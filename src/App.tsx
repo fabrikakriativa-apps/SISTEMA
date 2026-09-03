@@ -1,0 +1,22 @@
+import { useState } from 'react'
+import type { ModuleKey } from './domain'
+import { AuthGate } from './components/AuthGate'
+import { Layout } from './components/Layout'
+import { ToastProvider } from './components/ToastProvider'
+import { Dashboard } from './pages/Dashboard'
+import { Clients } from './pages/Clients'
+import { Supplies } from './pages/Supplies'
+import { Budgets } from './pages/Budgets'
+import { Orders } from './pages/Orders'
+import { ModulePlaceholder } from './pages/ModulePlaceholder'
+
+export function App() {
+  const [active, setActive] = useState<ModuleKey>('inicio')
+  const content = active === 'inicio' ? <Dashboard navigate={setActive}/>
+    : active === 'clientes' ? <Clients/>
+    : active === 'insumos' ? <Supplies/>
+    : active === 'orcamentos' ? <Budgets/>
+    : active === 'pedidos' ? <Orders/>
+    : <ModulePlaceholder module={active}/>
+  return <ToastProvider><AuthGate><Layout active={active} setActive={setActive}>{content}</Layout></AuthGate></ToastProvider>
+}
