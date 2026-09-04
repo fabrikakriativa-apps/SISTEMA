@@ -13,10 +13,10 @@ Repositório oficial desta reconstrução: https://github.com/fabrikakriativa-ap
 - Estrutura responsiva do sistema.
 - Login Google via Supabase Auth.
 - Navegação simplificada, sem módulos separados de Produção e Entrega.
-- Formulários iniciais de clientes e insumos; falta completar o vínculo de organização e validar gravação.
+- Formulários iniciais de clientes e insumos com vínculo de organização, validação de campos, bloqueio de envio simultâneo e identificador estável nas tentativas de gravação. Falta validar gravação no banco real.
 - Modelo relacional inicial para orçamentos, versões, itens, pedidos, compras, financeiro, agenda, anexos e auditoria.
-- Segurança por organização com RLS.
-- Armazenamento privado de PDFs e imagens.
+- Rascunho de políticas RLS por organização, ainda não aprovado para produção.
+- Rascunho de armazenamento privado de PDFs e imagens, ainda não aplicado.
 - Mensagens e confirmações próprias do sistema.
 
 ## Executar localmente
@@ -28,6 +28,10 @@ Repositório oficial desta reconstrução: https://github.com/fabrikakriativa-ap
 5. Execute `pnpm install` e `pnpm dev`.
 
 Sem `.env.local`, a aplicação abre em modo de prévia e não grava dados.
+
+Projeto Supabase autorizado: `dpowbyexrcdcwwqysgzp` (SISTEMA), organização `xhozxulkprvjzchnknfv`. Não utilizar o projeto legado. O acesso Google exige identidade confirmada e um único vínculo ativo de empresa; a proteção efetiva dos dados também depende das políticas RLS no servidor.
+
+Verificação local: 19 testes unitários de autorização, prazo de espera e validação de cadastros. Esses testes não substituem testes integrados de sessão, RLS, isolamento e recuperação de gravação após falhas de rede.
 
 ## Regras previstas (ainda não implementadas integralmente)
 

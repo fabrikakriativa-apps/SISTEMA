@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { ModuleKey } from './domain'
-import { AuthGate } from './components/AuthGate'
+import { AuthGate } from './components/AuthorizedAccess'
 import { Layout } from './components/Layout'
 import { ToastProvider } from './components/ToastProvider'
 import { Dashboard } from './pages/Dashboard'

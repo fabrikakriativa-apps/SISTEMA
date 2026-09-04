@@ -1,3 +1,5 @@
+-- DRAFT: isolated database validation is required before any production deployment.
+begin;
 create extension if not exists pgcrypto;
 create schema if not exists private;
 
@@ -44,6 +46,7 @@ create table public.supplies (
   unique(organization_id,code)
 );
 create table public.supply_suppliers (
+  organization_id uuid not null references public.organizations(id),
   supply_id uuid not null references public.supplies(id) on delete cascade, supplier_id uuid not null references public.suppliers(id) on delete cascade,
   supplier_reference text, latest_cost numeric(14,2), is_primary boolean not null default false, updated_at timestamptz not null default now(),
   primary key(supply_id,supplier_id)
@@ -159,38 +162,137 @@ create table public.audit_log (
   action text not null, before_data jsonb, after_data jsonb, reason text, created_at timestamptz not null default now()
 );
 
-create or replace function private.is_org_member(org_id uuid) returns boolean language sql stable security definer set search_path='' as $$
-  select exists(select 1 from public.memberships m where m.organization_id=org_id and m.user_id=auth.uid() and m.active);
+-- Every link between tenant-owned tables must include the organization.
+-- Discover existing FKs instead of maintaining an incomplete manual list.
+do $$
+declare t record; fk record; source_column text;
+begin
+  for t in select c.oid, c.relname from pg_class c
+    join pg_namespace n on n.oid=c.relnamespace
+    where n.nspname='public' and c.relkind='r'
+      and exists(select 1 from pg_attribute a where a.attrelid=c.oid and a.attname='organization_id' and not a.attisdropped)
+      and exists(select 1 from pg_attribute a where a.attrelid=c.oid and a.attname='id' and not a.attisdropped)
+  loop
+    execute format('alter table public.%I add constraint %I unique (organization_id,id)',t.relname,t.relname||'_org_id_key');
+  end loop;
+  for fk in select c.*, source.relname as source_table, target.relname as target_table
+    from pg_constraint c
+    join pg_class source on source.oid=c.conrelid
+    join pg_namespace n on n.oid=source.relnamespace
+    join pg_class target on target.oid=c.confrelid
+    where c.contype='f' and n.nspname='public' and cardinality(c.conkey)=1
+      and exists(select 1 from pg_attribute a where a.attrelid=c.conrelid and a.attname='organization_id' and not a.attisdropped)
+      and exists(select 1 from pg_attribute a where a.attrelid=c.confrelid and a.attname='organization_id' and not a.attisdropped)
+  loop
+    select attname into source_column from pg_attribute where attrelid=fk.conrelid and attnum=fk.conkey[1];
+    execute format('alter table public.%I add constraint %I foreign key (organization_id,%I) references public.%I(organization_id,id)',
+      fk.source_table,fk.conname||'_org',source_column,fk.target_table);
+  end loop;
+end $$;
+
+alter table public.clients add constraint clients_name_nonempty check(length(btrim(name))>0);
+alter table public.clients add constraint clients_not_own_master check(master_client_id is distinct from id);
+alter table public.supplies add constraint supplies_fields_nonempty check(
+  length(btrim(code))>0 and length(btrim(name))>0 and length(btrim(purchase_unit))>0 and length(btrim(usage_unit))>0);
+alter table public.supplies add constraint supplies_conversion_positive check(conversion_factor>0 and conversion_factor<>'NaN'::numeric);
+alter table public.supplies add constraint supplies_cost_finite check(current_cost<>'NaN'::numeric);
+create index memberships_user_active_idx on public.memberships(user_id,organization_id) where active;
+
+-- No client can insert memberships or change their own role.
+revoke all on schema private from public, anon;
+grant usage on schema private to authenticated;
+create function private.has_org_role(org_id uuid, allowed_roles public.app_role[])
+returns boolean language sql stable security definer set search_path='' as $$
+  select auth.uid() is not null and exists(
+    select 1 from public.memberships m where m.organization_id=org_id
+    and m.user_id=(select auth.uid()) and m.active and m.role=any(allowed_roles)
+  );
 $$;
-revoke all on function private.is_org_member(uuid) from public;
-grant execute on function private.is_org_member(uuid) to authenticated;
+revoke all on function private.has_org_role(uuid,public.app_role[]) from public, anon;
+grant execute on function private.has_org_role(uuid,public.app_role[]) to authenticated;
 
-create or replace function public.handle_new_user() returns trigger language plpgsql security definer set search_path='' as $$
-begin insert into public.profiles(id,full_name,email,avatar_url) values(new.id,new.raw_user_meta_data->>'full_name',new.email,new.raw_user_meta_data->>'avatar_url') on conflict(id) do update set full_name=excluded.full_name,email=excluded.email,avatar_url=excluded.avatar_url,updated_at=now(); return new; end; $$;
-revoke all on function public.handle_new_user() from public;
-create trigger on_auth_user_created after insert or update on auth.users for each row execute function public.handle_new_user();
+create function private.handle_new_user() returns trigger language plpgsql security definer set search_path='' as $$
+begin
+  insert into public.profiles(id,full_name,email,avatar_url)
+  values(new.id,new.raw_user_meta_data->>'full_name',new.email,new.raw_user_meta_data->>'avatar_url')
+  on conflict(id) do update set full_name=excluded.full_name,email=excluded.email,avatar_url=excluded.avatar_url,updated_at=now();
+  return new;
+end; $$;
+revoke all on function private.handle_new_user() from public, anon, authenticated;
+create trigger on_auth_user_created after insert or update on auth.users for each row execute function private.handle_new_user();
 
-do $$ declare t text; begin foreach t in array array['organizations','profiles','memberships','clients','suppliers','supplies','supply_suppliers','supply_price_history','item_families','budgets','budget_versions','budget_items','item_cost_lines','orders','order_items','purchases','purchase_items','receivables','payables','calendar_events','attachments','audit_log'] loop execute format('alter table public.%I enable row level security',t); end loop; end $$;
-
-create policy "profile self read" on public.profiles for select to authenticated using(id=(select auth.uid()));
-create policy "profile self update" on public.profiles for update to authenticated using(id=(select auth.uid())) with check(id=(select auth.uid()));
-create policy "memberships own read" on public.memberships for select to authenticated using(user_id=(select auth.uid()));
-create policy "organization member read" on public.organizations for select to authenticated using(private.is_org_member(id));
-
-do $$ declare t text; begin foreach t in array array['clients','suppliers','supplies','supply_price_history','item_families','budgets','budget_versions','budget_items','item_cost_lines','orders','order_items','purchases','purchase_items','receivables','payables','calendar_events','attachments','audit_log'] loop
- execute format('create policy "org members read" on public.%I for select to authenticated using(private.is_org_member(organization_id))',t);
- execute format('create policy "org members insert" on public.%I for insert to authenticated with check(private.is_org_member(organization_id))',t);
- execute format('create policy "org members update" on public.%I for update to authenticated using(private.is_org_member(organization_id)) with check(private.is_org_member(organization_id))',t);
-end loop; end $$;
-
-create policy "supply suppliers read" on public.supply_suppliers for select to authenticated using(exists(select 1 from public.supplies s where s.id=supply_id and private.is_org_member(s.organization_id)));
-create policy "supply suppliers write" on public.supply_suppliers for all to authenticated using(exists(select 1 from public.supplies s where s.id=supply_id and private.is_org_member(s.organization_id))) with check(exists(select 1 from public.supplies s where s.id=supply_id and private.is_org_member(s.organization_id)));
+-- Explicit scope: never grant/revoke ALL TABLES in a shared database.
+do $$ declare t text; begin
+  foreach t in array array['organizations','profiles','memberships','clients','suppliers','supplies','supply_suppliers','supply_price_history','item_families','budgets','budget_versions','budget_items','item_cost_lines','orders','order_items','purchases','purchase_items','receivables','payables','calendar_events','attachments','audit_log']
+  loop
+    execute format('alter table public.%I enable row level security',t);
+    execute format('revoke all on table public.%I from public,anon,authenticated',t);
+  end loop;
+end $$;
 
 grant usage on schema public to authenticated;
-grant select,insert,update,delete on all tables in schema public to authenticated;
-grant usage,select on all sequences in schema public to authenticated;
+grant select on public.profiles,public.memberships,public.organizations,public.clients,public.supplies,public.audit_log to authenticated;
+grant insert(id,organization_id,client_type,master_client_id,name,document,email,phone,address,city,origin,notes,created_by) on public.clients to authenticated;
+grant update(client_type,master_client_id,name,document,email,phone,address,city,origin,notes,archived_at) on public.clients to authenticated;
+grant insert(id,organization_id,code,name,category,brand,reference,purchase_unit,usage_unit,conversion_factor,current_cost,notes) on public.supplies to authenticated;
+grant update(code,name,category,brand,reference,purchase_unit,usage_unit,conversion_factor,current_cost,notes,active) on public.supplies to authenticated;
 
-insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types) values('documents','documents',false,20971520,array['application/pdf','image/jpeg','image/png','image/webp']) on conflict(id) do nothing;
-create policy "members access organization documents" on storage.objects for all to authenticated
-using(bucket_id='documents' and exists(select 1 from public.memberships m where m.user_id=(select auth.uid()) and m.active and m.organization_id::text=(storage.foldername(name))[1]))
-with check(bucket_id='documents' and exists(select 1 from public.memberships m where m.user_id=(select auth.uid()) and m.active and m.organization_id::text=(storage.foldername(name))[1]));
+create policy "profile self read" on public.profiles for select to authenticated using(id=(select auth.uid()));
+create policy "memberships own read" on public.memberships for select to authenticated using(user_id=(select auth.uid()));
+create policy "organization member read" on public.organizations for select to authenticated
+using(private.has_org_role(id,array['admin','comercial','compras','financeiro','operacao']::public.app_role[]));
+
+do $$ declare t text; roles text; begin
+  foreach t in array array['clients','supplies'] loop
+    roles:=case when t='clients' then 'array[''admin'',''comercial'']::public.app_role[]' else 'array[''admin'',''compras'']::public.app_role[]' end;
+    execute format('create policy "catalog member read" on public.%I for select to authenticated using(private.has_org_role(organization_id,array[''admin'',''comercial'',''compras'',''financeiro'',''operacao'']::public.app_role[]))',t);
+    execute format('create policy "catalog role insert" on public.%I for insert to authenticated with check(private.has_org_role(organization_id,%s))',t,roles);
+    execute format('create policy "catalog role update" on public.%I for update to authenticated using(private.has_org_role(organization_id,%s)) with check(private.has_org_role(organization_id,%s))',t,roles,roles);
+  end loop;
+end $$;
+
+create policy "admin audit read" on public.audit_log for select to authenticated
+using(private.has_org_role(organization_id,array['admin']::public.app_role[]));
+
+-- The server, not the form, owns author, timestamps and audit records.
+create function private.guard_catalog() returns trigger language plpgsql set search_path='' as $$
+begin
+  if tg_op='UPDATE' then
+    if new.id is distinct from old.id or new.organization_id is distinct from old.organization_id then
+      raise exception 'Record identity and organization cannot change' using errcode='23514';
+    end if;
+    new.created_at:=old.created_at;
+  else
+    new.created_at:=now();
+  end if;
+  if tg_table_name='clients' then
+    if tg_op='INSERT' then new.created_by:=auth.uid(); else new.created_by:=old.created_by; end if;
+    if new.master_client_id is not null and not exists(
+      select 1 from public.clients c where c.id=new.master_client_id
+      and c.organization_id=new.organization_id and c.client_type='Parceiro/master' and c.archived_at is null
+    ) then raise exception 'Invalid partner for client' using errcode='23514'; end if;
+  end if;
+  new.updated_at:=now();
+  return new;
+end $$;
+revoke all on function private.guard_catalog() from public,anon,authenticated;
+
+create function private.audit_catalog() returns trigger language plpgsql security definer set search_path='' as $$
+begin
+  insert into public.audit_log(organization_id,actor_id,entity_type,entity_id,action,before_data,after_data)
+  values(new.organization_id,auth.uid(),tg_table_name,new.id,lower(tg_op),
+    case when tg_op='UPDATE' then to_jsonb(old) else null end,to_jsonb(new));
+  return new;
+end $$;
+revoke all on function private.audit_catalog() from public,anon,authenticated;
+create trigger clients_guard before insert or update on public.clients for each row execute function private.guard_catalog();
+create trigger supplies_guard before insert or update on public.supplies for each row execute function private.guard_catalog();
+create trigger clients_audit after insert or update on public.clients for each row execute function private.audit_catalog();
+create trigger supplies_audit after insert or update on public.supplies for each row execute function private.audit_catalog();
+
+-- Future modules and document uploads intentionally have no client policies yet.
+-- No storage.objects policy is created until attachment ownership is validated.
+insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
+values('documents','documents',false,20971520,array['application/pdf','image/jpeg','image/png','image/webp'])
+on conflict(id) do nothing;
+commit;

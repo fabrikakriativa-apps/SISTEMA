@@ -1,6 +1,7 @@
 # Escopo deste projeto
 
 - Repositório exclusivo: https://github.com/fabrikakriativa-apps/SISTEMA.git.
+- Organização Supabase: xhozxulkprvjzchnknfv (fabrikakriativa CRM). Projeto confirmado pelo usuário: dpowbyexrcdcwwqysgzp (SISTEMA). Não usar a organização lqimdmdlvygidpwymbvd nem o projeto legado oohvjpcrsmxgdeauwtfx. Confirmar acesso ao projeto correto antes de operações remotas.
 - Esta pasta contém a reconstrução; não editar o repositório CRM antigo.
 - Não afirmar que telas preliminares ou migrations não testadas estão concluídas.
 - Não aplicar o SQL inicial sem revisão e testes de segurança em ambiente isolado.
