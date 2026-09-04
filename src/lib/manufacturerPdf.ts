@@ -41,7 +41,15 @@ export function parseManufacturerText(text:string):ParsedManufacturerDocument {
     if(!numbers.length)continue
     const description=clean(head[1])
     const upper=description.toUpperCase()
-    items.push({description,unit:head[2].toUpperCase(),quantity:decimal(head[3]),width:decimal(head[4]),height:decimal(head[5]),value:decimal(numbers.at(-1)!),operation:/MOTORIZAD/.test(upper)?'motorized':/MANUAL/.test(upper)?'manual':'unspecified',confidence:numbers.length>=2?.96:.82})
+    const item={description,unit:head[2].toUpperCase(),quantity:decimal(head[3]),width:decimal(head[4]),height:decimal(head[5]),value:decimal(numbers.at(-1)!),operation:(/MOTORIZAD/.test(upper)?'motorized':/MANUAL/.test(upper)?'manual':'unspecified') as ParsedManufacturerItem['operation'],confidence:numbers.length>=2?.96:.82}
+    const previous=items.at(-1)
+    if(/^TRILHO\b/i.test(description)&&previous&&/\bCORTINA\b/i.test(previous.description)){
+      previous.description=`${previous.description}, com ${description}`
+      previous.value=Number((previous.value+item.value).toFixed(2))
+      previous.confidence=Math.min(previous.confidence,item.confidence)
+      continue
+    }
+    items.push(item)
   }
   return {documentDate:date?isoDate(date):null,externalNumber:external,internalCode:internal,paymentTerms:paymentLine?clean(paymentLine[1]):null,paymentMethod:paymentLine?clean(paymentLine[2]):null,total,items}
 }

@@ -17,14 +17,16 @@ Total com Impostos: 3.346,66`)
     expect(parsed.total).toBe(3346.66)
   })
 
-  it('reads order metadata and curtain plus rail as independent purchase lines',()=>{
+  it('groups a curtain and its rail as one commercial item',()=>{
     const parsed=parseManufacturerText(`Data: 20/05/2026 Nro Pedido: #11013707-1 Cód . Interno: 260038 Pág.: 1 de 1
 Condição de Pagamento: 30/60/90 DIAS Forma de Pagamento: BOLETO
 CORTINA PRONTA - BLACKOUT GIARDINO - 15662 - CINZA UN 1,00 5,810 2,420 14,0602 14,0602 C 1.425,88 - - - 1.425,880
 TRILHO MAX REFORÇADO 1 VIA ML 1,00 5,810 1,000 1,0000 0 C 11,57 - - - 67,222
 Total com Impostos: 1.493,10`)
     expect(parsed).toMatchObject({documentDate:'2026-05-20',externalNumber:'#11013707-1',internalCode:'260038',paymentTerms:'30/60/90 DIAS',paymentMethod:'BOLETO',total:1493.1})
-    expect(parsed.items.map(item=>item.value)).toEqual([1425.88,67.222])
+    expect(parsed.items).toHaveLength(1)
+    expect(parsed.items[0]).toMatchObject({value:1493.1})
+    expect(parsed.items[0].description).toContain('TRILHO MAX REFORÇADO 1 VIA')
   })
 
   it('does not interpret accessory rows as main items',()=>{
