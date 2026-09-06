@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { ArrowLeft, FileText, Plus, Search, X } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, FileText, Plus, Search, Send, X } from 'lucide-react'
 import { Page } from '../components/Page'
 import { useAccess } from '../components/AuthorizedAccess'
 import { useToast } from '../components/ToastProvider'
@@ -123,6 +123,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   const [pdfRows,setPdfRows]=useState<PdfRow[]>([])
   const [confirmDelete,setConfirmDelete]=useState(false)
   const [previewOpen,setPreviewOpen]=useState(false)
+  const [workflowBusy,setWorkflowBusy]=useState(false),[confirmApproval,setConfirmApproval]=useState(false)
   const client=clients.find(item=>item.id===form.client_id)
   const stateLabel=saveState==='saving'?'Salvando…':saveState==='waiting'?'Alterações pendentes':saveState==='error'?'Falha ao salvar':'Rascunho sincronizado'
   const loadItems=useCallback(async()=>{
@@ -202,8 +203,26 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     else {setItemOpen(false);await loadItems();const {data}=await supabase.from('budgets').select(columns).eq('id',budget.id).single();if(data)setBudget(data as unknown as Budget);show('Item excluído e total atualizado.','success')}
     setItemSaving(false)
   }
-  return <Page title="Construção do orçamento" description="Monte os dados comerciais e os itens que o cliente receberá." action={<div className="page-actions"><button className="button primary" onClick={()=>setPreviewOpen(true)}>Prévia do cliente</button><button className="button secondary" onClick={close}><ArrowLeft/>Voltar aos orçamentos</button></div>}>
+  const markSent=async()=>{
+    if(!supabase||workflowBusy)return
+    if(saveState==='waiting'||saveState==='saving'){show('Aguarde o salvamento do rascunho antes de enviar.','info');return}
+    setWorkflowBusy(true)
+    const {data,error}=await supabase.rpc('mark_budget_sent',{org_id:access.organizationId,target_budget_id:budget.id})
+    if(error)show(error.code==='23514'?'Informe o cliente e inclua ao menos um item principal antes de enviar.':'Não foi possível marcar o orçamento como enviado.','error')
+    else {setBudget(data as unknown as Budget);show('Orçamento marcado como enviado e versão preservada.','success')}
+    setWorkflowBusy(false)
+  }
+  const approve=async()=>{
+    if(!supabase||workflowBusy)return
+    setWorkflowBusy(true)
+    const {data,error}=await supabase.rpc('approve_budget_and_create_order',{org_id:access.organizationId,target_budget_id:budget.id})
+    if(error)show('Não foi possível aprovar e gerar o pedido.','error')
+    else {setBudget({...budget,status:'approved'});setConfirmApproval(false);show(`Orçamento aprovado. Pedido ${(data as {display_number?:string})?.display_number??''} criado com sucesso.`,'success')}
+    setWorkflowBusy(false)
+  }
+  return <Page title="Construção do orçamento" description="Monte os dados comerciais e os itens que o cliente receberá." action={<div className="page-actions"><button className="button secondary" onClick={()=>setPreviewOpen(true)}>Prévia do cliente</button>{budget.status==='draft'&&<button className="button primary" disabled={workflowBusy} onClick={()=>void markSent()}><Send/>{workflowBusy?'Processando…':'Marcar como enviado'}</button>}{budget.status==='sent'&&<button className="button primary" disabled={workflowBusy} onClick={()=>setConfirmApproval(true)}><CheckCircle2/>Aprovar e gerar pedido</button>}<button className="button secondary" onClick={close}><ArrowLeft/>Voltar aos orçamentos</button></div>}>
     {previewOpen&&<BudgetPreview budget={{...budget,valid_until:form.valid_until,payment_terms:form.payment_terms,delivery_terms:form.delivery_terms,notes:form.notes,discount:Number(form.discount||0),total:Math.max(0,Number(budget.subtotal)-Number(form.discount||0))}} items={items} clientName={client?.name??'Cliente não informado'} onClose={()=>setPreviewOpen(false)}/>}
+    {confirmApproval&&<div className="workflow-confirm"><div><strong>Aprovar este orçamento e gerar o pedido?</strong><span>A versão enviada será preservada e somente os itens principais entrarão no pedido.</span></div><button className="button secondary" onClick={()=>setConfirmApproval(false)}>Voltar</button><button className="button primary" disabled={workflowBusy} onClick={()=>void approve()}>{workflowBusy?'Gerando pedido…':'Confirmar aprovação'}</button></div>}
     <div className="budget-layout"><section className="panel budget-form"><header><div><h2>Dados comerciais</h2><p>{budget.display_number} · revisão {budget.current_revision}</p></div><span className={`save-state ${saveState}`}>{stateLabel}</span></header><div className="form-grid">
       <label className="field span-2">Cliente final<select value={form.client_id??''} onChange={e=>setForm({...form,client_id:e.target.value||null})}><option value="">Selecione um cliente</option>{clients.filter(x=>x.client_type==='Cliente final').map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
       <label className="field">Validade<input type="date" value={form.valid_until??''} onChange={e=>setForm({...form,valid_until:e.target.value})}/></label><label className="field">Previsão<input value={form.delivery_terms??''} onChange={e=>setForm({...form,delivery_terms:e.target.value})} placeholder="Ex.: 25 dias úteis"/></label>
