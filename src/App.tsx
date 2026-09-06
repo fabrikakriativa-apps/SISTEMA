@@ -8,6 +8,7 @@ import { Clients } from './pages/Clients'
 import { Supplies } from './pages/Supplies'
 import { Budgets } from './pages/Budgets'
 import { Orders } from './pages/Orders'
+import { Finance } from './pages/Finance'
 import { ModulePlaceholder } from './pages/ModulePlaceholder'
 
 export function App() {
@@ -17,6 +18,7 @@ export function App() {
     : active === 'insumos' ? <Supplies/>
     : active === 'orcamentos' ? <Budgets/>
     : active === 'pedidos' ? <Orders/>
+    : active === 'financeiro' ? <Finance/>
     : <ModulePlaceholder module={active}/>
   return <ToastProvider><AuthGate><Layout active={active} setActive={setActive}>{content}</Layout></AuthGate></ToastProvider>
 }
