@@ -2,7 +2,7 @@ export type AppRole = 'admin' | 'comercial' | 'compras' | 'financeiro' | 'operac
 
 export type ModuleKey =
   | 'inicio' | 'prospeccao' | 'clientes' | 'insumos' | 'orcamentos'
-  | 'pedidos' | 'compras' | 'financeiro' | 'agenda' | 'administracao'
+  | 'pedidos' | 'compras' | 'financeiro' | 'agenda' | 'fornecedores' | 'administracao'
 
 export type Metric = { label: string; value: string; helper: string; tone?: 'gold' | 'green' | 'rose' }
 
