@@ -9,7 +9,7 @@ import { Supplies } from './pages/Supplies'
 import { Budgets } from './pages/Budgets'
 import { Orders } from './pages/Orders'
 import { Finance } from './pages/Finance'
-import { Purchases } from './pages/Purchases'
+import { PurchasesConnected } from './pages/PurchasesConnected'
 import { Suppliers } from './pages/Suppliers'
 import { ModulePlaceholder } from './pages/ModulePlaceholder'
 
@@ -21,7 +21,7 @@ export function App() {
     : active === 'orcamentos' ? <Budgets/>
     : active === 'pedidos' ? <Orders/>
     : active === 'financeiro' ? <Finance/>
-    : active === 'compras' ? <Purchases/>
+    : active === 'compras' ? <PurchasesConnected/>
     : active === 'fornecedores' ? <Suppliers/>
     : <ModulePlaceholder module={active}/>
   return <ToastProvider><AuthGate><Layout active={active} setActive={setActive}>{content}</Layout></AuthGate></ToastProvider>
