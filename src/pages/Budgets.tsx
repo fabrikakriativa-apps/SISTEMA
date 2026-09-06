@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabase'
 import { itemCostTotal, salePriceFromMargin } from '../lib/budgetItems'
 import { extractPdfText } from '../lib/pdfText'
 import { parseManufacturerText, type ParsedManufacturerDocument } from '../lib/manufacturerPdf'
+import { BudgetPreview } from '../components/BudgetPreview'
 
 type BudgetStatus = 'draft' | 'sent' | 'approved' | 'rejected' | 'cancelled'
 type Budget = {
@@ -121,6 +122,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   const [pdfReading,setPdfReading]=useState(false),[pdfResult,setPdfResult]=useState<ParsedManufacturerDocument|null>(null),[pdfName,setPdfName]=useState(''),[pdfCandidate,setPdfCandidate]=useState(0)
   const [pdfRows,setPdfRows]=useState<PdfRow[]>([])
   const [confirmDelete,setConfirmDelete]=useState(false)
+  const [previewOpen,setPreviewOpen]=useState(false)
   const client=clients.find(item=>item.id===form.client_id)
   const stateLabel=saveState==='saving'?'Salvando…':saveState==='waiting'?'Alterações pendentes':saveState==='error'?'Falha ao salvar':'Rascunho sincronizado'
   const loadItems=useCallback(async()=>{
@@ -200,7 +202,8 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     else {setItemOpen(false);await loadItems();const {data}=await supabase.from('budgets').select(columns).eq('id',budget.id).single();if(data)setBudget(data as unknown as Budget);show('Item excluído e total atualizado.','success')}
     setItemSaving(false)
   }
-  return <Page title="Construção do orçamento" description="Monte os dados comerciais e os itens que o cliente receberá." action={<button className="button secondary" onClick={close}><ArrowLeft/>Voltar aos orçamentos</button>}>
+  return <Page title="Construção do orçamento" description="Monte os dados comerciais e os itens que o cliente receberá." action={<div className="page-actions"><button className="button primary" onClick={()=>setPreviewOpen(true)}>Prévia do cliente</button><button className="button secondary" onClick={close}><ArrowLeft/>Voltar aos orçamentos</button></div>}>
+    {previewOpen&&<BudgetPreview budget={{...budget,valid_until:form.valid_until,payment_terms:form.payment_terms,delivery_terms:form.delivery_terms,notes:form.notes,discount:Number(form.discount||0),total:Math.max(0,Number(budget.subtotal)-Number(form.discount||0))}} items={items} clientName={client?.name??'Cliente não informado'} onClose={()=>setPreviewOpen(false)}/>}
     <div className="budget-layout"><section className="panel budget-form"><header><div><h2>Dados comerciais</h2><p>{budget.display_number} · revisão {budget.current_revision}</p></div><span className={`save-state ${saveState}`}>{stateLabel}</span></header><div className="form-grid">
       <label className="field span-2">Cliente final<select value={form.client_id??''} onChange={e=>setForm({...form,client_id:e.target.value||null})}><option value="">Selecione um cliente</option>{clients.filter(x=>x.client_type==='Cliente final').map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
       <label className="field">Validade<input type="date" value={form.valid_until??''} onChange={e=>setForm({...form,valid_until:e.target.value})}/></label><label className="field">Previsão<input value={form.delivery_terms??''} onChange={e=>setForm({...form,delivery_terms:e.target.value})} placeholder="Ex.: 25 dias úteis"/></label>
