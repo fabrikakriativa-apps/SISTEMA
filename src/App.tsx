@@ -4,6 +4,7 @@ import { AuthGate } from './components/AuthorizedAccess'
 import { Layout } from './components/Layout'
 import { ToastProvider } from './components/ToastProvider'
 import { Dashboard } from './pages/Dashboard'
+import { Prospecting } from './pages/Prospecting'
 import { Clients } from './pages/Clients'
 import { Supplies } from './pages/Supplies'
 import { Budgets } from './pages/Budgets'
@@ -17,6 +18,7 @@ import { ModulePlaceholder } from './pages/ModulePlaceholder'
 export function App() {
   const [active, setActive] = useState<ModuleKey>('inicio')
   const content = active === 'inicio' ? <Dashboard navigate={setActive}/>
+    : active === 'prospeccao' ? <Prospecting/>
     : active === 'clientes' ? <Clients/>
     : active === 'insumos' ? <Supplies/>
     : active === 'orcamentos' ? <Budgets/>
