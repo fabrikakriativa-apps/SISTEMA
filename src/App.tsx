@@ -11,6 +11,7 @@ import { Orders } from './pages/Orders'
 import { Finance } from './pages/Finance'
 import { PurchasesConnected } from './pages/PurchasesConnected'
 import { Suppliers } from './pages/Suppliers'
+import { Calendar } from './pages/Calendar'
 import { ModulePlaceholder } from './pages/ModulePlaceholder'
 
 export function App() {
@@ -23,6 +24,7 @@ export function App() {
     : active === 'financeiro' ? <Finance/>
     : active === 'compras' ? <PurchasesConnected/>
     : active === 'fornecedores' ? <Suppliers/>
+    : active === 'agenda' ? <Calendar/>
     : <ModulePlaceholder module={active}/>
   return <ToastProvider><AuthGate><Layout active={active} setActive={setActive}>{content}</Layout></AuthGate></ToastProvider>
 }
