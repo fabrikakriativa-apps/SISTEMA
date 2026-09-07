@@ -3,6 +3,7 @@ import type { Session } from '@supabase/supabase-js'
 import { LogIn, ShieldCheck } from 'lucide-react'
 import { supabase, supabaseConfigured } from '../lib/supabase'
 import { verifyAccess, withTimeout, type Access } from '../lib/access'
+import { cleanAuthenticationFragment } from '../lib/authUrl'
 
 const AccessContext = createContext<Access | null>(null)
 export const useAccess = () => useContext(AccessContext)
@@ -26,6 +27,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
     // Never await another Supabase call inside this synchronous auth callback.
     const { data } = supabase.auth.onAuthStateChange((event, next) => {
       if (next?.provider_token) sessionStorage.setItem('fk_google_provider_token', next.provider_token)
+      const cleanUrl=cleanAuthenticationFragment(window.location);if(next&&cleanUrl)window.history.replaceState({},document.title,cleanUrl)
       if (event === 'SIGNED_OUT') sessionStorage.removeItem('fk_google_provider_token')
       clearTimeout(timer); setSession(next); setReady(true)
     })

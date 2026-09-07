@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { ArrowLeft, CheckCircle2, FileText, Plus, Search, Send, X } from 'lucide-react'
+import { ArrowLeft, FileText, Plus, Search, X } from 'lucide-react'
 import { Page } from '../components/Page'
 import { useAccess } from '../components/AuthorizedAccess'
 import { useToast } from '../components/ToastProvider'
@@ -9,8 +9,8 @@ import { itemCostTotal, salePriceFromMargin } from '../lib/budgetItems'
 import { extractPdfText } from '../lib/pdfText'
 import { parseManufacturerText, type ParsedManufacturerDocument } from '../lib/manufacturerPdf'
 import { BudgetPreview } from '../components/BudgetPreview'
+import { budgetStatusLabels as labels, budgetStatusOptions, statusNeedsReason, type BudgetStatus } from '../lib/budgetStatus'
 
-type BudgetStatus = 'draft' | 'sent' | 'approved' | 'rejected' | 'cancelled'
 type Budget = {
   id:string; number:number; display_number:string; current_revision:number; client_id:string|null
   status:BudgetStatus; valid_until:string|null; payment_terms:string|null; delivery_terms:string|null
@@ -24,7 +24,6 @@ type BudgetItem={id:string;family_id:string|null;position:number;presentation:st
 type ItemForm={id?:string;family_id:string;environment:string;description:string;quantity:number;presentation:'principal'|'option';manufacturer_cost:number;installation_cost:number;additional_cost:number;margin_percent:number;sale_total:number}
 type PdfRow={selected:boolean;environment:string;presentation:'principal'|'option';margin_percent:number;sale_total:number}
 
-const labels:Record<BudgetStatus,string> = { draft:'Rascunho', sent:'Enviado', approved:'Aprovado', rejected:'Reprovado', cancelled:'Cancelado' }
 const blankEditable:Editable = { client_id:null, valid_until:null, payment_terms:'', delivery_terms:'', notes:'', internal_notes:'', discount:0 }
 const blankItem:ItemForm={family_id:'',environment:'',description:'',quantity:1,presentation:'principal',manufacturer_cost:0,installation_cost:0,additional_cost:0,margin_percent:50,sale_total:0}
 const columns = 'id,number,display_number,current_revision,client_id,status,valid_until,payment_terms,delivery_terms,notes,internal_notes,subtotal,discount,total,created_at,updated_at,client:clients!budgets_client_id_fkey(name)'
@@ -124,6 +123,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   const [confirmDelete,setConfirmDelete]=useState(false)
   const [previewOpen,setPreviewOpen]=useState(false)
   const [workflowBusy,setWorkflowBusy]=useState(false),[confirmApproval,setConfirmApproval]=useState(false)
+  const [pendingStatus,setPendingStatus]=useState<BudgetStatus|null>(null),[statusReason,setStatusReason]=useState('')
   const client=clients.find(item=>item.id===form.client_id)
   const stateLabel=saveState==='saving'?'Salvando…':saveState==='waiting'?'Alterações pendentes':saveState==='error'?'Falha ao salvar':'Rascunho sincronizado'
   const loadItems=useCallback(async()=>{
@@ -220,11 +220,27 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     else {setBudget({...budget,status:'approved'});setConfirmApproval(false);show(`Orçamento aprovado. Pedido ${(data as {display_number?:string})?.display_number??''} criado com sucesso.`,'success')}
     setWorkflowBusy(false)
   }
-  return <Page title="Construção do orçamento" description="Monte os dados comerciais e os itens que o cliente receberá." action={<div className="page-actions"><button className="button secondary" onClick={()=>setPreviewOpen(true)}>Prévia do cliente</button>{budget.status==='draft'&&<button className="button primary" disabled={workflowBusy} onClick={()=>void markSent()}><Send/>{workflowBusy?'Processando…':'Marcar como enviado'}</button>}{budget.status==='sent'&&<button className="button primary" disabled={workflowBusy} onClick={()=>setConfirmApproval(true)}><CheckCircle2/>Aprovar e gerar pedido</button>}<button className="button secondary" onClick={close}><ArrowLeft/>Voltar aos orçamentos</button></div>}>
+  const requestStatus=(next:BudgetStatus)=>{
+    if(next===budget.status)return
+    if(next==='approved'){setConfirmApproval(true);return}
+    if(next==='sent'){void markSent();return}
+    setStatusReason('');setPendingStatus(next)
+  }
+  const changeStatus=async()=>{
+    if(!supabase||!pendingStatus||workflowBusy)return
+    if(statusNeedsReason(pendingStatus)&&statusReason.trim().length<5){show('Informe o motivo da alteração.','error');return}
+    setWorkflowBusy(true)
+    const {data,error}=await supabase.rpc('change_budget_status',{org_id:access.organizationId,target_budget_id:budget.id,new_status:pendingStatus,change_reason:statusReason.trim()||null})
+    if(error)show('Não foi possível alterar o status do orçamento.','error')
+    else {setBudget(data as unknown as Budget);setPendingStatus(null);show(`Status alterado para ${labels[pendingStatus]}.`,'success')}
+    setWorkflowBusy(false)
+  }
+  return <Page title="Construção do orçamento" description="Monte os dados comerciais e os itens que o cliente receberá." action={<div className="page-actions"><button className="button secondary" onClick={()=>setPreviewOpen(true)}>Prévia do cliente</button><button className="button secondary" onClick={close}><ArrowLeft/>Voltar aos orçamentos</button></div>}>
     {previewOpen&&<BudgetPreview budget={{...budget,valid_until:form.valid_until,payment_terms:form.payment_terms,delivery_terms:form.delivery_terms,notes:form.notes,discount:Number(form.discount||0),total:Math.max(0,Number(budget.subtotal)-Number(form.discount||0))}} items={items} clientName={client?.name??'Cliente não informado'} onClose={()=>setPreviewOpen(false)}/>}
     {confirmApproval&&<div className="workflow-confirm"><div><strong>Aprovar este orçamento e gerar o pedido?</strong><span>A versão enviada será preservada e somente os itens principais entrarão no pedido.</span></div><button className="button secondary" onClick={()=>setConfirmApproval(false)}>Voltar</button><button className="button primary" disabled={workflowBusy} onClick={()=>void approve()}>{workflowBusy?'Gerando pedido…':'Confirmar aprovação'}</button></div>}
+    {pendingStatus&&<div className="workflow-confirm"><div><strong>Alterar status para {labels[pendingStatus]}?</strong><span>{pendingStatus==='draft'?'Uma nova revisão editável será iniciada.':'Esta alteração ficará registrada no histórico.'}</span>{statusNeedsReason(pendingStatus)&&<input autoFocus value={statusReason} onChange={e=>setStatusReason(e.target.value)} placeholder="Informe o motivo"/>}</div><button className="button secondary" onClick={()=>setPendingStatus(null)}>Voltar</button><button className="button primary" disabled={workflowBusy||statusNeedsReason(pendingStatus)&&statusReason.trim().length<5} onClick={()=>void changeStatus()}>{workflowBusy?'Alterando…':'Confirmar alteração'}</button></div>}
     <div className="budget-layout"><section className="panel budget-form"><header><div><h2>Dados comerciais</h2><p>{budget.display_number} · revisão {budget.current_revision}</p></div><span className={`save-state ${saveState}`}>{stateLabel}</span></header><div className="form-grid">
-      <label className="field span-2">Cliente final<select value={form.client_id??''} onChange={e=>setForm({...form,client_id:e.target.value||null})}><option value="">Selecione um cliente</option>{clients.filter(x=>x.client_type==='Cliente final').map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+      <label className="field">Status<select value={budget.status} disabled={workflowBusy} onChange={e=>requestStatus(e.target.value as BudgetStatus)}>{budgetStatusOptions(budget.status).map(status=><option value={status} key={status}>{labels[status]}</option>)}</select></label><label className="field">Cliente final<select disabled={budget.status!=='draft'} value={form.client_id??''} onChange={e=>setForm({...form,client_id:e.target.value||null})}><option value="">Selecione um cliente</option>{clients.filter(x=>x.client_type==='Cliente final').map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
       <label className="field">Validade<input type="date" value={form.valid_until??''} onChange={e=>setForm({...form,valid_until:e.target.value})}/></label><label className="field">Previsão<input value={form.delivery_terms??''} onChange={e=>setForm({...form,delivery_terms:e.target.value})} placeholder="Ex.: 25 dias úteis"/></label>
       <label className="field span-2">Condição de pagamento<input value={form.payment_terms??''} onChange={e=>setForm({...form,payment_terms:e.target.value})}/></label><label className="field span-2">Observações para o cliente<textarea value={form.notes??''} onChange={e=>setForm({...form,notes:e.target.value})}/></label><label className="field span-2">Observações internas<textarea value={form.internal_notes??''} onChange={e=>setForm({...form,internal_notes:e.target.value})}/></label>
     </div></section><aside className="panel budget-summary"><header><h2>Resumo</h2></header><dl><div><dt>Cliente</dt><dd>{client?.name??'Não informado'}</dd></div><div><dt>Subtotal</dt><dd>{money.format(Number(budget.subtotal))}</dd></div><div><dt>Desconto</dt><dd><input type="number" min="0" step="0.01" value={form.discount} onChange={e=>setForm({...form,discount:Number(e.target.value)})}/></dd></div><div className="total"><dt>Total</dt><dd>{money.format(Math.max(0,Number(budget.subtotal)-Number(form.discount||0)))}</dd></div></dl></aside></div>

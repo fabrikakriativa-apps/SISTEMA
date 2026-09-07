@@ -3,10 +3,10 @@ import { X } from 'lucide-react'
 import { useToast } from './ToastProvider'
 import { supabase } from '../lib/supabase'
 type Item={id:string;status:string;snapshot:{environment?:string|null;description?:string}}
-type Props={organizationId:string;order:{id:string;display_number:string;order_items:Item[]};onClose:()=>void;onSaved:()=>Promise<void>}
 const stages={preparing:'Em preparação',ready_to_schedule:'Pronto para agendar',scheduled:'Agendado',completed:'Concluído',pending_issue:'Com pendência'} as const
-export function OrderOperation({organizationId,order,onClose,onSaved}:Props){
- const {show}=useToast(),active=order.order_items.filter(x=>x.status!=='cancelled'),[selected,setSelected]=useState(active.map(x=>x.id)),[stage,setStage]=useState<keyof typeof stages>('preparing'),[scheduled,setScheduled]=useState(''),[issue,setIssue]=useState(''),[saving,setSaving]=useState(false)
+type Props={organizationId:string;order:{id:string;display_number:string;order_items:Item[]};initialStage?:keyof typeof stages;onClose:()=>void;onSaved:()=>Promise<void>}
+export function OrderOperation({organizationId,order,initialStage='preparing',onClose,onSaved}:Props){
+ const {show}=useToast(),active=order.order_items.filter(x=>x.status!=='cancelled'),[selected,setSelected]=useState(active.map(x=>x.id)),[stage,setStage]=useState<keyof typeof stages>(initialStage),[scheduled,setScheduled]=useState(''),[issue,setIssue]=useState(''),[saving,setSaving]=useState(false)
  const valid=selected.length>0&&(stage!=='scheduled'||Boolean(scheduled))&&(stage!=='pending_issue'||issue.trim().length>=5),all=useMemo(()=>selected.length===active.length,[selected,active.length])
  const toggle=(id:string)=>setSelected(x=>x.includes(id)?x.filter(y=>y!==id):[...x,id])
  const save=async()=>{if(!supabase||saving||!valid)return;setSaving(true);const {error}=await supabase.rpc('update_order_items_operation',{org_id:organizationId,target_order_id:order.id,target_item_ids:selected,new_status:stage,new_scheduled_at:stage==='scheduled'?new Date(scheduled).toISOString():null,new_issue_reason:stage==='pending_issue'?issue:null});if(error)show('Não foi possível atualizar os itens do pedido.','error');else{show('Etapa aplicada aos itens selecionados.','success');await onSaved();onClose()}setSaving(false)}
