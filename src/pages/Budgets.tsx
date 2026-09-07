@@ -10,6 +10,7 @@ import { extractPdfText } from '../lib/pdfText'
 import { parseManufacturerText, type ParsedManufacturerDocument } from '../lib/manufacturerPdf'
 import { BudgetPreview } from '../components/BudgetPreview'
 import { budgetStatusLabels as labels, budgetStatusOptions, statusNeedsReason, type BudgetStatus } from '../lib/budgetStatus'
+import { navigateTo, readRoute } from '../lib/navigation'
 
 type Budget = {
   id:string; number:number; display_number:string; current_revision:number; client_id:string|null
@@ -59,6 +60,8 @@ export function Budgets() {
   },[access])
 
   useEffect(() => { void load() },[load])
+  useEffect(() => { const id=readRoute(window.location.hash).recordId;if(id&&items.length&&!selected){const budget=items.find(item=>item.id===id);if(budget)openEditor(budget)} },[items])
+  useEffect(() => { if(selected)navigateTo('orcamentos',selected.id) },[selected?.id])
   useEffect(() => () => { if(saveTimer.current) window.clearTimeout(saveTimer.current) },[])
 
   const openEditor = (budget:Budget) => {
@@ -106,7 +109,7 @@ export function Budgets() {
 
   const filtered=useMemo(()=>items.filter(item=>`${item.display_number} ${item.client?.name??''} ${labels[item.status]}`.toLowerCase().includes(search.toLowerCase())),[items,search])
   const counts=useMemo(()=>({draft:items.filter(x=>x.status==='draft').length,sent:items.filter(x=>x.status==='sent').length,approved:items.filter(x=>x.status==='approved').length,rejected:items.filter(x=>x.status==='rejected').length}),[items])
-  if(selected) return <BudgetEditor access={access!} budget={selected} setBudget={budget=>{selectedRef.current=budget;setSelected(budget);setItems(current=>current.map(item=>item.id===budget.id?budget:item))}} form={form} setForm={setForm} clients={clients} saveState={saveState} close={()=>{initialized.current=false;selectedRef.current=null;setSelected(null)}}/>
+  if(selected) return <BudgetEditor access={access!} budget={selected} setBudget={budget=>{selectedRef.current=budget;setSelected(budget);setItems(current=>current.map(item=>item.id===budget.id?budget:item))}} form={form} setForm={setForm} clients={clients} saveState={saveState} close={()=>{initialized.current=false;selectedRef.current=null;setSelected(null);navigateTo('orcamentos')}}/>
 
   return <Page title="Orçamentos" description="Rascunhos automáticos, revisões preservadas e uma única versão para tela, PDF e WhatsApp." action={<button className="button primary" disabled={creating} onClick={create}><Plus/>{creating?'Criando…':'Novo orçamento'}</button>}>
     {loading&&<p role="status">Carregando orçamentos…</p>}{error&&<p role="alert">{error} <button className="button secondary" onClick={load}>Tentar novamente</button></p>}

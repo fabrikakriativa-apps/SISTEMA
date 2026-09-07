@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ModuleKey } from './domain'
 import { AuthGate } from './components/AuthorizedAccess'
 import { Layout } from './components/Layout'
@@ -14,9 +14,12 @@ import { PurchasesConnected } from './pages/PurchasesConnected'
 import { Suppliers } from './pages/Suppliers'
 import { Calendar } from './pages/Calendar'
 import { ModulePlaceholder } from './pages/ModulePlaceholder'
+import { navigateTo, readRoute } from './lib/navigation'
 
 export function App() {
-  const [active, setActive] = useState<ModuleKey>('inicio')
+  const [active, setActive] = useState<ModuleKey>(()=>readRoute(window.location.hash).module)
+  useEffect(()=>{const sync=()=>setActive(readRoute(window.location.hash).module);window.addEventListener('hashchange',sync);return()=>window.removeEventListener('hashchange',sync)},[])
+  const navigate=(module:ModuleKey)=>navigateTo(module)
   const content = active === 'inicio' ? <Dashboard navigate={setActive}/>
     : active === 'prospeccao' ? <Prospecting/>
     : active === 'clientes' ? <Clients/>
@@ -28,5 +31,5 @@ export function App() {
     : active === 'fornecedores' ? <Suppliers/>
     : active === 'agenda' ? <Calendar/>
     : <ModulePlaceholder module={active}/>
-  return <ToastProvider><AuthGate><Layout active={active} setActive={setActive}>{content}</Layout></AuthGate></ToastProvider>
+  return <ToastProvider><AuthGate><Layout active={active} setActive={navigate}>{content}</Layout></AuthGate></ToastProvider>
 }
