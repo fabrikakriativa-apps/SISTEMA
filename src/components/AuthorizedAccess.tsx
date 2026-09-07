@@ -24,7 +24,9 @@ export function AuthGate({ children }: { children: ReactNode }) {
       setReady(true)
     }, 15000)
     // Never await another Supabase call inside this synchronous auth callback.
-    const { data } = supabase.auth.onAuthStateChange((_event, next) => {
+    const { data } = supabase.auth.onAuthStateChange((event, next) => {
+      if (next?.provider_token) sessionStorage.setItem('fk_google_provider_token', next.provider_token)
+      if (event === 'SIGNED_OUT') sessionStorage.removeItem('fk_google_provider_token')
       clearTimeout(timer); setSession(next); setReady(true)
     })
     return () => { clearTimeout(timer); data.subscription.unsubscribe() }
@@ -59,6 +61,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
       const { error } = await withTimeout(supabase.auth.signOut())
       if (error) throw error
       setAccess(null); setSession(null); setError('')
+      sessionStorage.removeItem('fk_google_provider_token')
     } catch { setError('Não foi possível sair. Verifique a conexão e tente novamente.') }
     finally { setBusy(false) }
   }
