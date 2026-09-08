@@ -24,7 +24,6 @@ export function useCatalog<T extends { id: string; name: string }>(table: 'clien
     const load = async () => {
       try {
         let query = supabase!.from(table).select(columns).eq('organization_id', access.organizationId).order('name')
-        if (table === 'clients') query = query.is('archived_at', null)
         const { data, error } = await query.abortSignal(controller.signal)
         if (error) throw error
         if (!cancelled) setItems((data ?? []) as unknown as T[])
@@ -57,5 +56,15 @@ export function useCatalog<T extends { id: string; name: string }>(table: 'clien
       return true
     } finally { lock.current = false; if (mounted.current) setSaving(false) }
   }
-  return { items, loading, saving, error, save, reload: () => setRevision(n => n + 1) }
+  async function update(id:string,changes:Record<string,unknown>):Promise<boolean>{
+    if(lock.current||!supabase||!access)return false
+    lock.current=true;setSaving(true)
+    try{
+      const {data,error}=await supabase.from(table).update(changes).eq('organization_id',access.organizationId).eq('id',id).select(columns).abortSignal(AbortSignal.timeout(15000)).single()
+      if(error||!data)throw new Error('Não foi possível confirmar a atualização. Tente novamente.')
+      if(mounted.current)setItems(current=>current.map(item=>item.id===id?data as unknown as T:item).sort((a,b)=>a.name.localeCompare(b.name,'pt-BR')))
+      return true
+    }finally{lock.current=false;if(mounted.current)setSaving(false)}
+  }
+  return { items, loading, saving, error, save, update, reload: () => setRevision(n => n + 1) }
 }
