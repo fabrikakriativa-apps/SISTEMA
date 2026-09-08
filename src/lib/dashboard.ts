@@ -1,3 +1,5 @@
+import {needsCalendarSync} from './calendarStatus'
+
 export type DashboardBudget = { status: string; total: number | string }
 export type DashboardOrder = { status: string }
 export type DashboardReceivable = { status: string; amount: number | string; paid_amount: number | string; due_date: string | null }
@@ -19,7 +21,7 @@ export function summarizeDashboard(budgets: DashboardBudget[], orders: Dashboard
       drafts: activeBudgets.filter(item => item.status === 'draft').length,
       awaitingFinance: activeOrders.filter(item => item.status === 'awaiting_finance').length,
       overdueReceivables: openReceivables.filter(item => item.status === 'overdue' || Boolean(item.due_date && item.due_date < today.toISOString().slice(0, 10))).length,
-      calendarSync: events.filter(item => item.sync_status === 'pending').length,
+      calendarSync: events.filter(item => needsCalendarSync(item.sync_status)).length,
     },
   }
 }
