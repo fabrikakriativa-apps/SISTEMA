@@ -1,20 +1,21 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import type { ModuleKey } from './domain'
 import { AuthGate } from './components/AuthorizedAccess'
 import { Layout } from './components/Layout'
 import { ToastProvider } from './components/ToastProvider'
-import { Dashboard } from './pages/Dashboard'
-import { Prospecting } from './pages/Prospecting'
-import { Clients } from './pages/Clients'
-import { Supplies } from './pages/Supplies'
-import { Budgets } from './pages/Budgets'
-import { Orders } from './pages/Orders'
-import { Finance } from './pages/Finance'
-import { PurchasesConnected } from './pages/PurchasesConnected'
-import { Suppliers } from './pages/Suppliers'
-import { Calendar } from './pages/Calendar'
-import { ModulePlaceholder } from './pages/ModulePlaceholder'
 import { navigateTo, readRoute } from './lib/navigation'
+
+const Dashboard=lazy(()=>import('./pages/Dashboard').then(module=>({default:module.Dashboard})))
+const Prospecting=lazy(()=>import('./pages/Prospecting').then(module=>({default:module.Prospecting})))
+const Clients=lazy(()=>import('./pages/Clients').then(module=>({default:module.Clients})))
+const Supplies=lazy(()=>import('./pages/Supplies').then(module=>({default:module.Supplies})))
+const Budgets=lazy(()=>import('./pages/Budgets').then(module=>({default:module.Budgets})))
+const Orders=lazy(()=>import('./pages/Orders').then(module=>({default:module.Orders})))
+const Finance=lazy(()=>import('./pages/Finance').then(module=>({default:module.Finance})))
+const PurchasesConnected=lazy(()=>import('./pages/PurchasesConnected').then(module=>({default:module.PurchasesConnected})))
+const Suppliers=lazy(()=>import('./pages/Suppliers').then(module=>({default:module.Suppliers})))
+const Calendar=lazy(()=>import('./pages/Calendar').then(module=>({default:module.Calendar})))
+const ModulePlaceholder=lazy(()=>import('./pages/ModulePlaceholder').then(module=>({default:module.ModulePlaceholder})))
 
 export function App() {
   const [active, setActive] = useState<ModuleKey>(()=>readRoute(window.location.hash).module)
@@ -31,5 +32,5 @@ export function App() {
     : active === 'fornecedores' ? <Suppliers/>
     : active === 'agenda' ? <Calendar/>
     : <ModulePlaceholder module={active}/>
-  return <ToastProvider><AuthGate><Layout active={active} setActive={navigate}>{content}</Layout></AuthGate></ToastProvider>
+  return <ToastProvider><AuthGate><Layout active={active} setActive={navigate}><Suspense fallback={<p className="panel-message" role="status">Carregando módulo…</p>}>{content}</Suspense></Layout></AuthGate></ToastProvider>
 }
