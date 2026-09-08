@@ -7,3 +7,7 @@ export function safeDocumentName(name:string){
 export function budgetDocumentPath(organizationId:string,budgetId:string,fileName:string,id:string=crypto.randomUUID()){
   return `${organizationId}/budgets/${budgetId}/${id}-${safeDocumentName(fileName)}`
 }
+
+export function purchaseDocumentPath(organizationId:string,purchaseId:string,fileName:string,id:string=crypto.randomUUID()){
+  return `${organizationId}/purchases/${purchaseId}/${id}-${safeDocumentName(fileName)}`
+}
