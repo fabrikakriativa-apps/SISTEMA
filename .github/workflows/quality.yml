@@ -1,0 +1,33 @@
+name: Verificar sistema
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+      - name: Preparar pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+      - name: Preparar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - name: Instalar dependências
+        run: pnpm install --frozen-lockfile
+      - name: Executar testes
+        run: pnpm test
+      - name: Compilar produção
+        run: pnpm build

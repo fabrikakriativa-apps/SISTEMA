@@ -1,43 +1,49 @@
-# Novo CRM Fábrika Kriativa
+# Sistema Fábrika Kriativa
 
-Reconstrução independente do sistema anterior. O Google Sheets e o Apps Script não são utilizados como banco ou servidor.
+Novo sistema de gestão da Fábrika Kriativa, independente do CRM legado. O banco, a autenticação e os documentos privados utilizam Supabase; Google Sheets e Apps Script não fazem parte desta aplicação.
 
-## Estado: fundação em desenvolvimento, não usar em produção
+Repositório oficial: https://github.com/fabrikakriativa-apps/SISTEMA
 
-Este repositório contém a prévia inicial, não um CRM concluído. A compilação foi validada, mas login, permissões e gravação no banco ainda não passaram por teste integrado. Orçamentos, pedidos, compras, financeiro e agenda possuem telas preliminares ou planejamento.
+## Estado atual
 
-Repositório oficial desta reconstrução: https://github.com/fabrikakriativa-apps/SISTEMA
+A aplicação já possui fluxo integrado e testado para:
 
-## O que já existe no código
+- login Google e autorização por empresa e perfil;
+- prospecção B2B com valor estimado opcional;
+- clientes finais e parceiros/master;
+- fornecedores, insumos e composição real de custos;
+- orçamentos com rascunho automático, revisões, PDF e versão para o cliente;
+- importação conferida de PDFs de Cortina e Persiana;
+- aprovação do orçamento e geração do pedido;
+- andamento operacional dentro do pedido, sem módulos separados de Produção e Entrega;
+- compras agrupadas, leitura do pedido do fornecedor e validação dos itens;
+- contas a receber e a pagar, com parcelas individuais ou em grupo;
+- cancelamentos e estornos com propagação e auditoria;
+- agenda operacional e sincronização com Google Calendar;
+- administração de usuários, perfis e histórico de alterações.
 
-- Estrutura responsiva do sistema.
-- Login Google via Supabase Auth.
-- Navegação simplificada, sem módulos separados de Produção e Entrega.
-- Formulários iniciais de clientes e insumos com vínculo de organização, validação de campos, bloqueio de envio simultâneo e identificador estável nas tentativas de gravação. Falta validar gravação no banco real.
-- Modelo relacional inicial para orçamentos, versões, itens, pedidos, compras, financeiro, agenda, anexos e auditoria.
-- Rascunho de políticas RLS por organização, ainda não aprovado para produção.
-- Rascunho de armazenamento privado de PDFs e imagens, ainda não aplicado.
-- Mensagens e confirmações próprias do sistema.
+O banco autorizado é exclusivamente o projeto Supabase `dpowbyexrcdcwwqysgzp`, da organização `xhozxulkprvjzchnknfv`. Não utilizar projetos do CRM anterior.
 
 ## Executar localmente
 
 1. Copie `.env.example` para `.env.local`.
-2. Preencha a URL e a chave publicável do projeto Supabase.
-3. Não aplique os arquivos SQL em produção: são rascunhos que precisam de revisão de permissões por perfil, integridade entre organizações e testes em banco isolado.
-4. Ative o provedor Google no Supabase e registre a URL de retorno.
-5. Execute `pnpm install` e `pnpm dev`.
+2. Preencha a URL e a chave publicável do projeto Supabase correto.
+3. Execute `pnpm install`.
+4. Execute `pnpm dev`.
 
-Sem `.env.local`, a aplicação abre em modo de prévia e não grava dados.
+Sem as variáveis do Supabase, a aplicação abre somente a visualização estrutural e não grava dados.
 
-Projeto Supabase autorizado: `dpowbyexrcdcwwqysgzp` (SISTEMA), organização `xhozxulkprvjzchnknfv`. Não utilizar o projeto legado. O acesso Google exige identidade confirmada e um único vínculo ativo de empresa; a proteção efetiva dos dados também depende das políticas RLS no servidor.
+## Verificação
 
-Verificação local: 19 testes unitários de autorização, prazo de espera e validação de cadastros. Esses testes não substituem testes integrados de sessão, RLS, isolamento e recuperação de gravação após falhas de rede.
+- `pnpm test`: executa os testes automatizados.
+- `pnpm build`: valida os tipos e gera a versão de produção.
 
-## Regras previstas (ainda não implementadas integralmente)
+O GitHub executa as duas verificações automaticamente em pushes e pull requests direcionados à branch `main`.
 
-- Orçamentos aprovados geram uma versão imutável usada pelo pedido.
-- O pedido centraliza o andamento operacional; seus itens possuem status individuais.
-- Insumos e serviços são linhas explícitas de custo do item.
-- Compras e parcelas mantêm vínculo com a origem.
-- PDFs serão sempre validados pelo usuário antes da gravação.
-- Eventos são criados no CRM e enviados ao Google Calendar.
+## Banco de dados
+
+As alterações ficam em `supabase/migrations` e devem ser aplicadas em ordem. As políticas RLS isolam os dados por organização e as funções sensíveis conferem identidade e perfil no servidor. Nunca exponha uma chave `service_role` no navegador.
+
+## Publicação
+
+A compilação está pronta para hospedagem estática. Antes do primeiro deploy público ainda é necessário escolher o provedor, configurar nele as duas variáveis `VITE_SUPABASE_*` e registrar a URL definitiva nos retornos autorizados do Supabase e do Google OAuth.
