@@ -20,7 +20,7 @@ export function App() {
   const [active, setActive] = useState<ModuleKey>(()=>readRoute(window.location.hash).module)
   useEffect(()=>{const sync=()=>setActive(readRoute(window.location.hash).module);window.addEventListener('hashchange',sync);return()=>window.removeEventListener('hashchange',sync)},[])
   const navigate=(module:ModuleKey)=>navigateTo(module)
-  const content = active === 'inicio' ? <Dashboard navigate={setActive}/>
+  const content = active === 'inicio' ? <Dashboard navigate={navigate}/>
     : active === 'prospeccao' ? <Prospecting/>
     : active === 'clientes' ? <Clients/>
     : active === 'insumos' ? <Supplies/>
