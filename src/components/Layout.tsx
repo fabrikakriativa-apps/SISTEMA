@@ -13,7 +13,7 @@ const groups: { label: string; items: NavItem[] }[] = [
   { label: 'Operação', items: [{ key:'compras', label:'Compras', icon:ShoppingCart }] },
   { label: 'Financeiro', items: [{ key:'financeiro', label:'Gestão financeira', icon:CircleDollarSign }] },
   { label: 'Cadastros', items: [{ key:'insumos', label:'Insumos e produtos', icon:ContactRound },{ key:'fornecedores', label:'Fornecedores', icon:UsersRound }] },
-  { label: 'Administração', items: [{ key:'administracao', label:'Configurações', icon:Settings }] },
+  { label: 'Administração', items: [{ key:'administracao', label:'Administração', icon:Settings }] },
 ]
 
 export function Layout({ active, setActive, children }: { active: ModuleKey; setActive: (key: ModuleKey) => void; children: ReactNode }) {

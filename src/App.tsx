@@ -15,7 +15,7 @@ const Finance=lazy(()=>import('./pages/Finance').then(module=>({default:module.F
 const PurchasesConnected=lazy(()=>import('./pages/PurchasesConnected').then(module=>({default:module.PurchasesConnected})))
 const Suppliers=lazy(()=>import('./pages/Suppliers').then(module=>({default:module.Suppliers})))
 const Calendar=lazy(()=>import('./pages/Calendar').then(module=>({default:module.Calendar})))
-const ModulePlaceholder=lazy(()=>import('./pages/ModulePlaceholder').then(module=>({default:module.ModulePlaceholder})))
+const Administration=lazy(()=>import('./pages/Administration').then(module=>({default:module.Administration})))
 
 export function App() {
   const [active, setActive] = useState<ModuleKey>(()=>readRoute(window.location.hash).module)
@@ -31,6 +31,6 @@ export function App() {
     : active === 'compras' ? <PurchasesConnected/>
     : active === 'fornecedores' ? <Suppliers/>
     : active === 'agenda' ? <Calendar/>
-    : <ModulePlaceholder module={active}/>
+    : <Administration/>
   return <ToastProvider><AuthGate><Layout active={active} setActive={navigate}><Suspense fallback={<p className="panel-message" role="status">Carregando módulo…</p>}>{content}</Suspense></Layout></AuthGate></ToastProvider>
 }
