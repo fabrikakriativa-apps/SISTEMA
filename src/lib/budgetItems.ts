@@ -5,6 +5,8 @@ export type ItemCosts = {
   margin_percent:number
 }
 
+export type SupplyCost={quantity:number;unit_cost:number}
+
 const positive=(value:number)=>Number.isFinite(value)?Math.max(0,value):0
 
 export function itemCostTotal(item:ItemCosts) {
@@ -13,4 +15,12 @@ export function itemCostTotal(item:ItemCosts) {
 
 export function salePriceFromMargin(item:ItemCosts) {
   return Number((itemCostTotal(item)*(1+positive(item.margin_percent)/100)).toFixed(2))
+}
+
+export function supplyCostTotal(lines:SupplyCost[]){
+  return Number(lines.reduce((sum,line)=>sum+positive(line.quantity)*positive(line.unit_cost),0).toFixed(2))
+}
+
+export function composedItemCost(item:ItemCosts,lines:SupplyCost[]){
+  return Number((itemCostTotal(item)+supplyCostTotal(lines)).toFixed(2))
 }
