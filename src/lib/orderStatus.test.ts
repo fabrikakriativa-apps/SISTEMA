@@ -9,4 +9,9 @@ describe('orderStatusOptions', () => {
   it('mantém cancelamento como estado terminal', () => {
     expect(orderStatusOptions('cancelled')).toEqual(['cancelled'])
   })
+
+  it('não permite pular compras pendentes pela interface', () => {
+    expect(orderStatusOptions('awaiting_purchase')).toEqual(['awaiting_purchase', 'cancelled'])
+    expect(orderStatusOptions('awaiting_supplier')).toEqual(['awaiting_supplier', 'cancelled'])
+  })
 })
