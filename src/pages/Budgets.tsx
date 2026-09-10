@@ -207,7 +207,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     const [familyResult,itemResult,supplyResult,attachmentResult]=await Promise.all([
       supabase.from('item_families').select('id,name,code,form_key').eq('organization_id',access.organizationId).eq('active',true).order('name'),
       supabase.from('budget_items').select('id,family_id,position,presentation,environment,description,quantity,configuration,cost_total,margin_percent,sale_total,affects_total,family:item_families!budget_items_family_id_fkey(name)').eq('organization_id',access.organizationId).eq('budget_id',budget.id).order('position'),
-      supabase.from('supplies').select('id,code,name,usage_unit,current_cost').eq('organization_id',access.organizationId).eq('active',true).order('name'),
+      supabase.from('supplies').select('id,code,name,category,usage_unit,current_cost').eq('organization_id',access.organizationId).eq('active',true).order('name'),
       supabase.from('attachments').select('id,original_name,storage_path,created_at').eq('organization_id',access.organizationId).eq('entity_type','budget').eq('entity_id',budget.id).order('created_at',{ascending:false})
     ])
     if(familyResult.error||itemResult.error||supplyResult.error)show(`Não foi possível carregar os itens: ${familyResult.error?.message??itemResult.error?.message??supplyResult.error?.message}`,'error')
