@@ -31,5 +31,5 @@ function ReceivablesPanel(){
 
 export function Finance(){
   const access=useAccess(),[view,setView]=useState<'receivable'|'payable'>('receivable')
-  return <Page title="Gestão financeira" description="Contas a receber e a pagar, sempre vinculadas à origem."><div className="finance-tabs"><button className={view==='receivable'?'active':''} onClick={()=>setView('receivable')}>Contas a receber</button><button className={view==='payable'?'active':''} onClick={()=>setView('payable')}>Contas a pagar</button></div>{view==='receivable'?<ReceivablesPanel/>:access?<PayablesPanel organizationId={access.organizationId}/>:null}</Page>
+  return <Page title="Gestão financeira" description="Controle de contas a receber e a pagar."><div className="finance-tabs"><button className={view==='receivable'?'active':''} onClick={()=>setView('receivable')}>Contas a receber</button><button className={view==='payable'?'active':''} onClick={()=>setView('payable')}>Contas a pagar</button></div>{view==='receivable'?<ReceivablesPanel/>:access?<PayablesPanel organizationId={access.organizationId}/>:null}</Page>
 }
