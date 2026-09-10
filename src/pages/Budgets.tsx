@@ -33,7 +33,8 @@ type Attachment={id:string;original_name:string;storage_path:string;created_at:s
 
 const blankEditable:Editable = { client_id:null, client_address:'', client_address_edited:false, valid_until:null, payment_terms:'', delivery_terms:'', notes:'', internal_notes:'', discount:0 }
 const newBlankItem=():ItemForm=>({family_id:'',environment:'',description:'',quantity:1,presentation:'principal',manufacturer_cost:0,installation_cost:0,additional_cost:0,margin_percent:50,sale_total:0,confection_subitem:'',initial_configuration:{}})
-const columns = 'id,number,display_number,current_revision,client_id,client_address,client_address_edited,status,valid_until,payment_terms,delivery_terms,notes,internal_notes,subtotal,discount,total,created_at,updated_at,client:clients!budgets_client_id_fkey(name)'
+const columns = 'id,number,display_number,current_revision,client_id,client_address,client_address_edited,status,valid_until,payment_terms,delivery_terms,notes,internal_notes,subtotal,discount,total,created_at,updated_at'
+const withClient = (budget:Budget, clients:Client[]):Budget => ({...budget,client:clients.find(client=>client.id===budget.client_id)?{name:clients.find(client=>client.id===budget.client_id)!.name}:null})
 
 function errorMessage(error:unknown, fallback:string) {
   const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : ''
@@ -58,9 +59,10 @@ export function Budgets() {
         supabase.from('budgets').select(columns).eq('organization_id',access.organizationId).order('number',{ascending:false}).abortSignal(AbortSignal.timeout(15000)),
         supabase.from('clients').select('id,name,phone,address,city,client_type,master_client_id,master:clients!clients_master_client_id_fkey(name,address,city)').eq('organization_id',access.organizationId).is('archived_at',null).order('name').abortSignal(AbortSignal.timeout(15000)),
       ])
-      if (budgetResult.error) throw budgetResult.error
       if (clientResult.error) throw clientResult.error
-      setItems((budgetResult.data ?? []) as unknown as Budget[]); setClients((clientResult.data ?? []) as Client[])
+      setClients((clientResult.data ?? []) as Client[])
+      if (budgetResult.error) throw budgetResult.error
+      setItems(((budgetResult.data ?? []) as unknown as Budget[]).map(budget=>withClient(budget,clientResult.data as Client[])))
     } catch (reason) { setError(errorMessage(reason,'Não foi possível carregar os orçamentos. Verifique a conexão e tente novamente.')) }
     finally { setLoading(false) }
   },[access])
@@ -85,7 +87,7 @@ export function Budgets() {
       const total = Math.max(0,Number(currentBudget.subtotal)-Number(next.discount||0))
       const { data,error } = await supabase.from('budgets').update({ ...next, client_id:next.client_id||null, valid_until:next.valid_until||null, total }).eq('id',currentBudget.id).eq('organization_id',access!.organizationId).select(columns).single()
       if (error) throw error
-      const saved = data as unknown as Budget
+      const saved = withClient(data as unknown as Budget,clients)
       selectedRef.current=saved; setSelected(saved); setItems(current=>current.map(item=>item.id===saved.id?saved:item)); setSaveState('saved')
     } catch (reason) { setSaveState('error'); show(errorMessage(reason,'Não foi possível salvar o rascunho. Seus dados permanecem na tela.'),'error') }
     finally {
@@ -93,7 +95,7 @@ export function Budgets() {
       const queued=pending.current; pending.current=null
       if(queued&&JSON.stringify(queued)!==JSON.stringify(next)) void persist(queued)
     }
-  },[access,show])
+  },[access,clients,show])
 
   useEffect(() => {
     if(!selected||!initialized.current) return
