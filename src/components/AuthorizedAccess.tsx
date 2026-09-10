@@ -3,7 +3,7 @@ import type { Session } from '@supabase/supabase-js'
 import { LogIn, ShieldCheck } from 'lucide-react'
 import { supabase, supabaseConfigured } from '../lib/supabase'
 import { verifyAccess, withTimeout, type Access } from '../lib/access'
-import { cleanAuthenticationFragment } from '../lib/authUrl'
+import { applicationRedirectUrl, cleanAuthenticationFragment } from '../lib/authUrl'
 
 const AccessContext = createContext<Access | null>(null)
 export const useAccess = () => useContext(AccessContext)
@@ -51,7 +51,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
     if (!supabase || busy) return
     setBusy(true); setError('')
     try {
-      const { error } = await withTimeout(supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } }))
+      const { error } = await withTimeout(supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: applicationRedirectUrl(window.location.origin,import.meta.env.BASE_URL) } }))
       if (error) throw error
     } catch { setError('Não foi possível iniciar o login Google. Tente novamente ou contate o administrador.') }
     finally { setBusy(false) }

@@ -46,4 +46,4 @@ As alterações ficam em `supabase/migrations` e devem ser aplicadas em ordem. A
 
 ## Publicação
 
-A compilação está pronta para hospedagem estática. Antes do primeiro deploy público ainda é necessário escolher o provedor, configurar nele as duas variáveis `VITE_SUPABASE_*` e registrar a URL definitiva nos retornos autorizados do Supabase e do Google OAuth.
+O projeto inclui um ambiente de testes manual no GitHub Pages, separado do CRM antigo. Veja o roteiro em [docs/TESTE_PUBLICADO.md](docs/TESTE_PUBLICADO.md). A versão definitiva poderá usar o domínio próprio após a validação desse ambiente.

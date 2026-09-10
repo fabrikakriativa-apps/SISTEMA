@@ -1,0 +1,48 @@
+name: Publicar ambiente de testes
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+      - name: Preparar pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+      - name: Preparar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - name: Instalar dependências
+        run: pnpm install --frozen-lockfile
+      - name: Compilar versão de testes
+        run: pnpm exec tsc -p tsconfig.app.json && pnpm exec vite build --base=/SISTEMA/
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      - name: Preparar GitHub Pages
+        uses: actions/configure-pages@v5
+      - name: Enviar versão compilada
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - name: Publicar ambiente de testes
+        id: deployment
+        uses: actions/deploy-pages@v4

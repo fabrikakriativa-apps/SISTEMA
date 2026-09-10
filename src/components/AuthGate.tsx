@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { LogIn, ShieldCheck } from 'lucide-react'
 import { supabase, supabaseConfigured } from '../lib/supabase'
+import { applicationRedirectUrl } from '../lib/authUrl'
 
 export function AuthGate({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
@@ -27,7 +28,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   if (!session && !preview) return <main className="auth-page"><section className="auth-card">
     <div className="brand-mark">FK</div><ShieldCheck className="auth-shield"/><span className="eyebrow">Acesso protegido</span>
     <h1>Gestão Fábrika Kriativa</h1><p>Entre com uma conta Google autorizada pela empresa.</p>
-    <button className="button google wide" onClick={() => supabase!.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } })}><LogIn/> Entrar com Google</button>
+    <button className="button google wide" onClick={() => supabase!.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: applicationRedirectUrl(window.location.origin,import.meta.env.BASE_URL) } })}><LogIn/> Entrar com Google</button>
   </section></main>
 
   return <>{children}</>
