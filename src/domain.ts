@@ -13,6 +13,7 @@ export const orderStatuses = [
 ] as const
 
 export const knownItemFamilies = [
-  'Cortina', 'Persiana', 'Papel de parede', 'Cabeceira', 'Confecção',
-  'Reforma de estofados', 'Diversos',
+  'Cortina', 'Persiana', 'Confecção', 'Reforma de estofados', 'Papel de parede',
 ] as const
+
+export const confectionSubitems = ['Cabeceira', 'Sofá', 'Estofado para bancos', 'Outros'] as const

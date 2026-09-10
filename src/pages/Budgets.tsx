@@ -13,8 +13,7 @@ import { budgetStatusLabels as labels, budgetStatusOptions, statusNeedsReason, t
 import { navigateTo, readRoute } from '../lib/navigation'
 import { ItemCostComposition, type SupplyLine, type SupplyOption } from '../components/ItemCostComposition'
 import { budgetDocumentPath } from '../lib/documents'
-import {blankWallpaper,wallpaperDescription,type WallpaperDetails} from '../lib/wallpaper'
-import {blankHeadboard,headboardDescription,type HeadboardDetails} from '../lib/headboard'
+import { confectionSubitems } from '../domain'
 
 type Budget = {
   id:string; number:number; display_number:string; current_revision:number; client_id:string|null
@@ -27,12 +26,12 @@ type Client = { id:string; name:string; phone:string|null; address:string|null; 
 type Editable = Pick<Budget,'client_id'|'client_address'|'client_address_edited'|'valid_until'|'payment_terms'|'delivery_terms'|'notes'|'internal_notes'|'discount'>
 type Family={id:string;name:string;code:string;form_key:string}
 type BudgetItem={id:string;family_id:string|null;position:number;presentation:string;environment:string|null;description:string;quantity:number;configuration:Record<string,unknown>;cost_total:number;margin_percent:number|null;sale_total:number;affects_total:boolean;family:{name:string}|null}
-type ItemForm={id?:string;family_id:string;environment:string;description:string;quantity:number;presentation:'principal'|'option';manufacturer_cost:number;installation_cost:number;additional_cost:number;margin_percent:number;sale_total:number;wallpaper:WallpaperDetails;headboard:HeadboardDetails}
+type ItemForm={id?:string;family_id:string;environment:string;description:string;quantity:number;presentation:'principal'|'option';manufacturer_cost:number;installation_cost:number;additional_cost:number;margin_percent:number;sale_total:number;confection_subitem:string;initial_configuration:Record<string,unknown>}
 type PdfRow={selected:boolean;environment:string;presentation:'principal'|'option';margin_percent:number;sale_total:number}
 type Attachment={id:string;original_name:string;storage_path:string;created_at:string}
 
 const blankEditable:Editable = { client_id:null, client_address:'', client_address_edited:false, valid_until:null, payment_terms:'', delivery_terms:'', notes:'', internal_notes:'', discount:0 }
-const newBlankItem=():ItemForm=>({family_id:'',environment:'',description:'',quantity:1,presentation:'principal',manufacturer_cost:0,installation_cost:0,additional_cost:0,margin_percent:50,sale_total:0,wallpaper:{...blankWallpaper},headboard:{...blankHeadboard}})
+const newBlankItem=():ItemForm=>({family_id:'',environment:'',description:'',quantity:1,presentation:'principal',manufacturer_cost:0,installation_cost:0,additional_cost:0,margin_percent:50,sale_total:0,confection_subitem:'',initial_configuration:{}})
 const columns = 'id,number,display_number,current_revision,client_id,client_address,client_address_edited,status,valid_until,payment_terms,delivery_terms,notes,internal_notes,subtotal,discount,total,created_at,updated_at,client:clients!budgets_client_id_fkey(name)'
 
 function errorMessage(error:unknown, fallback:string) {
@@ -117,10 +116,68 @@ export function Budgets() {
   const counts=useMemo(()=>({draft:items.filter(x=>x.status==='draft').length,sent:items.filter(x=>x.status==='sent').length,approved:items.filter(x=>x.status==='approved').length,rejected:items.filter(x=>x.status==='rejected').length}),[items])
   if(selected) return <BudgetEditor access={access!} budget={selected} setBudget={budget=>{selectedRef.current=budget;setSelected(budget);setItems(current=>current.map(item=>item.id===budget.id?budget:item))}} form={form} setForm={setForm} clients={clients} saveState={saveState} close={()=>{initialized.current=false;selectedRef.current=null;setSelected(null);navigateTo('orcamentos')}}/>
 
-  return <Page title="Orçamentos" description="Rascunhos automáticos, revisões preservadas e uma única versão para tela, PDF e WhatsApp." action={<button className="button primary" disabled={creating} onClick={create}><Plus/>{creating?'Criando…':'Novo orçamento'}</button>}>
-    {loading&&<p role="status">Carregando orçamentos…</p>}{error&&<p role="alert">{error} <button className="button secondary" onClick={load}>Tentar novamente</button></p>}
-    <section className="status-grid"><article><span>Rascunhos</span><strong>{counts.draft}</strong></article><article><span>Enviados</span><strong>{counts.sent}</strong></article><article><span>Aprovados</span><strong>{counts.approved}</strong></article><article><span>Reprovados</span><strong>{counts.rejected}</strong></article></section>
-    <section className="panel"><div className="toolbar"><label className="search"><Search/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Cliente, número ou status"/></label><span>{filtered.length} orçamento(s)</span></div><div className="table-wrap"><table><thead><tr><th>Número / cliente</th><th>Revisão</th><th>Criação</th><th>Valor</th><th>Status</th></tr></thead><tbody>{filtered.map(item=><tr className="clickable-row" key={item.id} onClick={()=>openEditor(item)}><td><strong>{item.display_number}</strong><small>{item.client?.name??'Cliente não informado'}</small></td><td>v{item.current_revision}</td><td>{new Date(item.created_at).toLocaleDateString('pt-BR')}</td><td><strong>{money.format(Number(item.total))}</strong></td><td><span className={`badge ${item.status==='approved'?'green':''}`}>{labels[item.status]}</span></td></tr>)}</tbody></table>{!loading&&!filtered.length&&<div className="empty-state"><FileText/><strong>Nenhum orçamento encontrado</strong><span>Crie o primeiro rascunho para começar.</span></div>}</div></section>
+  return <Page title="Orçamentos" description="Rascunhos automáticos, revisões preservadas e uma única versão para tela, PDF e WhatsApp." action={<button className="button primary" disabled={creating} onClick={create}>
+<Plus/>{creating?'Criando…':'Novo orçamento'}</button>}>
+    {loading&&<p role="status">Carregando orçamentos…</p>}{error&&<p role="alert">{error} <button className="button secondary" onClick={load}>Tentar novamente</button>
+</p>}
+    <section className="status-grid">
+<article>
+<span>Rascunhos</span>
+<strong>{counts.draft}</strong>
+</article>
+<article>
+<span>Enviados</span>
+<strong>{counts.sent}</strong>
+</article>
+<article>
+<span>Aprovados</span>
+<strong>{counts.approved}</strong>
+</article>
+<article>
+<span>Reprovados</span>
+<strong>{counts.rejected}</strong>
+</article>
+</section>
+    <section className="panel">
+<div className="toolbar">
+<label className="search">
+<Search/>
+<input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Cliente, número ou status"/>
+</label>
+<span>{filtered.length} orçamento(s)</span>
+</div>
+<div className="table-wrap">
+<table>
+<thead>
+<tr>
+<th>Número / cliente</th>
+<th>Revisão</th>
+<th>Criação</th>
+<th>Valor</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>{filtered.map(item=>
+<tr className="clickable-row" key={item.id} onClick={()=>openEditor(item)}>
+<td>
+<strong>{item.display_number}</strong>
+<small>{item.client?.name??'Cliente não informado'}</small>
+</td>
+<td>v{item.current_revision}</td>
+<td>{new Date(item.created_at).toLocaleDateString('pt-BR')}</td>
+<td>
+<strong>{money.format(Number(item.total))}</strong>
+</td>
+<td>
+<span className={`badge ${item.status==='approved'?'green':''}`}>{labels[item.status]}</span>
+</td>
+</tr>)}</tbody>
+</table>{!loading&&!filtered.length&&<div className="empty-state">
+<FileText/>
+<strong>Nenhum orçamento encontrado</strong>
+<span>Crie o primeiro rascunho para começar.</span>
+</div>}</div>
+</section>
   </Page>
 }
 
@@ -142,7 +199,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   const master=client?.master?.[0]
   const masterAddress=master?[master.address,master.city].filter(Boolean).join(' · '):''
   const selectedFormKey=families.find(family=>family.id===itemForm.family_id)?.form_key
-  const wallpaperSelected=selectedFormKey==='wallpaper',headboardSelected=selectedFormKey==='headboard'
+  const confectionSelected=selectedFormKey==='confection'
   const stateLabel=saveState==='saving'?'Salvando…':saveState==='waiting'?'Alterações pendentes':saveState==='error'?'Falha ao salvar':'Rascunho sincronizado'
   const loadItems=useCallback(async()=>{
     if(!supabase)return
@@ -183,7 +240,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     setSupplyLines([])
     if(!item){setItemForm(newBlankItem());setItemOpen(true);return}
     const c=item.configuration??{}
-    setItemForm({id:item.id,family_id:item.family_id??'',environment:item.environment??'',description:item.description,quantity:Number(item.quantity),presentation:item.presentation==='option'?'option':'principal',manufacturer_cost:Number(c.manufacturer_cost??item.cost_total),installation_cost:Number(c.installation_cost??0),additional_cost:Number(c.additional_cost??0),margin_percent:Number(item.margin_percent??0),sale_total:Number(item.sale_total),wallpaper:{...blankWallpaper,...((c.wallpaper??{}) as Partial<WallpaperDetails>)},headboard:{...blankHeadboard,...((c.headboard??{}) as Partial<HeadboardDetails>)}})
+    setItemForm({id:item.id,family_id:item.family_id??'',environment:item.environment??'',description:item.description,quantity:Number(item.quantity),presentation:item.presentation==='option'?'option':'principal',manufacturer_cost:Number(c.manufacturer_cost??item.cost_total),installation_cost:Number(c.installation_cost??0),additional_cost:Number(c.additional_cost??0),margin_percent:Number(item.margin_percent??0),sale_total:Number(item.sale_total),confection_subitem:typeof c.confection_subitem==='string'?c.confection_subitem:'',initial_configuration:c})
     setItemOpen(true)
     if(supabase){const {data}=await supabase.from('item_cost_lines').select('supply_id,description,quantity,unit,unit_cost').eq('organization_id',access.organizationId).eq('budget_item_id',item.id).eq('kind','supply');setSupplyLines((data??[]).map(line=>({...line,supply_id:line.supply_id??'',quantity:Number(line.quantity),unit_cost:Number(line.unit_cost)})) as SupplyLine[])}
   }
@@ -242,7 +299,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     if(!itemForm.family_id||!itemForm.description.trim()){show('Informe o tipo e a descrição do item.','error');return}
     setItemSaving(true)
     const formKey=families.find(family=>family.id===itemForm.family_id)?.form_key
-    const cost=costOf(itemForm), payload={organization_id:access.organizationId,budget_id:budget.id,family_id:itemForm.family_id,position:itemForm.id?(items.find(x=>x.id===itemForm.id)?.position??1):items.length+1,presentation:itemForm.presentation,environment:itemForm.environment.trim()||null,description:itemForm.description.trim(),quantity:itemForm.quantity,configuration:{manufacturer_cost:itemForm.manufacturer_cost,installation_cost:itemForm.installation_cost,additional_cost:itemForm.additional_cost,...(formKey==='wallpaper'?{wallpaper:itemForm.wallpaper}:{}),...(formKey==='headboard'?{headboard:itemForm.headboard}:{})},cost_total:cost,margin_percent:itemForm.margin_percent,sale_total:itemForm.sale_total,affects_total:itemForm.presentation==='principal'}
+    const cost=costOf(itemForm), payload={organization_id:access.organizationId,budget_id:budget.id,family_id:itemForm.family_id,position:itemForm.id?(items.find(x=>x.id===itemForm.id)?.position??1):items.length+1,presentation:itemForm.presentation,environment:itemForm.environment.trim()||null,description:itemForm.description.trim(),quantity:itemForm.quantity,configuration:{...itemForm.initial_configuration,manufacturer_cost:itemForm.manufacturer_cost,installation_cost:itemForm.installation_cost,additional_cost:itemForm.additional_cost,...(formKey==='confection'&&itemForm.confection_subitem?{confection_subitem:itemForm.confection_subitem}:{})},cost_total:cost,margin_percent:itemForm.margin_percent,sale_total:itemForm.sale_total,affects_total:itemForm.presentation==='principal'}
     const result=itemForm.id?await supabase.from('budget_items').update(payload).eq('id',itemForm.id).eq('organization_id',access.organizationId).select('id').single():await supabase.from('budget_items').insert(payload).select('id').single()
     if(result.error)show('Não foi possível salvar o item.','error')
     else {
@@ -299,20 +356,255 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     setWorkflowBusy(false)
   }
   const openAttachment=async(attachment:Attachment)=>{if(!supabase)return;const {data,error}=await supabase.storage.from('documents').createSignedUrl(attachment.storage_path,300);if(error||!data?.signedUrl)show('Não foi possível abrir o documento.','error');else window.open(data.signedUrl,'_blank','noopener,noreferrer')}
-  return <Page title="Construção do orçamento" description="Monte os dados comerciais e os itens que o cliente receberá." action={<div className="page-actions"><button className="button secondary" onClick={()=>setPreviewOpen(true)}>Prévia do cliente</button><button className="button secondary" onClick={close}><ArrowLeft/>Voltar aos orçamentos</button></div>}>
+  return <Page title="Construção do orçamento" description="Monte os dados comerciais e os itens que o cliente receberá." action={<div className="page-actions">
+<button className="button secondary" onClick={()=>setPreviewOpen(true)}>Prévia do cliente</button>
+<button className="button secondary" onClick={close}>
+<ArrowLeft/>Voltar aos orçamentos</button>
+</div>}>
     {previewOpen&&<BudgetPreview budget={{...budget,valid_until:form.valid_until,payment_terms:form.payment_terms,delivery_terms:form.delivery_terms,notes:form.notes,discount:Number(form.discount||0),total:Math.max(0,Number(budget.subtotal)-Number(form.discount||0))}} items={items} clientName={client?.name??'Cliente não informado'} clientAddress={form.client_address??''} onClose={()=>setPreviewOpen(false)}/>}
-    {newClientOpen&&<div className="dialog-backdrop"><form className="dialog" onSubmit={saveNewClient}><header><div><span className="eyebrow">Cliente do orçamento</span><h2>Novo cliente</h2><p>O cadastro será incluído na base e selecionado neste orçamento.</p></div><button type="button" className="icon-button" aria-label="Fechar" onClick={()=>setNewClientOpen(false)}><X/></button></header><div className="form-grid"><label className="field span-2">Nome<input required value={newClient.name} onChange={e=>setNewClient({...newClient,name:e.target.value})}/></label><label className="field">Telefone<input value={newClient.phone} onChange={e=>setNewClient({...newClient,phone:e.target.value})}/></label><label className="field">Origem<select value={newClient.origin} onChange={e=>setNewClient({...newClient,origin:e.target.value})}><option value="">Não informada</option><option>Porta de loja</option><option>Instagram</option><option>Google</option><option>Indicação</option></select></label><label className="field span-2">Parceiro/master vinculado<select value={newClient.master_client_id} onChange={e=>setNewClient({...newClient,master_client_id:e.target.value})}><option value="">Nenhum parceiro vinculado</option>{availableClients.filter(item=>item.client_type==='Parceiro/master').map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label className="field span-2">Endereço<input value={newClient.address} onChange={e=>setNewClient({...newClient,address:e.target.value})} placeholder="Rua, número e complemento"/></label><label className="field">Cidade/UF<input value={newClient.city} onChange={e=>setNewClient({...newClient,city:e.target.value})}/></label><label className="field">Observação da origem<input value={newClient.notes} onChange={e=>setNewClient({...newClient,notes:e.target.value})}/></label></div><footer><button type="button" className="button secondary" onClick={()=>setNewClientOpen(false)}>Cancelar</button><button className="button primary" disabled={newClientSaving}>{newClientSaving?'Salvando…':'Salvar e selecionar'}</button></footer></form></div>}
-    {confirmApproval&&<div className="workflow-confirm"><div><strong>Aprovar este orçamento e gerar o pedido?</strong><span>A versão enviada será preservada e somente os itens principais entrarão no pedido.</span></div><button className="button secondary" onClick={()=>setConfirmApproval(false)}>Voltar</button><button className="button primary" disabled={workflowBusy} onClick={()=>void approve()}>{workflowBusy?'Gerando pedido…':'Confirmar aprovação'}</button></div>}
-    {pendingStatus&&<div className="workflow-confirm"><div><strong>Alterar status para {labels[pendingStatus]}?</strong><span>{pendingStatus==='draft'?'Uma nova revisão editável será iniciada.':'Esta alteração ficará registrada no histórico.'}</span>{statusNeedsReason(pendingStatus)&&<input autoFocus value={statusReason} onChange={e=>setStatusReason(e.target.value)} placeholder="Informe o motivo"/>}</div><button className="button secondary" onClick={()=>setPendingStatus(null)}>Voltar</button><button className="button primary" disabled={workflowBusy||statusNeedsReason(pendingStatus)&&statusReason.trim().length<5} onClick={()=>void changeStatus()}>{workflowBusy?'Alterando…':'Confirmar alteração'}</button></div>}
-    <div className="budget-layout"><section className="panel budget-form"><header><div><h2>Dados comerciais</h2><p>{budget.display_number} · revisão {budget.current_revision}</p></div><span className={`save-state ${saveState}`}>{stateLabel}</span></header><div className="form-grid">
-      <label className="field">Status<select value={budget.status} disabled={workflowBusy} onChange={e=>requestStatus(e.target.value as BudgetStatus)}>{budgetStatusOptions(budget.status).map(status=><option value={status} key={status}>{labels[status]}</option>)}</select></label><div className="field"><span>Cliente final</span><div className="client-picker"><input list="budget-client-options" disabled={budget.status!=='draft'} value={clientSearch} onChange={e=>selectClient(e.target.value)} onBlur={()=>{if(clientSearch&& !availableClients.some(item=>item.name.toLocaleLowerCase('pt-BR')===clientSearch.trim().toLocaleLowerCase('pt-BR')))setClientSearch(client?.name??'')}} placeholder="Digite para buscar"/><button type="button" className="button secondary" disabled={budget.status!=='draft'} onClick={()=>setNewClientOpen(true)}><Plus/>Novo</button></div><datalist id="budget-client-options">{availableClients.filter(x=>x.client_type==='Cliente final').map(item=><option key={item.id} value={item.name}/>)}</datalist></div>
+    {newClientOpen&&<div className="dialog-backdrop">
+<form className="dialog" onSubmit={saveNewClient}>
+<header>
+<div>
+<span className="eyebrow">Cliente do orçamento</span>
+<h2>Novo cliente</h2>
+<p>O cadastro será incluído na base e selecionado neste orçamento.</p>
+</div>
+<button type="button" className="icon-button" aria-label="Fechar" onClick={()=>setNewClientOpen(false)}>
+<X/>
+</button>
+</header>
+<div className="form-grid">
+<label className="field span-2">Nome<input required value={newClient.name} onChange={e=>setNewClient({...newClient,name:e.target.value})}/>
+</label>
+<label className="field">Telefone<input value={newClient.phone} onChange={e=>setNewClient({...newClient,phone:e.target.value})}/>
+</label>
+<label className="field">Origem<select value={newClient.origin} onChange={e=>setNewClient({...newClient,origin:e.target.value})}>
+<option value="">Não informada</option>
+<option>Porta de loja</option>
+<option>Instagram</option>
+<option>Google</option>
+<option>Indicação</option>
+</select>
+</label>
+<label className="field span-2">Parceiro/master vinculado<select value={newClient.master_client_id} onChange={e=>setNewClient({...newClient,master_client_id:e.target.value})}>
+<option value="">Nenhum parceiro vinculado</option>{availableClients.filter(item=>item.client_type==='Parceiro/master').map(item=>
+<option key={item.id} value={item.id}>{item.name}</option>)}</select>
+</label>
+<label className="field span-2">Endereço<input value={newClient.address} onChange={e=>setNewClient({...newClient,address:e.target.value})} placeholder="Rua, número e complemento"/>
+</label>
+<label className="field">Cidade/UF<input value={newClient.city} onChange={e=>setNewClient({...newClient,city:e.target.value})}/>
+</label>
+<label className="field">Observação da origem<input value={newClient.notes} onChange={e=>setNewClient({...newClient,notes:e.target.value})}/>
+</label>
+</div>
+<footer>
+<button type="button" className="button secondary" onClick={()=>setNewClientOpen(false)}>Cancelar</button>
+<button className="button primary" disabled={newClientSaving}>{newClientSaving?'Salvando…':'Salvar e selecionar'}</button>
+</footer>
+</form>
+</div>}
+    {confirmApproval&&<div className="workflow-confirm">
+<div>
+<strong>Aprovar este orçamento e gerar o pedido?</strong>
+<span>A versão enviada será preservada e somente os itens principais entrarão no pedido.</span>
+</div>
+<button className="button secondary" onClick={()=>setConfirmApproval(false)}>Voltar</button>
+<button className="button primary" disabled={workflowBusy} onClick={()=>void approve()}>{workflowBusy?'Gerando pedido…':'Confirmar aprovação'}</button>
+</div>}
+    {pendingStatus&&<div className="workflow-confirm">
+<div>
+<strong>Alterar status para {labels[pendingStatus]}?</strong>
+<span>{pendingStatus==='draft'?'Uma nova revisão editável será iniciada.':'Esta alteração ficará registrada no histórico.'}</span>{statusNeedsReason(pendingStatus)&&<input autoFocus value={statusReason} onChange={e=>setStatusReason(e.target.value)} placeholder="Informe o motivo"/>}</div>
+<button className="button secondary" onClick={()=>setPendingStatus(null)}>Voltar</button>
+<button className="button primary" disabled={workflowBusy||statusNeedsReason(pendingStatus)&&statusReason.trim().length<5} onClick={()=>void changeStatus()}>{workflowBusy?'Alterando…':'Confirmar alteração'}</button>
+</div>}
+    <div className="budget-layout">
+<section className="panel budget-form">
+<header>
+<div>
+<h2>Dados comerciais</h2>
+<p>{budget.display_number} · revisão {budget.current_revision}</p>
+</div>
+<span className={`save-state ${saveState}`}>{stateLabel}</span>
+</header>
+<div className="form-grid">
+      <label className="field">Status<select value={budget.status} disabled={workflowBusy} onChange={e=>requestStatus(e.target.value as BudgetStatus)}>{budgetStatusOptions(budget.status).map(status=>
+<option value={status} key={status}>{labels[status]}</option>)}</select>
+</label>
+<div className="field">
+<span>Cliente final</span>
+<div className="client-picker">
+<input list="budget-client-options" disabled={budget.status!=='draft'} value={clientSearch} onChange={e=>selectClient(e.target.value)} onBlur={()=>{if(clientSearch&& !availableClients.some(item=>item.name.toLocaleLowerCase('pt-BR')===clientSearch.trim().toLocaleLowerCase('pt-BR')))setClientSearch(client?.name??'')}} placeholder="Digite para buscar"/>
+<button type="button" className="button secondary" disabled={budget.status!=='draft'} onClick={()=>setNewClientOpen(true)}>
+<Plus/>Novo</button>
+</div>
+<datalist id="budget-client-options">{availableClients.filter(x=>x.client_type==='Cliente final').map(item=>
+<option key={item.id} value={item.name}/>)}</datalist>
+</div>
       <label className="field span-2">Endereço do cliente<input disabled={!form.client_id||budget.status!=='draft'} value={form.client_address??''} onChange={e=>setForm({...form,client_address:e.target.value,client_address_edited:true})} placeholder={form.client_id?'Informe o endereço usado neste orçamento':'Selecione o cliente primeiro'}/>{form.client_address_edited&&<small className="field-note edited">Endereço editado pelo usuário neste orçamento</small>}</label>
-      {master&&<label className="field span-2">Endereço do Parceiro/master<input readOnly value={masterAddress}/><small className="field-note">{master.name}</small></label>}
-      <label className="field">Validade<input type="date" value={form.valid_until??''} onChange={e=>setForm({...form,valid_until:e.target.value})}/></label><label className="field">Previsão<input value={form.delivery_terms??''} onChange={e=>setForm({...form,delivery_terms:e.target.value})} placeholder="Ex.: 25 dias úteis"/></label>
-      <label className="field span-2">Condição de pagamento<input value={form.payment_terms??''} onChange={e=>setForm({...form,payment_terms:e.target.value})}/></label><label className="field span-2">Observações para o cliente<textarea value={form.notes??''} onChange={e=>setForm({...form,notes:e.target.value})}/></label><label className="field span-2">Observações internas<textarea value={form.internal_notes??''} onChange={e=>setForm({...form,internal_notes:e.target.value})}/></label>
-    </div>{attachments.length>0&&<div className="document-links"><strong>Documentos anexados</strong>{attachments.map(attachment=><button type="button" key={attachment.id} onClick={()=>void openAttachment(attachment)}>{attachment.original_name}</button>)}</div>}</section><aside className="panel budget-summary"><header><h2>Resumo</h2></header><dl><div><dt>Cliente</dt><dd>{client?.name??'Não informado'}</dd></div><div><dt>Subtotal</dt><dd>{money.format(Number(budget.subtotal))}</dd></div><div><dt>Desconto</dt><dd><input type="number" min="0" step="0.01" value={form.discount} onChange={e=>setForm({...form,discount:Number(e.target.value)})}/></dd></div><div className="total"><dt>Total</dt><dd>{money.format(Math.max(0,Number(budget.subtotal)-Number(form.discount||0)))}</dd></div></dl></aside></div>
-    <section className="panel budget-items"><header><div><h2>Itens do orçamento</h2><p>Cada item mantém seu ambiente, custo, margem e forma de apresentação.</p></div><button className="button primary" onClick={()=>openItem()}><Plus/>Adicionar item</button></header>{itemsLoading?<p className="panel-message">Carregando itens…</p>:items.length?<div className="table-wrap"><table><thead><tr><th>Tipo / ambiente</th><th>Descrição</th><th>Qtd.</th><th>Custo</th><th>Venda</th><th>Apresentação</th></tr></thead><tbody>{items.map(item=><tr className="clickable-row" key={item.id} onClick={()=>openItem(item)}><td><strong>{item.family?.name??'Item'}</strong><small>{item.environment||'Ambiente a definir'}</small></td><td>{item.description}</td><td>{Number(item.quantity).toLocaleString('pt-BR')}</td><td>{money.format(Number(item.cost_total))}</td><td><strong>{money.format(Number(item.sale_total))}</strong></td><td><span className="badge">{item.affects_total?'Item principal':'Opção'}</span></td></tr>)}</tbody></table></div>:<div className="empty-state compact"><FileText/><strong>Nenhum item adicionado</strong><span>Os dados gerais já são salvos automaticamente como rascunho.</span></div>}</section>
-    {itemOpen&&<div className="dialog-backdrop"><form className="dialog item-dialog" onSubmit={saveItem}><header><div><span className="eyebrow">Item do orçamento</span><h2>{itemForm.id?'Editar item':'Adicionar item'}</h2><p>Cortina e Persiana podem ser preenchidas pela leitura do PDF e sempre passam por conferência.</p></div><button type="button" className="icon-button" onClick={()=>setItemOpen(false)}><X/></button></header><div className="pdf-import"><label className={`pdf-drop ${pdfReading?'reading':''}`}><input type="file" accept="application/pdf,.pdf" onChange={e=>void readPdf(e.target.files?.[0])}/><strong>{pdfReading?'Lendo o documento…':'Anexar cotação ou pedido em PDF'}</strong><span>A leitura procura significado e valores, sem depender de coordenadas fixas.</span></label>{pdfResult&&<div className="pdf-result"><strong>{pdfName} · {pdfResult.items.length} item(ns)</strong><div className="pdf-bulk-list">{pdfResult.items.map((item,index)=><div className="pdf-bulk-row" key={`${item.description}-${index}`}><input aria-label={`Importar item ${index+1}`} type="checkbox" checked={pdfRows[index]?.selected??false} onChange={e=>setPdfRows(current=>current.map((row,i)=>i===index?{...row,selected:e.target.checked}:row))}/><button type="button" onClick={()=>applyPdfCandidate(pdfResult,index)}><strong>{index+1}. {item.description}</strong><span>{money.format(item.value)} · confiança {Math.round(item.confidence*100)}%</span></button><input aria-label={`Ambiente do item ${index+1}`} placeholder="Ambiente" value={pdfRows[index]?.environment??''} onChange={e=>setPdfRows(current=>current.map((row,i)=>i===index?{...row,environment:e.target.value}:row))}/><select aria-label={`Apresentação do item ${index+1}`} value={pdfRows[index]?.presentation??'principal'} onChange={e=>setPdfRows(current=>current.map((row,i)=>i===index?{...row,presentation:e.target.value as PdfRow['presentation']}:row))}><option value="principal">Principal</option><option value="option">Opção</option></select></div>)}</div><small>Marque os itens, informe os ambientes e confira valores antes da importação conjunta.</small><button type="button" className="button primary" disabled={itemSaving} onClick={()=>void importSelected()}>{itemSaving?'Importando…':`Importar ${pdfRows.filter(row=>row.selected).length} selecionado(s)`}</button></div>}</div><div className="form-grid"><label className="field">Tipo<select required value={itemForm.family_id} onChange={e=>setItemForm({...itemForm,family_id:e.target.value})}><option value="">Selecione</option>{families.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label><label className="field">Ambiente<input value={itemForm.environment} onChange={e=>setItemForm({...itemForm,environment:e.target.value})} placeholder="Ex.: Sala"/></label>{wallpaperSelected&&<><div className="span-2 item-specific-heading"><strong>Dados do papel de parede</strong><small>Preencha somente dados confirmados. O sistema não calcula consumo automaticamente.</small></div><label className="field">Fabricante<input value={itemForm.wallpaper.brand} onChange={e=>setItemForm({...itemForm,wallpaper:{...itemForm.wallpaper,brand:e.target.value}})}/></label><label className="field">Coleção<input value={itemForm.wallpaper.collection} onChange={e=>setItemForm({...itemForm,wallpaper:{...itemForm.wallpaper,collection:e.target.value}})}/></label><label className="field">Referência<input value={itemForm.wallpaper.reference} onChange={e=>setItemForm({...itemForm,wallpaper:{...itemForm.wallpaper,reference:e.target.value}})}/></label><label className="field">Cor<input value={itemForm.wallpaper.color} onChange={e=>setItemForm({...itemForm,wallpaper:{...itemForm.wallpaper,color:e.target.value}})}/></label><label className="field">Largura da parede (m)<input type="number" min="0" step="0.001" value={itemForm.wallpaper.wall_width||''} onChange={e=>setItemForm({...itemForm,wallpaper:{...itemForm.wallpaper,wall_width:Number(e.target.value)}})}/></label><label className="field">Altura da parede (m)<input type="number" min="0" step="0.001" value={itemForm.wallpaper.wall_height||''} onChange={e=>setItemForm({...itemForm,wallpaper:{...itemForm.wallpaper,wall_height:Number(e.target.value)}})}/></label><label className="field">Largura do rolo (m)<input type="number" min="0" step="0.001" value={itemForm.wallpaper.roll_width||''} onChange={e=>setItemForm({...itemForm,wallpaper:{...itemForm.wallpaper,roll_width:Number(e.target.value)}})}/></label><label className="field">Comprimento do rolo (m)<input type="number" min="0" step="0.001" value={itemForm.wallpaper.roll_length||''} onChange={e=>setItemForm({...itemForm,wallpaper:{...itemForm.wallpaper,roll_length:Number(e.target.value)}})}/></label><label className="field">Quantidade confirmada de rolos<input type="number" min="1" step="1" value={itemForm.wallpaper.rolls} onChange={e=>{const rolls=Math.max(1,Number(e.target.value));setItemForm({...itemForm,quantity:rolls,wallpaper:{...itemForm.wallpaper,rolls}})}}/></label><div className="field"><span>Descrição sugerida</span><button type="button" className="button secondary" onClick={()=>setItemForm({...itemForm,description:wallpaperDescription(itemForm.wallpaper)})}>Gerar descrição</button></div></>}<label className="field span-2">Descrição para o cliente<textarea required value={itemForm.description} onChange={e=>setItemForm({...itemForm,description:e.target.value})} placeholder="Descreva modelo, material, medidas e acabamento"/></label><label className="field">Quantidade<input type="number" min="0.001" step="0.001" value={itemForm.quantity} onChange={e=>setItemForm({...itemForm,quantity:Number(e.target.value)})}/></label><label className="field">Apresentação<select value={itemForm.presentation} onChange={e=>setItemForm({...itemForm,presentation:e.target.value as ItemForm['presentation']})}><option value="principal">Item principal</option><option value="option">Opção (não soma)</option></select></label><label className="field">Custo do fabricante<input type="number" min="0" step="0.01" value={itemForm.manufacturer_cost} onChange={e=>setItemForm(current=>withMargin({...current,manufacturer_cost:Number(e.target.value)}))}/></label><label className="field">Instalação<input type="number" min="0" step="0.01" value={itemForm.installation_cost} onChange={e=>setItemForm(current=>withMargin({...current,installation_cost:Number(e.target.value)}))}/></label><label className="field">Custos adicionais<input type="number" min="0" step="0.01" value={itemForm.additional_cost} onChange={e=>setItemForm(current=>withMargin({...current,additional_cost:Number(e.target.value)}))}/></label>
-{headboardSelected&&<><div className="span-2 item-specific-heading"><strong>Dados da cabeceira</strong><small>As medidas e acabamentos permanecem editáveis e não alteram custos automaticamente.</small></div><label className="field">Modelo<input value={itemForm.headboard.model} onChange={e=>setItemForm({...itemForm,headboard:{...itemForm.headboard,model:e.target.value}})}/></label><label className="field">Revestimento<input value={itemForm.headboard.covering} onChange={e=>setItemForm({...itemForm,headboard:{...itemForm.headboard,covering:e.target.value}})}/></label><label className="field">Cor<input value={itemForm.headboard.color} onChange={e=>setItemForm({...itemForm,headboard:{...itemForm.headboard,color:e.target.value}})}/></label><label className="field">Fixação<input value={itemForm.headboard.fixing} onChange={e=>setItemForm({...itemForm,headboard:{...itemForm.headboard,fixing:e.target.value}})} placeholder="Ex.: na parede"/></label><label className="field">Largura (m)<input type="number" min="0" step="0.001" value={itemForm.headboard.width||''} onChange={e=>setItemForm({...itemForm,headboard:{...itemForm.headboard,width:Number(e.target.value)}})}/></label><label className="field">Altura (m)<input type="number" min="0" step="0.001" value={itemForm.headboard.height||''} onChange={e=>setItemForm({...itemForm,headboard:{...itemForm.headboard,height:Number(e.target.value)}})}/></label><label className="field">Profundidade (m)<input type="number" min="0" step="0.001" value={itemForm.headboard.depth||''} onChange={e=>setItemForm({...itemForm,headboard:{...itemForm.headboard,depth:Number(e.target.value)}})}/></label><label className="field">Quantidade<input type="number" min="1" step="1" value={itemForm.headboard.quantity} onChange={e=>{const quantity=Math.max(1,Number(e.target.value));setItemForm({...itemForm,quantity,headboard:{...itemForm.headboard,quantity}})}}/></label><div className="field span-2"><span>Descrição sugerida</span><button type="button" className="button secondary" onClick={()=>setItemForm({...itemForm,description:headboardDescription(itemForm.headboard)})}>Gerar descrição da cabeceira</button></div></>}<ItemCostComposition supplies={supplies} lines={supplyLines} onChange={changeSupplyLines}/><label className="field">Custo total<input readOnly value={money.format(costOf(itemForm))}/></label><label className="field">Margem (%)<input type="number" min="0" step="0.1" value={itemForm.margin_percent} onChange={e=>setItemForm(current=>withMargin({...current,margin_percent:Number(e.target.value)}))}/></label><label className="field">Preço de venda<input type="number" min="0" step="0.01" value={itemForm.sale_total} onChange={e=>{const sale=Number(e.target.value),cost=costOf(itemForm);setItemForm({...itemForm,sale_total:sale,margin_percent:cost>0?Number((((sale/cost)-1)*100).toFixed(2)):0})}}/><small className="field-note">Margem e preço são sincronizados automaticamente.</small></label></div>{confirmDelete&&<div className="inline-confirm"><div><strong>Excluir este item?</strong><span>O total do orçamento será recalculado automaticamente.</span></div><button type="button" className="button secondary" onClick={()=>setConfirmDelete(false)}>Manter item</button><button type="button" className="button danger" disabled={itemSaving} onClick={()=>void deleteItem()}>Confirmar exclusão</button></div>}<footer>{itemForm.id&&!confirmDelete&&<button type="button" className="button danger footer-left" disabled={itemSaving} onClick={()=>setConfirmDelete(true)}>Excluir item</button>}<button type="button" className="button secondary" onClick={()=>setItemOpen(false)}>Cancelar</button><button className="button primary" disabled={itemSaving||pdfReading}>{itemSaving?'Salvando…':'Salvar apenas este item'}</button></footer></form></div>}
+      {master&&<label className="field span-2">Endereço do Parceiro/master<input readOnly value={masterAddress}/>
+<small className="field-note">{master.name}</small>
+</label>}
+      <label className="field">Validade<input type="date" value={form.valid_until??''} onChange={e=>setForm({...form,valid_until:e.target.value})}/>
+</label>
+<label className="field">Previsão<input value={form.delivery_terms??''} onChange={e=>setForm({...form,delivery_terms:e.target.value})} placeholder="Ex.: 25 dias úteis"/>
+</label>
+      <label className="field span-2">Condição de pagamento<input value={form.payment_terms??''} onChange={e=>setForm({...form,payment_terms:e.target.value})}/>
+</label>
+<label className="field span-2">Observações para o cliente<textarea value={form.notes??''} onChange={e=>setForm({...form,notes:e.target.value})}/>
+</label>
+<label className="field span-2">Observações internas<textarea value={form.internal_notes??''} onChange={e=>setForm({...form,internal_notes:e.target.value})}/>
+</label>
+    </div>{attachments.length>0&&<div className="document-links">
+<strong>Documentos anexados</strong>{attachments.map(attachment=>
+<button type="button" key={attachment.id} onClick={()=>void openAttachment(attachment)}>{attachment.original_name}</button>)}</div>}</section>
+<aside className="panel budget-summary">
+<header>
+<h2>Resumo</h2>
+</header>
+<dl>
+<div>
+<dt>Cliente</dt>
+<dd>{client?.name??'Não informado'}</dd>
+</div>
+<div>
+<dt>Subtotal</dt>
+<dd>{money.format(Number(budget.subtotal))}</dd>
+</div>
+<div>
+<dt>Desconto</dt>
+<dd>
+<input type="number" min="0" step="0.01" value={form.discount} onChange={e=>setForm({...form,discount:Number(e.target.value)})}/>
+</dd>
+</div>
+<div className="total">
+<dt>Total</dt>
+<dd>{money.format(Math.max(0,Number(budget.subtotal)-Number(form.discount||0)))}</dd>
+</div>
+</dl>
+</aside>
+</div>
+    <section className="panel budget-items">
+<header>
+<div>
+<h2>Itens do orçamento</h2>
+<p>Cada item mantém seu ambiente, custo, margem e forma de apresentação.</p>
+</div>
+<button className="button primary" onClick={()=>openItem()}>
+<Plus/>Adicionar item</button>
+</header>{itemsLoading?<p className="panel-message">Carregando itens…</p>:items.length?<div className="table-wrap">
+<table>
+<thead>
+<tr>
+<th>Tipo / ambiente</th>
+<th>Descrição</th>
+<th>Qtd.</th>
+<th>Custo</th>
+<th>Venda</th>
+<th>Apresentação</th>
+</tr>
+</thead>
+<tbody>{items.map(item=>
+<tr className="clickable-row" key={item.id} onClick={()=>openItem(item)}>
+<td>
+<strong>{item.family?.name??'Item'}</strong>
+<small>{item.environment||'Ambiente a definir'}</small>
+</td>
+<td>{item.description}</td>
+<td>{Number(item.quantity).toLocaleString('pt-BR')}</td>
+<td>{money.format(Number(item.cost_total))}</td>
+<td>
+<strong>{money.format(Number(item.sale_total))}</strong>
+</td>
+<td>
+<span className="badge">{item.affects_total?'Item principal':'Opção'}</span>
+</td>
+</tr>)}</tbody>
+</table>
+</div>:<div className="empty-state compact">
+<FileText/>
+<strong>Nenhum item adicionado</strong>
+<span>Os dados gerais já são salvos automaticamente como rascunho.</span>
+</div>}</section>
+    {itemOpen&&<div className="dialog-backdrop">
+<form className="dialog item-dialog" onSubmit={saveItem}>
+<header>
+<div>
+<span className="eyebrow">Item do orçamento</span>
+<h2>{itemForm.id?'Editar item':'Adicionar item'}</h2>
+<p>Cortina e Persiana podem ser preenchidas pela leitura do PDF e sempre passam por conferência.</p>
+</div>
+<button type="button" className="icon-button" onClick={()=>setItemOpen(false)}>
+<X/>
+</button>
+</header>
+<div className="pdf-import">
+<label className={`pdf-drop ${pdfReading?'reading':''}`}>
+<input type="file" accept="application/pdf,.pdf" onChange={e=>void readPdf(e.target.files?.[0])}/>
+<strong>{pdfReading?'Lendo o documento…':'Anexar cotação ou pedido em PDF'}</strong>
+<span>A leitura procura significado e valores, sem depender de coordenadas fixas.</span>
+</label>{pdfResult&&<div className="pdf-result">
+<strong>{pdfName} · {pdfResult.items.length} item(ns)</strong>
+<div className="pdf-bulk-list">{pdfResult.items.map((item,index)=>
+<div className="pdf-bulk-row" key={`${item.description}-${index}`}>
+<input aria-label={`Importar item ${index+1}`} type="checkbox" checked={pdfRows[index]?.selected??false} onChange={e=>setPdfRows(current=>current.map((row,i)=>i===index?{...row,selected:e.target.checked}:row))}/>
+<button type="button" onClick={()=>applyPdfCandidate(pdfResult,index)}>
+<strong>{index+1}. {item.description}</strong>
+<span>{money.format(item.value)} · confiança {Math.round(item.confidence*100)}%</span>
+</button>
+<input aria-label={`Ambiente do item ${index+1}`} placeholder="Ambiente" value={pdfRows[index]?.environment??''} onChange={e=>setPdfRows(current=>current.map((row,i)=>i===index?{...row,environment:e.target.value}:row))}/>
+<select aria-label={`Apresentação do item ${index+1}`} value={pdfRows[index]?.presentation??'principal'} onChange={e=>setPdfRows(current=>current.map((row,i)=>i===index?{...row,presentation:e.target.value as PdfRow['presentation']}:row))}>
+<option value="principal">Principal</option>
+<option value="option">Opção</option>
+</select>
+</div>)}</div>
+<small>Marque os itens, informe os ambientes e confira valores antes da importação conjunta.</small>
+<button type="button" className="button primary" disabled={itemSaving} onClick={()=>void importSelected()}>{itemSaving?'Importando…':`Importar ${pdfRows.filter(row=>row.selected).length} selecionado(s)`}</button>
+</div>}</div>
+<div className="form-grid">
+<label className="field">Tipo<select required value={itemForm.family_id} onChange={e=>setItemForm({...itemForm,family_id:e.target.value,confection_subitem:''})}>
+<option value="">Selecione</option>{families.map(x=>
+<option key={x.id} value={x.id}>{x.name}</option>)}</select>
+</label>
+<label className="field">Ambiente<input value={itemForm.environment} onChange={e=>setItemForm({...itemForm,environment:e.target.value})} placeholder="Ex.: Sala"/>
+</label>{confectionSelected&&<label className="field span-2">Subitem de confecção<select required value={itemForm.confection_subitem} onChange={e=>setItemForm({...itemForm,confection_subitem:e.target.value})}>
+<option value="">Selecione</option>{confectionSubitems.map(subitem=><option key={subitem} value={subitem}>{subitem}</option>)}</select>
+<small>O detalhamento comercial continua na descrição do item.</small>
+</label>}<label className="field span-2">Descrição para o cliente<textarea required value={itemForm.description} onChange={e=>setItemForm({...itemForm,description:e.target.value})} placeholder="Descreva modelo, material, medidas e acabamento"/>
+</label>
+<label className="field">Quantidade<input type="number" min="0.001" step="0.001" value={itemForm.quantity} onChange={e=>setItemForm({...itemForm,quantity:Number(e.target.value)})}/>
+</label>
+<label className="field">Apresentação<select value={itemForm.presentation} onChange={e=>setItemForm({...itemForm,presentation:e.target.value as ItemForm['presentation']})}>
+<option value="principal">Item principal</option>
+<option value="option">Opção (não soma)</option>
+</select>
+</label>
+<label className="field">Custo do fabricante<input type="number" min="0" step="0.01" value={itemForm.manufacturer_cost} onChange={e=>setItemForm(current=>withMargin({...current,manufacturer_cost:Number(e.target.value)}))}/>
+</label>
+<label className="field">Instalação<input type="number" min="0" step="0.01" value={itemForm.installation_cost} onChange={e=>setItemForm(current=>withMargin({...current,installation_cost:Number(e.target.value)}))}/>
+</label>
+<label className="field">Custos adicionais<input type="number" min="0" step="0.01" value={itemForm.additional_cost} onChange={e=>setItemForm(current=>withMargin({...current,additional_cost:Number(e.target.value)}))}/>
+</label>
+<ItemCostComposition supplies={supplies} lines={supplyLines} onChange={changeSupplyLines}/>
+<label className="field">Custo total<input readOnly value={money.format(costOf(itemForm))}/>
+</label>
+<label className="field">Margem (%)<input type="number" min="0" step="0.1" value={itemForm.margin_percent} onChange={e=>setItemForm(current=>withMargin({...current,margin_percent:Number(e.target.value)}))}/>
+</label>
+<label className="field">Preço de venda<input type="number" min="0" step="0.01" value={itemForm.sale_total} onChange={e=>{const sale=Number(e.target.value),cost=costOf(itemForm);setItemForm({...itemForm,sale_total:sale,margin_percent:cost>0?Number((((sale/cost)-1)*100).toFixed(2)):0})}}/>
+<small className="field-note">Margem e preço são sincronizados automaticamente.</small>
+</label>
+</div>{confirmDelete&&<div className="inline-confirm">
+<div>
+<strong>Excluir este item?</strong>
+<span>O total do orçamento será recalculado automaticamente.</span>
+</div>
+<button type="button" className="button secondary" onClick={()=>setConfirmDelete(false)}>Manter item</button>
+<button type="button" className="button danger" disabled={itemSaving} onClick={()=>void deleteItem()}>Confirmar exclusão</button>
+</div>}<footer>{itemForm.id&&!confirmDelete&&<button type="button" className="button danger footer-left" disabled={itemSaving} onClick={()=>setConfirmDelete(true)}>Excluir item</button>}<button type="button" className="button secondary" onClick={()=>setItemOpen(false)}>Cancelar</button>
+<button className="button primary" disabled={itemSaving||pdfReading}>{itemSaving?'Salvando…':'Salvar apenas este item'}</button>
+</footer>
+</form>
+</div>}
   </Page>
 }
