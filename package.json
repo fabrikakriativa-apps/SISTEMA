@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.app.json && vite build",
+    "build:test": "tsc -p tsconfig.app.json && vite build --base=/SISTEMA/",
     "preview": "vite preview",
     "test": "vitest run"
   },
