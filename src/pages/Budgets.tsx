@@ -23,7 +23,7 @@ type Budget = {
   notes:string|null; internal_notes:string|null; subtotal:number; discount:number; total:number
   created_at:string; updated_at:string; client:{name:string}|null
 }
-type Client = { id:string; name:string; phone:string|null; address:string|null; city:string|null; client_type:string }
+type Client = { id:string; name:string; phone:string|null; address:string|null; city:string|null; client_type:string; master_client_id:string|null; master:{name:string;address:string|null;city:string|null}[] }
 type Editable = Pick<Budget,'client_id'|'client_address'|'client_address_edited'|'valid_until'|'payment_terms'|'delivery_terms'|'notes'|'internal_notes'|'discount'>
 type Family={id:string;name:string;code:string;form_key:string}
 type BudgetItem={id:string;family_id:string|null;position:number;presentation:string;environment:string|null;description:string;quantity:number;configuration:Record<string,unknown>;cost_total:number;margin_percent:number|null;sale_total:number;affects_total:boolean;family:{name:string}|null}
@@ -56,7 +56,7 @@ export function Budgets() {
     try {
       const [budgetResult,clientResult] = await Promise.all([
         supabase.from('budgets').select(columns).eq('organization_id',access.organizationId).order('number',{ascending:false}).abortSignal(AbortSignal.timeout(15000)),
-        supabase.from('clients').select('id,name,phone,address,city,client_type').eq('organization_id',access.organizationId).is('archived_at',null).order('name').abortSignal(AbortSignal.timeout(15000)),
+        supabase.from('clients').select('id,name,phone,address,city,client_type,master_client_id,master:clients!clients_master_client_id_fkey(name,address,city)').eq('organization_id',access.organizationId).is('archived_at',null).order('name').abortSignal(AbortSignal.timeout(15000)),
       ])
       if (budgetResult.error) throw budgetResult.error
       if (clientResult.error) throw clientResult.error
@@ -139,6 +139,8 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   const [newClientOpen,setNewClientOpen]=useState(false),[newClientSaving,setNewClientSaving]=useState(false)
   const [newClient,setNewClient]=useState({name:'',phone:'',address:'',city:'',origin:'',notes:''})
   const client=availableClients.find(item=>item.id===form.client_id)
+  const master=client?.master?.[0]
+  const masterAddress=master?[master.address,master.city].filter(Boolean).join(' · '):''
   const selectedFormKey=families.find(family=>family.id===itemForm.family_id)?.form_key
   const wallpaperSelected=selectedFormKey==='wallpaper',headboardSelected=selectedFormKey==='headboard'
   const stateLabel=saveState==='saving'?'Salvando…':saveState==='waiting'?'Alterações pendentes':saveState==='error'?'Falha ao salvar':'Rascunho sincronizado'
@@ -305,6 +307,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     <div className="budget-layout"><section className="panel budget-form"><header><div><h2>Dados comerciais</h2><p>{budget.display_number} · revisão {budget.current_revision}</p></div><span className={`save-state ${saveState}`}>{stateLabel}</span></header><div className="form-grid">
       <label className="field">Status<select value={budget.status} disabled={workflowBusy} onChange={e=>requestStatus(e.target.value as BudgetStatus)}>{budgetStatusOptions(budget.status).map(status=><option value={status} key={status}>{labels[status]}</option>)}</select></label><div className="field"><span>Cliente final</span><div className="client-picker"><input list="budget-client-options" disabled={budget.status!=='draft'} value={clientSearch} onChange={e=>selectClient(e.target.value)} onBlur={()=>{if(clientSearch&& !availableClients.some(item=>item.name.toLocaleLowerCase('pt-BR')===clientSearch.trim().toLocaleLowerCase('pt-BR')))setClientSearch(client?.name??'')}} placeholder="Digite para buscar"/><button type="button" className="button secondary" disabled={budget.status!=='draft'} onClick={()=>setNewClientOpen(true)}><Plus/>Novo</button></div><datalist id="budget-client-options">{availableClients.filter(x=>x.client_type==='Cliente final').map(item=><option key={item.id} value={item.name}/>)}</datalist></div>
       <label className="field span-2">Endereço do cliente<input disabled={!form.client_id||budget.status!=='draft'} value={form.client_address??''} onChange={e=>setForm({...form,client_address:e.target.value,client_address_edited:true})} placeholder={form.client_id?'Informe o endereço usado neste orçamento':'Selecione o cliente primeiro'}/>{form.client_address_edited&&<small className="field-note edited">Endereço editado pelo usuário neste orçamento</small>}</label>
+      {master&&<label className="field span-2">Endereço do Parceiro/master<input readOnly value={masterAddress}/><small className="field-note">{master.name}</small></label>}
       <label className="field">Validade<input type="date" value={form.valid_until??''} onChange={e=>setForm({...form,valid_until:e.target.value})}/></label><label className="field">Previsão<input value={form.delivery_terms??''} onChange={e=>setForm({...form,delivery_terms:e.target.value})} placeholder="Ex.: 25 dias úteis"/></label>
       <label className="field span-2">Condição de pagamento<input value={form.payment_terms??''} onChange={e=>setForm({...form,payment_terms:e.target.value})}/></label><label className="field span-2">Observações para o cliente<textarea value={form.notes??''} onChange={e=>setForm({...form,notes:e.target.value})}/></label><label className="field span-2">Observações internas<textarea value={form.internal_notes??''} onChange={e=>setForm({...form,internal_notes:e.target.value})}/></label>
     </div>{attachments.length>0&&<div className="document-links"><strong>Documentos anexados</strong>{attachments.map(attachment=><button type="button" key={attachment.id} onClick={()=>void openAttachment(attachment)}>{attachment.original_name}</button>)}</div>}</section><aside className="panel budget-summary"><header><h2>Resumo</h2></header><dl><div><dt>Cliente</dt><dd>{client?.name??'Não informado'}</dd></div><div><dt>Subtotal</dt><dd>{money.format(Number(budget.subtotal))}</dd></div><div><dt>Desconto</dt><dd><input type="number" min="0" step="0.01" value={form.discount} onChange={e=>setForm({...form,discount:Number(e.target.value)})}/></dd></div><div className="total"><dt>Total</dt><dd>{money.format(Math.max(0,Number(budget.subtotal)-Number(form.discount||0)))}</dd></div></dl></aside></div>
