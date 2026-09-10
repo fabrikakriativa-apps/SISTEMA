@@ -12,6 +12,7 @@ import { BudgetPreview } from '../components/BudgetPreview'
 import { budgetStatusLabels as labels, budgetStatusOptions, statusNeedsReason, type BudgetStatus } from '../lib/budgetStatus'
 import { navigateTo, readRoute } from '../lib/navigation'
 import { ItemCostComposition, type SupplyLine, type SupplyOption } from '../components/ItemCostComposition'
+import { SearchSelect } from '../components/SearchSelect'
 import { budgetDocumentPath } from '../lib/documents'
 import { confectionSubitems } from '../domain'
 
@@ -219,10 +220,8 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   const costOf=(value:ItemForm)=>composedItemCost(value,supplyLines)
   const withMargin=(value:ItemForm,lines=supplyLines)=>({...value,sale_total:salePriceFromCostAndMargin(composedItemCost(value,lines),value.margin_percent)})
   const changeSupplyLines=(lines:SupplyLine[])=>{setSupplyLines(lines);setItemForm(current=>withMargin(current,lines))}
-  const selectClient=(name:string)=>{
-    setClientSearch(name)
-    const selectedClient=availableClients.find(item=>item.name.toLocaleLowerCase('pt-BR')===name.trim().toLocaleLowerCase('pt-BR'))
-    if(!selectedClient){if(!name.trim())setForm({...form,client_id:null,client_address:'',client_address_edited:false});return}
+  const selectClient=(selectedClient:Client)=>{
+    setClientSearch(selectedClient.name)
     const address=[selectedClient.address,selectedClient.city].filter(Boolean).join(' · ')
     setForm({...form,client_id:selectedClient.id,client_address:address,client_address_edited:false})
   }
@@ -435,12 +434,10 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <div className="field">
 <span>Cliente final</span>
 <div className="client-picker">
-<input list="budget-client-options" disabled={budget.status!=='draft'} value={clientSearch} onChange={e=>selectClient(e.target.value)} onBlur={()=>{if(clientSearch&& !availableClients.some(item=>item.name.toLocaleLowerCase('pt-BR')===clientSearch.trim().toLocaleLowerCase('pt-BR')))setClientSearch(client?.name??'')}} placeholder="Digite para buscar"/>
+<SearchSelect ariaLabel="Buscar cliente final" disabled={budget.status!=='draft'} value={clientSearch} onChange={value=>{setClientSearch(value);if(!value.trim())setForm({...form,client_id:null,client_address:'',client_address_edited:false})}} onSelect={option=>{const selectedClient=availableClients.find(item=>item.id===option.id);if(selectedClient)selectClient(selectedClient)}} options={availableClients.filter(item=>item.client_type==='Cliente final').map(item=>({id:item.id,label:item.name,detail:[item.phone,item.city].filter(Boolean).join(' · ')}))} placeholder="Digite para buscar"/>
 <button type="button" className="button secondary" disabled={budget.status!=='draft'} onClick={()=>setNewClientOpen(true)}>
 <Plus/>Novo</button>
 </div>
-<datalist id="budget-client-options">{availableClients.filter(x=>x.client_type==='Cliente final').map(item=>
-<option key={item.id} value={item.name}/>)}</datalist>
 </div>
       <label className="field span-2">Endereço do cliente<input disabled={!form.client_id||budget.status!=='draft'} value={form.client_address??''} onChange={e=>setForm({...form,client_address:e.target.value,client_address_edited:true})} placeholder={form.client_id?'Informe o endereço usado neste orçamento':'Selecione o cliente primeiro'}/>{form.client_address_edited&&<small className="field-note edited">Endereço editado pelo usuário neste orçamento</small>}</label>
       {master&&<label className="field span-2">Endereço do Parceiro/master<input readOnly value={masterAddress}/>
