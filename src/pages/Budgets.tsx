@@ -56,11 +56,11 @@ export function Budgets() {
     setLoading(true); setError('')
     try {
       const [budgetResult,clientResult] = await Promise.all([
-        supabase.from('budgets').select(columns).eq('organization_id',access.organizationId).order('number',{ascending:false}).abortSignal(AbortSignal.timeout(15000)),
-        supabase.from('clients').select('id,name,phone,address,city,client_type,master_client_id,master:clients!clients_master_client_id_fkey(name,address,city)').eq('organization_id',access.organizationId).is('archived_at',null).order('name').abortSignal(AbortSignal.timeout(15000)),
+        supabase.from('budgets').select(columns).eq('organization_id',access.organizationId).order('number',{ascending:false}),
+        supabase.from('clients').select('id,name,phone,address,city,client_type,master_client_id').eq('organization_id',access.organizationId).is('archived_at',null).order('name'),
       ])
       if (clientResult.error) throw clientResult.error
-      setClients((clientResult.data ?? []) as Client[])
+      setClients(((clientResult.data ?? []) as Client[]).map(client=>({...client,master:[]})))
       if (budgetResult.error) throw budgetResult.error
       setItems(((budgetResult.data ?? []) as unknown as Budget[]).map(budget=>withClient(budget,clientResult.data as Client[])))
     } catch (reason) { setError(errorMessage(reason,'Não foi possível carregar os orçamentos. Verifique a conexão e tente novamente.')) }
@@ -199,7 +199,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   const [newClientOpen,setNewClientOpen]=useState(false),[newClientSaving,setNewClientSaving]=useState(false)
   const [newClient,setNewClient]=useState({name:'',phone:'',address:'',city:'',origin:'',notes:'',master_client_id:''})
   const client=availableClients.find(item=>item.id===form.client_id)
-  const master=client?.master?.[0]
+  const master=availableClients.find(item=>item.id===client?.master_client_id)
   const masterAddress=master?[master.address,master.city].filter(Boolean).join(' · '):''
   const selectedFormKey=families.find(family=>family.id===itemForm.family_id)?.form_key
   const confectionSelected=selectedFormKey==='confection'
@@ -231,9 +231,9 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     event.preventDefault();if(!supabase||newClientSaving||!newClient.name.trim())return
     setNewClientSaving(true)
     const payload={id:crypto.randomUUID(),organization_id:access.organizationId,client_type:'Cliente final',name:newClient.name.trim(),phone:newClient.phone.trim()||null,address:newClient.address.trim()||null,city:newClient.city.trim()||null,origin:newClient.origin||null,notes:newClient.notes.trim()||null,master_client_id:newClient.master_client_id||null,created_by:access.userId}
-    const {data,error}=await supabase.from('clients').insert(payload).select('id,name,phone,address,city,client_type,master_client_id,master:clients!clients_master_client_id_fkey(name,address,city)').single()
+    const {data,error}=await supabase.from('clients').insert(payload).select('id,name,phone,address,city,client_type,master_client_id').single()
     if(error||!data)show('Não foi possível cadastrar o cliente. Confira os dados e tente novamente.','error')
-    else {const saved=data as unknown as Client;setAvailableClients(current=>[...current,saved].sort((a,b)=>a.name.localeCompare(b.name,'pt-BR')));setClientSearch(saved.name);setForm({...form,client_id:saved.id,client_address:[saved.address,saved.city].filter(Boolean).join(' · '),client_address_edited:false});setNewClientOpen(false);setNewClient({name:'',phone:'',address:'',city:'',origin:'',notes:'',master_client_id:''});show('Cliente cadastrado e selecionado no orçamento.','success')}
+    else {const saved={...(data as Client),master:[]};setAvailableClients(current=>[...current,saved].sort((a,b)=>a.name.localeCompare(b.name,'pt-BR')));setClientSearch(saved.name);setForm({...form,client_id:saved.id,client_address:[saved.address,saved.city].filter(Boolean).join(' · '),client_address_edited:false});setNewClientOpen(false);setNewClient({name:'',phone:'',address:'',city:'',origin:'',notes:'',master_client_id:''});show('Cliente cadastrado e selecionado no orçamento.','success')}
     setNewClientSaving(false)
   }
   const openItem=async(item?:BudgetItem)=>{
