@@ -10,7 +10,8 @@ describe('summarizeDashboard', () => {
       [{ starts_at: '2026-09-10T12:00:00Z', cancelled_at: null, sync_status: 'error' }, { starts_at: '2026-09-11T12:00:00Z', cancelled_at: '2026-09-01', sync_status: 'pending' }],
       new Date('2026-09-07T12:00:00Z'),
     )
-    expect(result).toMatchObject({ negotiatingTotal: 350, activeOrderCount: 2, receivableBalance: 150, upcomingEventCount: 1 })
+    expect(result).toMatchObject({ negotiatingTotal: 350, activeOrderCount: 2, receivableBalance: 150, upcomingEventCount: 1, approvedBudgetCount: 1, totalBudgetCount: 3 })
+    expect(result.budgetConversionRate).toBeCloseTo(100 / 3)
     expect(result.priorities).toEqual({ drafts: 1, awaitingFinance: 1, overdueReceivables: 1, calendarSync: 2 })
   })
 })

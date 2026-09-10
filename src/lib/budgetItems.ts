@@ -24,3 +24,12 @@ export function supplyCostTotal(lines:SupplyCost[]){
 export function composedItemCost(item:ItemCosts,lines:SupplyCost[]){
   return Number((itemCostTotal(item)+supplyCostTotal(lines)).toFixed(2))
 }
+
+export function salePriceFromCostAndMargin(cost:number,marginPercent:number){
+  return Number((positive(cost)*(1+positive(marginPercent)/100)).toFixed(2))
+}
+
+export function marginFromSalePrice(cost:number,salePrice:number){
+  const safeCost=positive(cost)
+  return safeCost>0?Number((((positive(salePrice)/safeCost)-1)*100).toFixed(2)):0
+}

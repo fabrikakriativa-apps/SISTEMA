@@ -27,7 +27,7 @@ export function useCatalog<T extends { id: string; name: string }>(table: 'clien
         const { data, error } = await query.abortSignal(controller.signal)
         if (error) throw error
         if (!cancelled) setItems((data ?? []) as unknown as T[])
-      } catch { if (!cancelled) setError('Não foi possível carregar os cadastros. Verifique a conexão e tente novamente.') }
+      } catch (reason) { if (!cancelled) { const detail=typeof reason==='object'&&reason&&'message' in reason?String(reason.message):'';setError(detail?`Não foi possível carregar os cadastros: ${detail}`:'Não foi possível carregar os cadastros. Verifique a conexão e tente novamente.') } }
       finally { clearTimeout(timer); if (!cancelled) setLoading(false) }
     }
     void load()

@@ -12,11 +12,15 @@ export function summarizeDashboard(budgets: DashboardBudget[], orders: Dashboard
   const today = new Date(now); today.setHours(0, 0, 0, 0)
   const end = new Date(today); end.setDate(end.getDate() + 7)
   const upcomingEvents = events.filter(item => { const start = new Date(item.starts_at); return !item.cancelled_at && start >= today && start < end })
+  const approvedBudgets = budgets.filter(item => item.status === 'approved').length
   return {
     negotiatingTotal: activeBudgets.reduce((sum, item) => sum + Number(item.total || 0), 0),
     activeOrderCount: activeOrders.length,
     receivableBalance: openReceivables.reduce((sum, item) => sum + Math.max(0, Number(item.amount || 0) - Number(item.paid_amount || 0)), 0),
     upcomingEventCount: upcomingEvents.length,
+    budgetConversionRate: budgets.length ? (approvedBudgets / budgets.length) * 100 : 0,
+    approvedBudgetCount: approvedBudgets,
+    totalBudgetCount: budgets.length,
     priorities: {
       drafts: activeBudgets.filter(item => item.status === 'draft').length,
       awaitingFinance: activeOrders.filter(item => item.status === 'awaiting_finance').length,

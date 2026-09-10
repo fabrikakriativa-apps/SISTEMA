@@ -20,7 +20,7 @@ export function Dashboard({ navigate }: { navigate: (key: ModuleKey) => void }) 
     setLoading(true); setError('')
     const org = access.organizationId
     const [budgets, orders, receivables, events] = await Promise.all([
-      supabase.from('budgets').select('status,total').eq('organization_id', org).in('status', ['draft', 'sent']).limit(1000),
+      supabase.from('budgets').select('status,total').eq('organization_id', org).limit(1000),
       supabase.from('orders').select('status').eq('organization_id', org).not('status', 'in', '(completed,cancelled)').limit(1000),
       supabase.from('receivables').select('status,amount,paid_amount,due_date').eq('organization_id', org).in('status', ['open', 'partial', 'overdue']).limit(1000),
       supabase.from('calendar_events').select('starts_at,cancelled_at,sync_status').eq('organization_id', org).gte('starts_at', new Date(new Date().setHours(0, 0, 0, 0)).toISOString()).limit(1000),
@@ -32,10 +32,11 @@ export function Dashboard({ navigate }: { navigate: (key: ModuleKey) => void }) 
   useEffect(() => { void load() }, [load])
   const summary = useMemo(() => summarizeDashboard(data.budgets, data.orders, data.receivables, data.events), [data])
   const metrics = [
-    { label:'Em negociação', value:money.format(summary.negotiatingTotal), helper:'Orçamentos em rascunho ou enviados', icon:FileText },
-    { label:'Pedidos ativos', value:String(summary.activeOrderCount), helper:'Ainda não concluídos', icon:PackageCheck },
-    { label:'A receber', value:money.format(summary.receivableBalance), helper:'Saldo das parcelas em aberto', icon:CircleDollarSign },
-    { label:'Próximos compromissos', value:String(summary.upcomingEventCount), helper:'Agenda dos próximos 7 dias', icon:CalendarClock },
+    { label:'Em negociação', value:money.format(summary.negotiatingTotal), helper:'Orçamentos em rascunho ou enviados', icon:FileText, module:'orcamentos' as ModuleKey },
+    { label:'Conversão de orçamentos', value:`${summary.budgetConversionRate.toLocaleString('pt-BR',{maximumFractionDigits:1})}%`, helper:`${summary.approvedBudgetCount} aprovados de ${summary.totalBudgetCount} gerados`, icon:FileText, module:'orcamentos' as ModuleKey },
+    { label:'Pedidos ativos', value:String(summary.activeOrderCount), helper:'Ainda não concluídos', icon:PackageCheck, module:'pedidos' as ModuleKey },
+    { label:'A receber', value:money.format(summary.receivableBalance), helper:'Saldo das parcelas em aberto', icon:CircleDollarSign, module:'financeiro' as ModuleKey },
+    { label:'Próximos compromissos', value:String(summary.upcomingEventCount), helper:'Agenda dos próximos 7 dias', icon:CalendarClock, module:'agenda' as ModuleKey },
   ]
   const priorities = [
     { label:'Orçamentos em rascunho', value:summary.priorities.drafts, module:'orcamentos' as ModuleKey },
@@ -43,9 +44,9 @@ export function Dashboard({ navigate }: { navigate: (key: ModuleKey) => void }) 
     { label:'Parcelas vencidas', value:summary.priorities.overdueReceivables, module:'financeiro' as ModuleKey },
     { label:'Compromissos para sincronizar', value:summary.priorities.calendarSync, module:'agenda' as ModuleKey },
   ].filter(item => item.value > 0)
-  return <Page title="Visão geral" description="Um retrato atualizado da operação, sem dados duplicados ou cálculos ocultos." action={<button className="button secondary" disabled={loading} onClick={() => void load()}><RefreshCw/>{loading ? 'Atualizando…' : 'Atualizar'}</button>}>
+  return <Page title="Visão geral" description="Sua operação hoje" action={<button className="button secondary" disabled={loading} onClick={() => void load()}><RefreshCw/>{loading ? 'Atualizando…' : 'Atualizar'}</button>}>
     {error && <div className="inline-warning"><AlertCircle/><span>{error}</span></div>}
-    <section className="metric-grid">{metrics.map(metric => <article className="metric-card" key={metric.label}><div><span>{metric.label}</span><strong>{loading ? '—' : metric.value}</strong><small>{metric.helper}</small></div><metric.icon/></article>)}</section>
+    <section className="metric-grid">{metrics.map(metric => <button type="button" className="metric-card clickable-metric" key={metric.label} onClick={()=>navigate(metric.module)}><div><span>{metric.label}</span><strong>{loading ? '—' : metric.value}</strong><small>{metric.helper}</small></div><metric.icon/></button>)}</section>
     <section className="dashboard-grid"><article className="panel"><header><div><h2>Prioridades</h2><p>O que precisa de atenção agora.</p></div></header>{loading ? <p className="panel-message">Carregando indicadores…</p> : priorities.length ? <div className="quick-actions">{priorities.map(item => <button key={item.label} onClick={() => navigate(item.module)}><span><AlertCircle/><strong>{item.value}</strong> {item.label}</span><ArrowRight/></button>)}</div> : <div className="empty-state"><PackageCheck/><strong>Nenhuma pendência imediata</strong><span>Os principais fluxos estão em dia.</span></div>}</article>
       <article className="panel quick-actions"><header><h2>Acessos rápidos</h2></header><button onClick={() => navigate('orcamentos')}><span><FileText/>Abrir orçamentos</span><ArrowRight/></button><button onClick={() => navigate('clientes')}><span><FileText/>Cadastrar cliente</span><ArrowRight/></button><button onClick={() => navigate('insumos')}><span><FileText/>Cadastrar insumo</span><ArrowRight/></button></article>
     </section>
