@@ -24,7 +24,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: pnpm
       - name: Instalar dependências
         run: pnpm install --frozen-lockfile
       - name: Executar testes
