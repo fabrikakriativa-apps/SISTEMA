@@ -592,13 +592,13 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 </label>
 <ItemCostComposition supplies={supplies} lines={supplyLines} onChange={changeSupplyLines}/>
 <ItemLaborComposition providers={providers} lines={laborLines} onChange={changeLaborLines}/>
-<label className="field">Custo total<input readOnly value={money.format(costOf(itemForm))}/>
+<div className="item-pricing-row span-2"><label className="field">Custo total<input readOnly value={money.format(costOf(itemForm))}/>
 </label>
 <label className="field">Margem (%)<input type="number" min="0" step="0.1" value={itemForm.margin_percent} onChange={e=>setItemForm(current=>withMargin({...current,margin_percent:Number(e.target.value)}))}/>
 </label>
 <label className="field">Preço de venda<input type="number" min="0" step="0.01" value={itemForm.sale_total} onChange={e=>{const sale=Number(e.target.value),cost=costOf(itemForm);setItemForm({...itemForm,sale_total:sale,margin_percent:cost>0?Number((((sale/cost)-1)*100).toFixed(2)):0})}}/>
 <small className="field-note">Margem e preço são sincronizados automaticamente.</small>
-</label>
+</label></div>
 </div>{confirmDelete&&<div className="inline-confirm">
 <div>
 <strong>Excluir este item?</strong>
