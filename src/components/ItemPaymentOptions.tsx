@@ -1,9 +1,16 @@
+import { useEffect } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { adjustmentFromFinalValue, optionFinalValue, standardItemPaymentOptions, type ItemPaymentOption } from '../lib/paymentOptions'
 import './ItemPaymentOptions.css'
 
 const blank=(position:number):ItemPaymentOption=>({position,description:'',adjustment_percent:0,final_value:null,observation:''})
 export function ItemPaymentOptions({saleTotal,options,onChange}:{saleTotal:number;options:ItemPaymentOption[];onChange:(options:ItemPaymentOption[])=>void}){
+ useEffect(()=>{
+  const synchronized=options.map(option=>option.final_value===null?option:{...option,adjustment_percent:adjustmentFromFinalValue(saleTotal,option.final_value)})
+  if(synchronized.some((option,index)=>option.adjustment_percent!==options[index].adjustment_percent))onChange(synchronized)
+ // The resulting percentage depends on the item's actual selling price, never the reverse.
+ // eslint-disable-next-line react-hooks/exhaustive-deps
+ },[saleTotal])
  const update=(index:number,change:Partial<ItemPaymentOption>)=>onChange(options.map((item,current)=>current===index?{...item,...change}:item))
  const updateAdjustment=(index:number,adjustment:number)=>update(index,{adjustment_percent:adjustment,final_value:null})
  const updateFinalValue=(index:number,finalValue:number)=>update(index,{final_value:finalValue,adjustment_percent:adjustmentFromFinalValue(saleTotal,finalValue)})
