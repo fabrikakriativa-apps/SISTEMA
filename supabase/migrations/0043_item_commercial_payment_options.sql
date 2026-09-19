@@ -6,7 +6,8 @@ create table public.budget_item_payment_options(
   budget_item_id uuid not null references public.budget_items(id) on delete cascade,
   position integer not null check(position > 0),
   description text not null check(length(btrim(description)) > 0),
-  adjustment_percent numeric(8,3) not null default 0 check(adjustment_percent between -100 and 500),
+  adjustment_percent numeric(14,6) not null default 0 check(adjustment_percent between -100 and 500),
+  final_value numeric(14,2),
   observation text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -44,8 +45,11 @@ begin
     if coalesce((option_row->>'adjustment_percent')::numeric,0) not between -100 and 500 then
       raise exception 'Invalid commercial adjustment' using errcode='23514';
     end if;
-    insert into public.budget_item_payment_options(organization_id,budget_item_id,position,description,adjustment_percent,observation)
-    values(org_id,target.id,option_position,btrim(option_row->>'description'),coalesce((option_row->>'adjustment_percent')::numeric,0),nullif(btrim(option_row->>'observation'),''));
+    if nullif(option_row->>'final_value','') is not null and coalesce((option_row->>'final_value')::numeric,-1) < 0 then
+      raise exception 'Invalid commercial final value' using errcode='23514';
+    end if;
+    insert into public.budget_item_payment_options(organization_id,budget_item_id,position,description,adjustment_percent,final_value,observation)
+    values(org_id,target.id,option_position,btrim(option_row->>'description'),coalesce((option_row->>'adjustment_percent')::numeric,0),nullif(option_row->>'final_value','')::numeric,nullif(btrim(option_row->>'observation'),''));
   end loop;
   return query select * from public.budget_item_payment_options where organization_id=org_id and budget_item_id=target.id order by position;
 end;
