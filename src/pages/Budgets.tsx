@@ -20,7 +20,7 @@ import { budgetDocumentPath } from '../lib/documents'
 import { confectionSubitems } from '../domain'
 
 type Budget = {
-  id:string; number:number; display_number:string; current_revision:number; client_id:string|null
+  id:string; organization_id:string; number:number; display_number:string; current_revision:number; client_id:string|null
   status:BudgetStatus; valid_until:string|null; payment_terms:string|null; delivery_terms:string|null
   client_address:string|null; client_address_edited:boolean
   notes:string|null; internal_notes:string|null; subtotal:number; discount:number; total:number
@@ -36,7 +36,7 @@ type Attachment={id:string;original_name:string;storage_path:string;created_at:s
 
 const blankEditable:Editable = { client_id:null, client_address:'', client_address_edited:false, valid_until:null, payment_terms:'', delivery_terms:'', notes:'', internal_notes:'', discount:0 }
 const newBlankItem=():ItemForm=>({family_id:'',environment:'',description:'',quantity:1,presentation:'principal',manufacturer_cost:0,installation_cost:0,additional_cost:0,margin_percent:50,sale_total:0,confection_subitem:'',initial_configuration:{}})
-const columns = 'id,number,display_number,current_revision,client_id,client_address,client_address_edited,status,valid_until,payment_terms,delivery_terms,notes,internal_notes,subtotal,discount,total,created_at,updated_at'
+const columns = 'id,organization_id,number,display_number,current_revision,client_id,client_address,client_address_edited,status,valid_until,payment_terms,delivery_terms,notes,internal_notes,subtotal,discount,total,created_at,updated_at'
 const withClient = (budget:Budget, clients:Client[]):Budget => ({...budget,client:clients.find(client=>client.id===budget.client_id)?{name:clients.find(client=>client.id===budget.client_id)!.name}:null})
 
 function errorMessage(error:unknown, fallback:string) {
@@ -188,6 +188,9 @@ export function Budgets() {
 }
 
 function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,close}:{access:NonNullable<ReturnType<typeof useAccess>>;budget:Budget;setBudget:(budget:Budget)=>void;form:Editable;setForm:(value:Editable)=>void;clients:Client[];saveState:string;close:()=>void}) {
+  // The budget is the source of truth for its organization. This prevents a stale
+  // global context from making a draft item fail the database access rule.
+  const budgetOrganizationId=budget.organization_id
   const {show}=useToast()
   const canEditItems=budget.status==='draft'&&(access.role==='admin'||access.role==='comercial')
   const [families,setFamilies]=useState<Family[]>([]),[items,setItems]=useState<BudgetItem[]>([]),[itemOpen,setItemOpen]=useState(false),[itemForm,setItemForm]=useState<ItemForm>(newBlankItem),[itemSaving,setItemSaving]=useState(false),[itemsLoading,setItemsLoading]=useState(true)
@@ -214,17 +217,17 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     if(!supabase)return
     setItemsLoading(true)
     const [familyResult,itemResult,supplyResult,providerResult,attachmentResult,optionResult]=await Promise.all([
-      supabase.from('item_families').select('id,name,code,form_key').eq('organization_id',access.organizationId).eq('active',true).order('name'),
-      supabase.from('budget_items').select('id,family_id,position,presentation,environment,description,quantity,configuration,cost_total,margin_percent,sale_total,affects_total,family:item_families!budget_items_family_id_fkey(name)').eq('organization_id',access.organizationId).eq('budget_id',budget.id).order('position'),
-      supabase.from('supplies').select('id,code,name,category,usage_unit,current_cost').eq('organization_id',access.organizationId).eq('active',true).order('name'),
-      supabase.from('suppliers').select('id,name,phone,supplier_types').eq('organization_id',access.organizationId).eq('active',true).order('name'),
-      supabase.from('attachments').select('id,original_name,storage_path,created_at').eq('organization_id',access.organizationId).eq('entity_type','budget').eq('entity_id',budget.id).order('created_at',{ascending:false}),
-      supabase.from('budget_item_payment_options').select('id,budget_item_id,position,description,adjustment_percent,final_value,observation').eq('organization_id',access.organizationId).order('position')
+      supabase.from('item_families').select('id,name,code,form_key').eq('organization_id',budgetOrganizationId).eq('active',true).order('name'),
+      supabase.from('budget_items').select('id,family_id,position,presentation,environment,description,quantity,configuration,cost_total,margin_percent,sale_total,affects_total,family:item_families!budget_items_family_id_fkey(name)').eq('organization_id',budgetOrganizationId).eq('budget_id',budget.id).order('position'),
+      supabase.from('supplies').select('id,code,name,category,usage_unit,current_cost').eq('organization_id',budgetOrganizationId).eq('active',true).order('name'),
+      supabase.from('suppliers').select('id,name,phone,supplier_types').eq('organization_id',budgetOrganizationId).eq('active',true).order('name'),
+      supabase.from('attachments').select('id,original_name,storage_path,created_at').eq('organization_id',budgetOrganizationId).eq('entity_type','budget').eq('entity_id',budget.id).order('created_at',{ascending:false}),
+      supabase.from('budget_item_payment_options').select('id,budget_item_id,position,description,adjustment_percent,final_value,observation').eq('organization_id',budgetOrganizationId).order('position')
     ])
     if(familyResult.error||itemResult.error||supplyResult.error||providerResult.error||optionResult.error)show(`Não foi possível carregar os itens: ${familyResult.error?.message??itemResult.error?.message??supplyResult.error?.message??providerResult.error?.message??optionResult.error?.message}`,'error')
     else {setFamilies((familyResult.data??[]) as Family[]);setItems((itemResult.data??[]) as unknown as BudgetItem[]);setSupplies((supplyResult.data??[]) as SupplyOption[]);setProviders((providerResult.data??[]) as ProviderOption[]);setAttachments((attachmentResult.data??[]) as Attachment[]);setItemPaymentOptions((optionResult.data??[]).reduce((result,item)=>({...result,[item.budget_item_id]:[...(result[item.budget_item_id]??[]),{id:item.id,position:item.position,description:item.description,adjustment_percent:Number(item.adjustment_percent),final_value:item.final_value===null?null:Number(item.final_value),observation:item.observation??''}]}),{} as Record<string,ItemPaymentOption[]>))}
     setItemsLoading(false)
-  },[access.organizationId,budget.id,show])
+  },[budget.id,budgetOrganizationId,show])
   useEffect(()=>{void loadItems()},[loadItems])
   useEffect(()=>setAvailableClients(clients),[clients])
   const costOf=(value:ItemForm,lines=supplyLines,labor=laborLines)=>Number((composedItemCost(value,lines)+laborCostTotal(labor)).toFixed(2))
@@ -239,7 +242,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   const saveNewClient=async(event:FormEvent)=>{
     event.preventDefault();if(!supabase||newClientSaving||!newClient.name.trim())return
     setNewClientSaving(true)
-    const payload={id:crypto.randomUUID(),organization_id:access.organizationId,client_type:'Cliente final',name:newClient.name.trim(),phone:newClient.phone.trim()||null,address:newClient.address.trim()||null,city:newClient.city.trim()||null,origin:newClient.origin||null,notes:newClient.notes.trim()||null,master_client_id:newClient.master_client_id||null,created_by:access.userId}
+    const payload={id:crypto.randomUUID(),organization_id:budgetOrganizationId,client_type:'Cliente final',name:newClient.name.trim(),phone:newClient.phone.trim()||null,address:newClient.address.trim()||null,city:newClient.city.trim()||null,origin:newClient.origin||null,notes:newClient.notes.trim()||null,master_client_id:newClient.master_client_id||null,created_by:access.userId}
     const {data,error}=await supabase.from('clients').insert(payload).select('id,name,phone,address,city,client_type,master_client_id').single()
     if(error||!data)show('Não foi possível cadastrar o cliente. Confira os dados e tente novamente.','error')
     else {const saved={...(data as Client),master:[]};setAvailableClients(current=>[...current,saved].sort((a,b)=>a.name.localeCompare(b.name,'pt-BR')));setClientSearch(saved.name);setForm({...form,client_id:saved.id,client_address:[saved.address,saved.city].filter(Boolean).join(' · '),client_address_edited:false});setNewClientOpen(false);setNewClient({name:'',phone:'',address:'',city:'',origin:'',notes:'',master_client_id:''});show('Cliente cadastrado e selecionado no orçamento.','success')}
@@ -252,7 +255,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     const c=item.configuration??{}
     setItemForm({id:item.id,family_id:item.family_id??'',environment:item.environment??'',description:item.description,quantity:Number(item.quantity),presentation:item.presentation==='option'?'option':'principal',manufacturer_cost:Number(c.manufacturer_cost??item.cost_total),installation_cost:Number(c.installation_cost??0),additional_cost:Number(c.additional_cost??0),margin_percent:Number(item.margin_percent??0),sale_total:Number(item.sale_total),confection_subitem:typeof c.confection_subitem==='string'?c.confection_subitem:'',initial_configuration:c})
     setPaymentOptions(itemPaymentOptions[item.id]??[]);setItemOpen(true)
-    if(supabase){const {data}=await supabase.from('item_cost_lines').select('kind,supply_id,supplier_id,description,quantity,unit,unit_cost,labor_days,labor_start_date').eq('organization_id',access.organizationId).eq('budget_item_id',item.id);setSupplyLines((data??[]).filter(line=>line.kind==='supply').map(line=>({...line,supply_id:line.supply_id??'',quantity:Number(line.quantity),unit_cost:Number(line.unit_cost)})) as SupplyLine[]);setLaborLines((data??[]).filter(line=>line.kind==='service').map(line=>({supplier_id:line.supplier_id??'',description:line.description,days:Number(line.labor_days??1),amount:Number(line.unit_cost),start_date:line.labor_start_date??''})) as LaborLine[])}
+    if(supabase){const {data}=await supabase.from('item_cost_lines').select('kind,supply_id,supplier_id,description,quantity,unit,unit_cost,labor_days,labor_start_date').eq('organization_id',budgetOrganizationId).eq('budget_item_id',item.id);setSupplyLines((data??[]).filter(line=>line.kind==='supply').map(line=>({...line,supply_id:line.supply_id??'',quantity:Number(line.quantity),unit_cost:Number(line.unit_cost)})) as SupplyLine[]);setLaborLines((data??[]).filter(line=>line.kind==='service').map(line=>({supplier_id:line.supplier_id??'',description:line.description,days:Number(line.labor_days??1),amount:Number(line.unit_cost),start_date:line.labor_start_date??''})) as LaborLine[])}
   }
   const applyPdfCandidate=(document:ParsedManufacturerDocument,index:number)=>{
     const candidate=document.items[index];if(!candidate)return
@@ -310,8 +313,8 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     if(!itemForm.family_id||!itemForm.description.trim()){show('Informe o tipo e a descrição do item.','error');return}
     setItemSaving(true)
     const formKey=families.find(family=>family.id===itemForm.family_id)?.form_key
-    const cost=costOf(itemForm), payload={organization_id:access.organizationId,budget_id:budget.id,family_id:itemForm.family_id,position:itemForm.id?(items.find(x=>x.id===itemForm.id)?.position??1):items.length+1,presentation:itemForm.presentation,environment:itemForm.environment.trim()||null,description:itemForm.description.trim(),quantity:itemForm.quantity,configuration:{...itemForm.initial_configuration,manufacturer_cost:itemForm.manufacturer_cost,installation_cost:itemForm.installation_cost,additional_cost:itemForm.additional_cost,...(formKey==='confection'&&itemForm.confection_subitem?{confection_subitem:itemForm.confection_subitem}:{})},cost_total:cost,margin_percent:itemForm.margin_percent,sale_total:itemForm.sale_total,affects_total:itemForm.presentation==='principal'}
-    const result=itemForm.id?await supabase.from('budget_items').update(payload).eq('id',itemForm.id).eq('organization_id',access.organizationId).select('id').single():await supabase.from('budget_items').insert(payload).select('id').single()
+    const cost=costOf(itemForm), payload={organization_id:budgetOrganizationId,budget_id:budget.id,family_id:itemForm.family_id,position:itemForm.id?(items.find(x=>x.id===itemForm.id)?.position??1):items.length+1,presentation:itemForm.presentation,environment:itemForm.environment.trim()||null,description:itemForm.description.trim(),quantity:itemForm.quantity,configuration:{...itemForm.initial_configuration,manufacturer_cost:itemForm.manufacturer_cost,installation_cost:itemForm.installation_cost,additional_cost:itemForm.additional_cost,...(formKey==='confection'&&itemForm.confection_subitem?{confection_subitem:itemForm.confection_subitem}:{})},cost_total:cost,margin_percent:itemForm.margin_percent,sale_total:itemForm.sale_total,affects_total:itemForm.presentation==='principal'}
+    const result=itemForm.id?await supabase.from('budget_items').update(payload).eq('id',itemForm.id).eq('organization_id',budgetOrganizationId).select('id').single():await supabase.from('budget_items').insert(payload).select('id').single()
     if(result.error){
       const detail=result.error.code==='42501'?'Você não tem permissão para alterar este orçamento.':result.error.code==='23514'?'Revise os dados obrigatórios e os valores do item.':result.error.message
       show(`Não foi possível salvar o item: ${detail}`,'error')
@@ -324,8 +327,8 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
         ...supplyLines.filter(line=>line.supply_id&&line.quantity>0).map(line=>({kind:'supply',...line})),
         ...laborLines.filter(line=>line.supplier_id&&line.amount>0&&line.days>0).map(line=>({kind:'service',supplier_id:line.supplier_id,description:line.description.trim()||'Mão de obra',quantity:1,unit:'serviço',unit_cost:line.amount,labor_days:line.days,labor_start_date:line.start_date||null}))
       ]
-      const composition=await supabase.rpc('replace_budget_item_cost_lines',{org_id:access.organizationId,target_budget_item_id:result.data.id,new_lines:lines})
-      const optionsResult=composition.error?null:await supabase.rpc('replace_budget_item_payment_options',{org_id:access.organizationId,target_budget_item_id:result.data.id,new_options:paymentOptions.map((option,index)=>({...option,position:index+1}))})
+      const composition=await supabase.rpc('replace_budget_item_cost_lines',{org_id:budgetOrganizationId,target_budget_item_id:result.data.id,new_lines:lines})
+      const optionsResult=composition.error?null:await supabase.rpc('replace_budget_item_payment_options',{org_id:budgetOrganizationId,target_budget_item_id:result.data.id,new_options:paymentOptions.map((option,index)=>({...option,position:index+1}))})
       if(composition.error||optionsResult?.error)show('O item foi salvo, mas não foi possível registrar todos os detalhes comerciais.','error')
       else {setItemOpen(false);await loadItems();const {data}=await supabase.from('budgets').select(columns).eq('id',budget.id).single();if(data)setBudget(data as unknown as Budget);show(itemForm.id?'Item e composição atualizados.':'Item adicionado ao orçamento.','success')}
     }
@@ -334,7 +337,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   const deleteItem=async()=>{
     if(!supabase||!itemForm.id||itemSaving)return
     setItemSaving(true)
-    const {error}=await supabase.from('budget_items').delete().eq('id',itemForm.id).eq('organization_id',access.organizationId)
+    const {error}=await supabase.from('budget_items').delete().eq('id',itemForm.id).eq('organization_id',budgetOrganizationId)
     if(error)show('Não foi possível excluir o item.','error')
     else {setItemOpen(false);await loadItems();const {data}=await supabase.from('budgets').select(columns).eq('id',budget.id).single();if(data)setBudget(data as unknown as Budget);show('Item excluído e total atualizado.','success')}
     setItemSaving(false)
