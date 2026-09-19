@@ -169,7 +169,7 @@ export function Budgets() {
 <strong>{item.display_number}</strong>
 <small>{item.client?.name??'Cliente não informado'}</small>
 </td>
-<td>v{item.current_revision}</td>
+<td>{item.status==='draft'?'—':`v${item.current_revision}`}</td>
 <td>{new Date(item.created_at).toLocaleDateString('pt-BR')}</td>
 <td>
 <strong>{money.format(Number(item.total))}</strong>
@@ -189,6 +189,7 @@ export function Budgets() {
 
 function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,close}:{access:NonNullable<ReturnType<typeof useAccess>>;budget:Budget;setBudget:(budget:Budget)=>void;form:Editable;setForm:(value:Editable)=>void;clients:Client[];saveState:string;close:()=>void}) {
   const {show}=useToast()
+  const canEditItems=budget.status==='draft'&&(access.role==='admin'||access.role==='comercial')
   const [families,setFamilies]=useState<Family[]>([]),[items,setItems]=useState<BudgetItem[]>([]),[itemOpen,setItemOpen]=useState(false),[itemForm,setItemForm]=useState<ItemForm>(newBlankItem),[itemSaving,setItemSaving]=useState(false),[itemsLoading,setItemsLoading]=useState(true)
   const [supplies,setSupplies]=useState<SupplyOption[]>([]),[supplyLines,setSupplyLines]=useState<SupplyLine[]>([])
   const [providers,setProviders]=useState<ProviderOption[]>([]),[laborLines,setLaborLines]=useState<LaborLine[]>([])
@@ -305,6 +306,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   }
   const saveItem=async(e:FormEvent)=>{
     e.preventDefault();if(!supabase||itemSaving)return
+    if(!canEditItems){show(budget.status!=='draft'?'Itens só podem ser alterados em orçamento rascunho.':'Seu perfil precisa ser Comercial ou Administrador para alterar itens.','error');return}
     if(!itemForm.family_id||!itemForm.description.trim()){show('Informe o tipo e a descrição do item.','error');return}
     setItemSaving(true)
     const formKey=families.find(family=>family.id===itemForm.family_id)?.form_key
@@ -438,7 +440,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <header>
 <div>
 <h2>Dados comerciais</h2>
-<p>{budget.display_number} · revisão {budget.current_revision}</p>
+<p>{budget.display_number}{budget.status==='draft'?'':` · revisão ${budget.current_revision}`}</p>
 </div>
 <span className={`save-state ${saveState}`}>{stateLabel}</span>
 </header>
@@ -503,7 +505,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <h2>Itens do orçamento</h2>
 <p>Cada item mantém seu ambiente, custo, margem e forma de apresentação.</p>
 </div>
-{budget.status==='draft'?<button className="button primary" onClick={()=>openItem()}><Plus/>Adicionar item</button>:budget.status==='sent'?<button className="button primary" onClick={()=>requestStatus('draft')}><Plus/>Criar nova revisão</button>:<span className="field-note">Itens bloqueados neste status.</span>}
+{canEditItems?<button className="button primary" onClick={()=>openItem()}><Plus/>Adicionar item</button>:<span className="field-note">{budget.status!=='draft'?'Itens bloqueados neste status.':'Seu perfil atual não pode alterar itens.'}</span>}
 </header>{itemsLoading?<p className="panel-message">Carregando itens…</p>:items.length?<div className="table-wrap">
 <table>
 <thead>
@@ -517,7 +519,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 </tr>
 </thead>
 <tbody>{items.map(item=>
-<tr className={budget.status==='draft'?'clickable-row':''} key={item.id} onClick={()=>{if(budget.status==='draft')void openItem(item)}}>
+<tr className={canEditItems?'clickable-row':''} key={item.id} onClick={()=>{if(canEditItems)void openItem(item)}}>
 <td>
 <strong>{item.family?.name??'Item'}</strong>
 <small>{item.environment||'Ambiente a definir'}</small>
