@@ -503,8 +503,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <h2>Itens do orçamento</h2>
 <p>Cada item mantém seu ambiente, custo, margem e forma de apresentação.</p>
 </div>
-<button className="button primary" onClick={()=>openItem()}>
-<Plus/>Adicionar item</button>
+{budget.status==='draft'?<button className="button primary" onClick={()=>openItem()}><Plus/>Adicionar item</button>:budget.status==='sent'?<button className="button primary" onClick={()=>requestStatus('draft')}><Plus/>Criar nova revisão</button>:<span className="field-note">Itens bloqueados neste status.</span>}
 </header>{itemsLoading?<p className="panel-message">Carregando itens…</p>:items.length?<div className="table-wrap">
 <table>
 <thead>
@@ -518,7 +517,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 </tr>
 </thead>
 <tbody>{items.map(item=>
-<tr className="clickable-row" key={item.id} onClick={()=>openItem(item)}>
+<tr className={budget.status==='draft'?'clickable-row':''} key={item.id} onClick={()=>{if(budget.status==='draft')void openItem(item)}}>
 <td>
 <strong>{item.family?.name??'Item'}</strong>
 <small>{item.environment||'Ambiente a definir'}</small>
