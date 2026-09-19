@@ -10,7 +10,7 @@ const groups: { label: string; items: NavItem[] }[] = [
     { key:'clientes', label:'Clientes', icon:UsersRound }, { key:'orcamentos', label:'Orçamentos', icon:FileText },
     { key:'pedidos', label:'Pedidos', icon:PackageCheck }, { key:'agenda', label:'Agenda', icon:CalendarDays },
   ]},
-  { label: 'Operação', items: [{ key:'compras', label:'Compras', icon:ShoppingCart }] },
+  { label: 'Operação', items: [{ key:'compras', label:'Compras', icon:ShoppingCart },{ key:'prestadores', label:'Carga de prestadores', icon:CalendarDays }] },
   { label: 'Financeiro', items: [{ key:'financeiro', label:'Gestão financeira', icon:CircleDollarSign }] },
   { label: 'Cadastros', items: [{ key:'insumos', label:'Insumos e produtos', icon:ContactRound },{ key:'fornecedores', label:'Fornecedores', icon:UsersRound }] },
   { label: 'Administração', items: [{ key:'administracao', label:'Administração', icon:Settings }] },

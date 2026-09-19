@@ -1,6 +1,6 @@
 import type { ModuleKey } from '../domain'
 
-const modules = new Set<ModuleKey>(['inicio','prospeccao','clientes','insumos','orcamentos','pedidos','compras','financeiro','agenda','fornecedores','administracao'])
+const modules = new Set<ModuleKey>(['inicio','prospeccao','clientes','insumos','orcamentos','pedidos','compras','prestadores','financeiro','agenda','fornecedores','administracao'])
 
 export type AppRoute={module:ModuleKey;recordId:string|null}
 

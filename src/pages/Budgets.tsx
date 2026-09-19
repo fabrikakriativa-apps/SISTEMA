@@ -12,6 +12,7 @@ import { BudgetPreview } from '../components/BudgetPreview'
 import { budgetStatusLabels as labels, budgetStatusOptions, statusNeedsReason, type BudgetStatus } from '../lib/budgetStatus'
 import { navigateTo, readRoute } from '../lib/navigation'
 import { ItemCostComposition, type SupplyLine, type SupplyOption } from '../components/ItemCostComposition'
+import { ItemLaborComposition, laborCostTotal, type LaborLine, type ProviderOption } from '../components/ItemLaborComposition'
 import { SearchSelect } from '../components/SearchSelect'
 import { budgetDocumentPath } from '../lib/documents'
 import { confectionSubitems } from '../domain'
@@ -188,6 +189,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   const {show}=useToast()
   const [families,setFamilies]=useState<Family[]>([]),[items,setItems]=useState<BudgetItem[]>([]),[itemOpen,setItemOpen]=useState(false),[itemForm,setItemForm]=useState<ItemForm>(newBlankItem),[itemSaving,setItemSaving]=useState(false),[itemsLoading,setItemsLoading]=useState(true)
   const [supplies,setSupplies]=useState<SupplyOption[]>([]),[supplyLines,setSupplyLines]=useState<SupplyLine[]>([])
+  const [providers,setProviders]=useState<ProviderOption[]>([]),[laborLines,setLaborLines]=useState<LaborLine[]>([])
   const [pdfReading,setPdfReading]=useState(false),[pdfResult,setPdfResult]=useState<ParsedManufacturerDocument|null>(null),[pdfName,setPdfName]=useState(''),[pdfCandidate,setPdfCandidate]=useState(0)
   const [pdfFile,setPdfFile]=useState<File|null>(null),[attachments,setAttachments]=useState<Attachment[]>([])
   const [pdfRows,setPdfRows]=useState<PdfRow[]>([])
@@ -207,21 +209,23 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   const loadItems=useCallback(async()=>{
     if(!supabase)return
     setItemsLoading(true)
-    const [familyResult,itemResult,supplyResult,attachmentResult]=await Promise.all([
+    const [familyResult,itemResult,supplyResult,providerResult,attachmentResult]=await Promise.all([
       supabase.from('item_families').select('id,name,code,form_key').eq('organization_id',access.organizationId).eq('active',true).order('name'),
       supabase.from('budget_items').select('id,family_id,position,presentation,environment,description,quantity,configuration,cost_total,margin_percent,sale_total,affects_total,family:item_families!budget_items_family_id_fkey(name)').eq('organization_id',access.organizationId).eq('budget_id',budget.id).order('position'),
       supabase.from('supplies').select('id,code,name,category,usage_unit,current_cost').eq('organization_id',access.organizationId).eq('active',true).order('name'),
+      supabase.from('suppliers').select('id,name,phone,supplier_types').eq('organization_id',access.organizationId).eq('active',true).order('name'),
       supabase.from('attachments').select('id,original_name,storage_path,created_at').eq('organization_id',access.organizationId).eq('entity_type','budget').eq('entity_id',budget.id).order('created_at',{ascending:false})
     ])
-    if(familyResult.error||itemResult.error||supplyResult.error)show(`Não foi possível carregar os itens: ${familyResult.error?.message??itemResult.error?.message??supplyResult.error?.message}`,'error')
-    else {setFamilies((familyResult.data??[]) as Family[]);setItems((itemResult.data??[]) as unknown as BudgetItem[]);setSupplies((supplyResult.data??[]) as SupplyOption[]);setAttachments((attachmentResult.data??[]) as Attachment[])}
+    if(familyResult.error||itemResult.error||supplyResult.error||providerResult.error)show(`Não foi possível carregar os itens: ${familyResult.error?.message??itemResult.error?.message??supplyResult.error?.message??providerResult.error?.message}`,'error')
+    else {setFamilies((familyResult.data??[]) as Family[]);setItems((itemResult.data??[]) as unknown as BudgetItem[]);setSupplies((supplyResult.data??[]) as SupplyOption[]);setProviders((providerResult.data??[]) as ProviderOption[]);setAttachments((attachmentResult.data??[]) as Attachment[])}
     setItemsLoading(false)
   },[access.organizationId,budget.id,show])
   useEffect(()=>{void loadItems()},[loadItems])
   useEffect(()=>setAvailableClients(clients),[clients])
-  const costOf=(value:ItemForm)=>composedItemCost(value,supplyLines)
-  const withMargin=(value:ItemForm,lines=supplyLines)=>({...value,sale_total:salePriceFromCostAndMargin(composedItemCost(value,lines),value.margin_percent)})
+  const costOf=(value:ItemForm,lines=supplyLines,labor=laborLines)=>Number((composedItemCost(value,lines)+laborCostTotal(labor)).toFixed(2))
+  const withMargin=(value:ItemForm,lines=supplyLines,labor=laborLines)=>({...value,sale_total:salePriceFromCostAndMargin(costOf(value,lines,labor),value.margin_percent)})
   const changeSupplyLines=(lines:SupplyLine[])=>{setSupplyLines(lines);setItemForm(current=>withMargin(current,lines))}
+  const changeLaborLines=(lines:LaborLine[])=>{setLaborLines(lines);setItemForm(current=>withMargin(current,supplyLines,lines))}
   const selectClient=(selectedClient:Client)=>{
     setClientSearch(selectedClient.name)
     const address=[selectedClient.address,selectedClient.city].filter(Boolean).join(' · ')
@@ -238,12 +242,12 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   }
   const openItem=async(item?:BudgetItem)=>{
     setPdfResult(null);setPdfName('');setPdfCandidate(0);setPdfRows([]);setConfirmDelete(false)
-    setSupplyLines([])
+    setSupplyLines([]);setLaborLines([])
     if(!item){setItemForm(newBlankItem());setItemOpen(true);return}
     const c=item.configuration??{}
     setItemForm({id:item.id,family_id:item.family_id??'',environment:item.environment??'',description:item.description,quantity:Number(item.quantity),presentation:item.presentation==='option'?'option':'principal',manufacturer_cost:Number(c.manufacturer_cost??item.cost_total),installation_cost:Number(c.installation_cost??0),additional_cost:Number(c.additional_cost??0),margin_percent:Number(item.margin_percent??0),sale_total:Number(item.sale_total),confection_subitem:typeof c.confection_subitem==='string'?c.confection_subitem:'',initial_configuration:c})
     setItemOpen(true)
-    if(supabase){const {data}=await supabase.from('item_cost_lines').select('supply_id,description,quantity,unit,unit_cost').eq('organization_id',access.organizationId).eq('budget_item_id',item.id).eq('kind','supply');setSupplyLines((data??[]).map(line=>({...line,supply_id:line.supply_id??'',quantity:Number(line.quantity),unit_cost:Number(line.unit_cost)})) as SupplyLine[])}
+    if(supabase){const {data}=await supabase.from('item_cost_lines').select('kind,supply_id,supplier_id,description,quantity,unit,unit_cost,labor_days,labor_start_date').eq('organization_id',access.organizationId).eq('budget_item_id',item.id);setSupplyLines((data??[]).filter(line=>line.kind==='supply').map(line=>({...line,supply_id:line.supply_id??'',quantity:Number(line.quantity),unit_cost:Number(line.unit_cost)})) as SupplyLine[]);setLaborLines((data??[]).filter(line=>line.kind==='service').map(line=>({supplier_id:line.supplier_id??'',description:line.description,days:Number(line.labor_days??1),amount:Number(line.unit_cost),start_date:line.labor_start_date??''})) as LaborLine[])}
   }
   const applyPdfCandidate=(document:ParsedManufacturerDocument,index:number)=>{
     const candidate=document.items[index];if(!candidate)return
@@ -308,7 +312,8 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
         ...(itemForm.manufacturer_cost>0?[{kind:'product',supply_id:null,description:'Custo do fabricante',quantity:1,unit:'un',unit_cost:itemForm.manufacturer_cost}]:[]),
         ...(itemForm.installation_cost>0?[{kind:'installation',supply_id:null,description:'Instalação',quantity:1,unit:'serviço',unit_cost:itemForm.installation_cost}]:[]),
         ...(itemForm.additional_cost>0?[{kind:'other',supply_id:null,description:'Custos adicionais',quantity:1,unit:'un',unit_cost:itemForm.additional_cost}]:[]),
-        ...supplyLines.filter(line=>line.supply_id&&line.quantity>0).map(line=>({kind:'supply',...line}))
+        ...supplyLines.filter(line=>line.supply_id&&line.quantity>0).map(line=>({kind:'supply',...line})),
+        ...laborLines.filter(line=>line.supplier_id&&line.amount>0&&line.days>0).map(line=>({kind:'service',supplier_id:line.supplier_id,description:line.description.trim()||'Mão de obra',quantity:1,unit:'serviço',unit_cost:line.amount,labor_days:line.days,labor_start_date:line.start_date||null}))
       ]
       const composition=await supabase.rpc('replace_budget_item_cost_lines',{org_id:access.organizationId,target_budget_item_id:result.data.id,new_lines:lines})
       if(composition.error)show('O item foi salvo, mas não foi possível registrar sua composição de custos.','error')
@@ -586,6 +591,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <label className="field">Custos adicionais<input type="number" min="0" step="0.01" value={itemForm.additional_cost} onChange={e=>setItemForm(current=>withMargin({...current,additional_cost:Number(e.target.value)}))}/>
 </label>
 <ItemCostComposition supplies={supplies} lines={supplyLines} onChange={changeSupplyLines}/>
+<ItemLaborComposition providers={providers} lines={laborLines} onChange={changeLaborLines}/>
 <label className="field">Custo total<input readOnly value={money.format(costOf(itemForm))}/>
 </label>
 <label className="field">Margem (%)<input type="number" min="0" step="0.1" value={itemForm.margin_percent} onChange={e=>setItemForm(current=>withMargin({...current,margin_percent:Number(e.target.value)}))}/>

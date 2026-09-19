@@ -15,6 +15,7 @@ const Finance=lazy(()=>import('./pages/Finance').then(module=>({default:module.F
 const PurchasesConnected=lazy(()=>import('./pages/PurchasesConnected').then(module=>({default:module.PurchasesConnected})))
 const Suppliers=lazy(()=>import('./pages/Suppliers').then(module=>({default:module.Suppliers})))
 const Calendar=lazy(()=>import('./pages/Calendar').then(module=>({default:module.Calendar})))
+const ProviderWorkload=lazy(()=>import('./pages/ProviderWorkload').then(module=>({default:module.ProviderWorkload})))
 const Administration=lazy(()=>import('./pages/Administration').then(module=>({default:module.Administration})))
 
 export function App() {
@@ -29,6 +30,7 @@ export function App() {
     : active === 'pedidos' ? <Orders/>
     : active === 'financeiro' ? <Finance/>
     : active === 'compras' ? <PurchasesConnected/>
+    : active === 'prestadores' ? <ProviderWorkload/>
     : active === 'fornecedores' ? <Suppliers/>
     : active === 'agenda' ? <Calendar/>
     : <Administration/>
