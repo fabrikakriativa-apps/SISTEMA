@@ -1,0 +1,21 @@
+.item-payment-options{border-top:1px solid var(--line);padding-top:18px}
+.item-payment-options header{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}
+.item-payment-options header strong{font-size:16px}
+.item-payment-options header small{display:block;max-width:620px;margin-top:3px;color:var(--muted);font-size:13px;line-height:1.35}
+.item-payment-options header>div:last-child{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}
+.payment-option-lines{margin-top:14px;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.payment-option-head,.payment-option-line{display:grid;grid-template-columns:minmax(170px,1.3fr) minmax(110px,.8fr) minmax(110px,.75fr) minmax(180px,1.3fr) 34px;gap:10px;align-items:center;padding:10px 12px}
+.payment-option-head{background:#faf7f1;color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+.payment-option-line{border-top:1px solid var(--line)}
+.payment-option-line input{min-width:0;border:1px solid var(--line);border-radius:9px;padding:9px;background:#fff;font-size:14px}
+.payment-option-line strong{text-align:right;font-size:14px}
+.payment-option-line .icon-button{color:var(--rose)}
+.item-payment-options>p{padding:13px;border:1px dashed var(--line);border-radius:10px;color:var(--muted);text-align:center;font-size:13px}
+.document-item-options{margin-top:13px}
+.document-item-options>small{display:block;color:#625b51;font-size:9px!important;font-weight:700;letter-spacing:.07em;text-transform:uppercase}
+.document-item-options>div{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin-top:7px}
+.document-item-options article{display:flex;min-height:52px;flex-direction:column;gap:3px;padding:10px;border:1px solid #ead7a4;border-radius:9px;background:#fffaf0}
+.document-item-options article span{font-size:11px}
+.document-item-options article strong{font-size:13px}
+.document-item-options article small{font-size:9px}
+@media(max-width:760px){.item-payment-options header{flex-direction:column}.item-payment-options header>div:last-child{justify-content:flex-start}.payment-option-head{display:none}.payment-option-line{grid-template-columns:1fr 1fr}.payment-option-line input:first-child,.payment-option-line input:nth-of-type(3){grid-column:span 2}.payment-option-line .icon-button{justify-self:end}}

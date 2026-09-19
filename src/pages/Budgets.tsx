@@ -13,6 +13,8 @@ import { budgetStatusLabels as labels, budgetStatusOptions, statusNeedsReason, t
 import { navigateTo, readRoute } from '../lib/navigation'
 import { ItemCostComposition, type SupplyLine, type SupplyOption } from '../components/ItemCostComposition'
 import { ItemLaborComposition, laborCostTotal, type LaborLine, type ProviderOption } from '../components/ItemLaborComposition'
+import { ItemPaymentOptions } from '../components/ItemPaymentOptions'
+import { standardItemPaymentOptions, type ItemPaymentOption } from '../lib/paymentOptions'
 import { SearchSelect } from '../components/SearchSelect'
 import { budgetDocumentPath } from '../lib/documents'
 import { confectionSubitems } from '../domain'
@@ -190,6 +192,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   const [families,setFamilies]=useState<Family[]>([]),[items,setItems]=useState<BudgetItem[]>([]),[itemOpen,setItemOpen]=useState(false),[itemForm,setItemForm]=useState<ItemForm>(newBlankItem),[itemSaving,setItemSaving]=useState(false),[itemsLoading,setItemsLoading]=useState(true)
   const [supplies,setSupplies]=useState<SupplyOption[]>([]),[supplyLines,setSupplyLines]=useState<SupplyLine[]>([])
   const [providers,setProviders]=useState<ProviderOption[]>([]),[laborLines,setLaborLines]=useState<LaborLine[]>([])
+  const [paymentOptions,setPaymentOptions]=useState<ItemPaymentOption[]>([]),[itemPaymentOptions,setItemPaymentOptions]=useState<Record<string,ItemPaymentOption[]>>({})
   const [pdfReading,setPdfReading]=useState(false),[pdfResult,setPdfResult]=useState<ParsedManufacturerDocument|null>(null),[pdfName,setPdfName]=useState(''),[pdfCandidate,setPdfCandidate]=useState(0)
   const [pdfFile,setPdfFile]=useState<File|null>(null),[attachments,setAttachments]=useState<Attachment[]>([])
   const [pdfRows,setPdfRows]=useState<PdfRow[]>([])
@@ -209,15 +212,16 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   const loadItems=useCallback(async()=>{
     if(!supabase)return
     setItemsLoading(true)
-    const [familyResult,itemResult,supplyResult,providerResult,attachmentResult]=await Promise.all([
+    const [familyResult,itemResult,supplyResult,providerResult,attachmentResult,optionResult]=await Promise.all([
       supabase.from('item_families').select('id,name,code,form_key').eq('organization_id',access.organizationId).eq('active',true).order('name'),
       supabase.from('budget_items').select('id,family_id,position,presentation,environment,description,quantity,configuration,cost_total,margin_percent,sale_total,affects_total,family:item_families!budget_items_family_id_fkey(name)').eq('organization_id',access.organizationId).eq('budget_id',budget.id).order('position'),
       supabase.from('supplies').select('id,code,name,category,usage_unit,current_cost').eq('organization_id',access.organizationId).eq('active',true).order('name'),
       supabase.from('suppliers').select('id,name,phone,supplier_types').eq('organization_id',access.organizationId).eq('active',true).order('name'),
-      supabase.from('attachments').select('id,original_name,storage_path,created_at').eq('organization_id',access.organizationId).eq('entity_type','budget').eq('entity_id',budget.id).order('created_at',{ascending:false})
+      supabase.from('attachments').select('id,original_name,storage_path,created_at').eq('organization_id',access.organizationId).eq('entity_type','budget').eq('entity_id',budget.id).order('created_at',{ascending:false}),
+      supabase.from('budget_item_payment_options').select('id,budget_item_id,position,description,adjustment_percent,observation').eq('organization_id',access.organizationId).order('position')
     ])
-    if(familyResult.error||itemResult.error||supplyResult.error||providerResult.error)show(`Não foi possível carregar os itens: ${familyResult.error?.message??itemResult.error?.message??supplyResult.error?.message??providerResult.error?.message}`,'error')
-    else {setFamilies((familyResult.data??[]) as Family[]);setItems((itemResult.data??[]) as unknown as BudgetItem[]);setSupplies((supplyResult.data??[]) as SupplyOption[]);setProviders((providerResult.data??[]) as ProviderOption[]);setAttachments((attachmentResult.data??[]) as Attachment[])}
+    if(familyResult.error||itemResult.error||supplyResult.error||providerResult.error||optionResult.error)show(`Não foi possível carregar os itens: ${familyResult.error?.message??itemResult.error?.message??supplyResult.error?.message??providerResult.error?.message??optionResult.error?.message}`,'error')
+    else {setFamilies((familyResult.data??[]) as Family[]);setItems((itemResult.data??[]) as unknown as BudgetItem[]);setSupplies((supplyResult.data??[]) as SupplyOption[]);setProviders((providerResult.data??[]) as ProviderOption[]);setAttachments((attachmentResult.data??[]) as Attachment[]);setItemPaymentOptions((optionResult.data??[]).reduce((result,item)=>({...result,[item.budget_item_id]:[...(result[item.budget_item_id]??[]),{id:item.id,position:item.position,description:item.description,adjustment_percent:Number(item.adjustment_percent),observation:item.observation??''}]}),{} as Record<string,ItemPaymentOption[]>))}
     setItemsLoading(false)
   },[access.organizationId,budget.id,show])
   useEffect(()=>{void loadItems()},[loadItems])
@@ -242,11 +246,11 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   }
   const openItem=async(item?:BudgetItem)=>{
     setPdfResult(null);setPdfName('');setPdfCandidate(0);setPdfRows([]);setConfirmDelete(false)
-    setSupplyLines([]);setLaborLines([])
-    if(!item){setItemForm(newBlankItem());setItemOpen(true);return}
+    setSupplyLines([]);setLaborLines([]);setPaymentOptions([])
+    if(!item){setItemForm(newBlankItem());setPaymentOptions(standardItemPaymentOptions());setItemOpen(true);return}
     const c=item.configuration??{}
     setItemForm({id:item.id,family_id:item.family_id??'',environment:item.environment??'',description:item.description,quantity:Number(item.quantity),presentation:item.presentation==='option'?'option':'principal',manufacturer_cost:Number(c.manufacturer_cost??item.cost_total),installation_cost:Number(c.installation_cost??0),additional_cost:Number(c.additional_cost??0),margin_percent:Number(item.margin_percent??0),sale_total:Number(item.sale_total),confection_subitem:typeof c.confection_subitem==='string'?c.confection_subitem:'',initial_configuration:c})
-    setItemOpen(true)
+    setPaymentOptions(itemPaymentOptions[item.id]??[]);setItemOpen(true)
     if(supabase){const {data}=await supabase.from('item_cost_lines').select('kind,supply_id,supplier_id,description,quantity,unit,unit_cost,labor_days,labor_start_date').eq('organization_id',access.organizationId).eq('budget_item_id',item.id);setSupplyLines((data??[]).filter(line=>line.kind==='supply').map(line=>({...line,supply_id:line.supply_id??'',quantity:Number(line.quantity),unit_cost:Number(line.unit_cost)})) as SupplyLine[]);setLaborLines((data??[]).filter(line=>line.kind==='service').map(line=>({supplier_id:line.supplier_id??'',description:line.description,days:Number(line.labor_days??1),amount:Number(line.unit_cost),start_date:line.labor_start_date??''})) as LaborLine[])}
   }
   const applyPdfCandidate=(document:ParsedManufacturerDocument,index:number)=>{
@@ -316,7 +320,8 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
         ...laborLines.filter(line=>line.supplier_id&&line.amount>0&&line.days>0).map(line=>({kind:'service',supplier_id:line.supplier_id,description:line.description.trim()||'Mão de obra',quantity:1,unit:'serviço',unit_cost:line.amount,labor_days:line.days,labor_start_date:line.start_date||null}))
       ]
       const composition=await supabase.rpc('replace_budget_item_cost_lines',{org_id:access.organizationId,target_budget_item_id:result.data.id,new_lines:lines})
-      if(composition.error)show('O item foi salvo, mas não foi possível registrar sua composição de custos.','error')
+      const optionsResult=composition.error?null:await supabase.rpc('replace_budget_item_payment_options',{org_id:access.organizationId,target_budget_item_id:result.data.id,new_options:paymentOptions.map((option,index)=>({...option,position:index+1}))})
+      if(composition.error||optionsResult?.error)show('O item foi salvo, mas não foi possível registrar todos os detalhes comerciais.','error')
       else {setItemOpen(false);await loadItems();const {data}=await supabase.from('budgets').select(columns).eq('id',budget.id).single();if(data)setBudget(data as unknown as Budget);show(itemForm.id?'Item e composição atualizados.':'Item adicionado ao orçamento.','success')}
     }
     setItemSaving(false)
@@ -367,7 +372,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <button className="button secondary" onClick={close}>
 <ArrowLeft/>Voltar aos orçamentos</button>
 </div>}>
-    {previewOpen&&<BudgetPreview budget={{...budget,valid_until:form.valid_until,payment_terms:form.payment_terms,delivery_terms:form.delivery_terms,notes:form.notes,discount:Number(form.discount||0),total:Math.max(0,Number(budget.subtotal)-Number(form.discount||0))}} items={items} clientName={client?.name??'Cliente não informado'} clientAddress={form.client_address??''} onClose={()=>setPreviewOpen(false)}/>}
+    {previewOpen&&<BudgetPreview budget={{...budget,valid_until:form.valid_until,payment_terms:form.payment_terms,delivery_terms:form.delivery_terms,notes:form.notes,discount:Number(form.discount||0),total:Math.max(0,Number(budget.subtotal)-Number(form.discount||0))}} items={items} paymentOptions={itemPaymentOptions} clientName={client?.name??'Cliente não informado'} clientAddress={form.client_address??''} onClose={()=>setPreviewOpen(false)}/>}
     {newClientOpen&&<div className="dialog-backdrop">
 <form className="dialog" onSubmit={saveNewClient}>
 <header>
@@ -599,6 +604,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <label className="field">Preço de venda<input type="number" min="0" step="0.01" value={itemForm.sale_total} onChange={e=>{const sale=Number(e.target.value),cost=costOf(itemForm);setItemForm({...itemForm,sale_total:sale,margin_percent:cost>0?Number((((sale/cost)-1)*100).toFixed(2)):0})}}/>
 <small className="field-note">Margem e preço são sincronizados automaticamente.</small>
 </label></div>
+<ItemPaymentOptions saleTotal={itemForm.sale_total} options={paymentOptions} onChange={setPaymentOptions}/>
 </div>{confirmDelete&&<div className="inline-confirm">
 <div>
 <strong>Excluir este item?</strong>
