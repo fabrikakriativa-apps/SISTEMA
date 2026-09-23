@@ -18,6 +18,7 @@ import { standardItemPaymentOptions, type ItemPaymentOption } from '../lib/payme
 import { SearchSelect } from '../components/SearchSelect'
 import { budgetDocumentPath } from '../lib/documents'
 import { confectionSubitems } from '../domain'
+import { DecimalInput } from '../components/DecimalInput'
 
 type Budget = {
   id:string; organization_id:string; number:number; display_number:string; current_revision:number; client_id:string|null
@@ -30,12 +31,12 @@ type Client = { id:string; name:string; phone:string|null; address:string|null; 
 type Editable = Pick<Budget,'client_id'|'client_address'|'client_address_edited'|'valid_until'|'payment_terms'|'delivery_terms'|'notes'|'internal_notes'|'discount'>
 type Family={id:string;name:string;code:string;form_key:string}
 type BudgetItem={id:string;family_id:string|null;position:number;presentation:string;environment:string|null;description:string;quantity:number;configuration:Record<string,unknown>;cost_total:number;margin_percent:number|null;sale_total:number;affects_total:boolean;family:{name:string}|null}
-type ItemForm={id?:string;family_id:string;environment:string;description:string;quantity:number;presentation:'principal'|'option';manufacturer_cost:number;installation_cost:number;additional_cost:number;margin_percent:number;sale_total:number;confection_subitem:string;initial_configuration:Record<string,unknown>}
+type ItemForm={id?:string;family_id:string;environment:string;description:string;quantity:number;presentation:'principal'|'option';manufacturer_cost:number;additional_cost:number;margin_percent:number;sale_total:number;confection_subitem:string;initial_configuration:Record<string,unknown>}
 type PdfRow={selected:boolean;environment:string;presentation:'principal'|'option';margin_percent:number;sale_total:number}
 type Attachment={id:string;original_name:string;storage_path:string;created_at:string}
 
 const blankEditable:Editable = { client_id:null, client_address:'', client_address_edited:false, valid_until:null, payment_terms:'', delivery_terms:'', notes:'', internal_notes:'', discount:0 }
-const newBlankItem=():ItemForm=>({family_id:'',environment:'',description:'',quantity:1,presentation:'principal',manufacturer_cost:0,installation_cost:0,additional_cost:0,margin_percent:50,sale_total:0,confection_subitem:'',initial_configuration:{}})
+const newBlankItem=():ItemForm=>({family_id:'',environment:'',description:'',quantity:1,presentation:'principal',manufacturer_cost:0,additional_cost:0,margin_percent:50,sale_total:0,confection_subitem:'',initial_configuration:{}})
 const columns = 'id,organization_id,number,display_number,current_revision,client_id,client_address,client_address_edited,status,valid_until,payment_terms,delivery_terms,notes,internal_notes,subtotal,discount,total,created_at,updated_at'
 const withClient = (budget:Budget, clients:Client[]):Budget => ({...budget,client:clients.find(client=>client.id===budget.client_id)?{name:clients.find(client=>client.id===budget.client_id)!.name}:null})
 
@@ -253,7 +254,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     setSupplyLines([]);setLaborLines([]);setPaymentOptions([])
     if(!item){setItemForm(newBlankItem());setPaymentOptions(standardItemPaymentOptions());setItemOpen(true);return}
     const c=item.configuration??{}
-    setItemForm({id:item.id,family_id:item.family_id??'',environment:item.environment??'',description:item.description,quantity:Number(item.quantity),presentation:item.presentation==='option'?'option':'principal',manufacturer_cost:Number(c.manufacturer_cost??item.cost_total),installation_cost:Number(c.installation_cost??0),additional_cost:Number(c.additional_cost??0),margin_percent:Number(item.margin_percent??0),sale_total:Number(item.sale_total),confection_subitem:typeof c.confection_subitem==='string'?c.confection_subitem:'',initial_configuration:c})
+    setItemForm({id:item.id,family_id:item.family_id??'',environment:item.environment??'',description:item.description,quantity:Number(item.quantity),presentation:item.presentation==='option'?'option':'principal',manufacturer_cost:Number(c.manufacturer_cost??item.cost_total),additional_cost:Number(c.additional_cost??0),margin_percent:Number(item.margin_percent??0),sale_total:Number(item.sale_total),confection_subitem:typeof c.confection_subitem==='string'?c.confection_subitem:'',initial_configuration:c})
     setPaymentOptions(itemPaymentOptions[item.id]??[]);setItemOpen(true)
     if(supabase){const {data}=await supabase.from('item_cost_lines').select('kind,supply_id,supplier_id,description,quantity,unit,unit_cost,labor_days,labor_start_date').eq('organization_id',budgetOrganizationId).eq('budget_item_id',item.id);setSupplyLines((data??[]).filter(line=>line.kind==='supply').map(line=>({...line,supply_id:line.supply_id??'',quantity:Number(line.quantity),unit_cost:Number(line.unit_cost)})) as SupplyLine[]);setLaborLines((data??[]).filter(line=>line.kind==='service').map(line=>({supplier_id:line.supplier_id??'',description:line.description,days:Number(line.labor_days??1),amount:Number(line.unit_cost),start_date:line.labor_start_date??''})) as LaborLine[])}
   }
@@ -289,7 +290,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     const missing=selected.find(({item})=>!pdfFamily(item.description))
     if(missing){show('Não foi possível definir o tipo de um dos itens. Importe-o individualmente.','error');return}
     setItemSaving(true)
-    const payloads=selected.map(({item,row},index)=>({organization_id:access.organizationId,budget_id:budget.id,family_id:pdfFamily(item.description)!.id,position:items.length+index+1,presentation:row.presentation,environment:row.environment.trim()||null,description:pdfDescription(item),quantity:item.quantity,configuration:{manufacturer_cost:item.value,installation_cost:0,additional_cost:0,source_file:pdfName,source_confidence:item.confidence},cost_total:item.value,margin_percent:row.margin_percent,sale_total:row.sale_total,affects_total:row.presentation==='principal'}))
+    const payloads=selected.map(({item,row},index)=>({organization_id:budgetOrganizationId,budget_id:budget.id,family_id:pdfFamily(item.description)!.id,position:items.length+index+1,presentation:row.presentation,environment:row.environment.trim()||null,description:pdfDescription(item),quantity:item.quantity,configuration:{manufacturer_cost:item.value,additional_cost:0,source_file:pdfName,source_confidence:item.confidence},cost_total:item.value,margin_percent:row.margin_percent,sale_total:row.sale_total,affects_total:row.presentation==='principal'}))
     const {data:created,error}=await supabase.from('budget_items').insert(payloads).select('id,cost_total')
     if(error)show('Não foi possível importar os itens selecionados. Nenhum item foi incluído.','error')
     else {
@@ -313,7 +314,8 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     if(!itemForm.family_id||!itemForm.description.trim()){show('Informe o tipo e a descrição do item.','error');return}
     setItemSaving(true)
     const formKey=families.find(family=>family.id===itemForm.family_id)?.form_key
-    const cost=costOf(itemForm), payload={organization_id:budgetOrganizationId,budget_id:budget.id,family_id:itemForm.family_id,position:itemForm.id?(items.find(x=>x.id===itemForm.id)?.position??1):items.length+1,presentation:itemForm.presentation,environment:itemForm.environment.trim()||null,description:itemForm.description.trim(),quantity:itemForm.quantity,configuration:{...itemForm.initial_configuration,manufacturer_cost:itemForm.manufacturer_cost,installation_cost:itemForm.installation_cost,additional_cost:itemForm.additional_cost,...(formKey==='confection'&&itemForm.confection_subitem?{confection_subitem:itemForm.confection_subitem}:{})},cost_total:cost,margin_percent:itemForm.margin_percent,sale_total:itemForm.sale_total,affects_total:itemForm.presentation==='principal'}
+    const {installation_cost:_,...previousConfiguration}=itemForm.initial_configuration
+    const cost=costOf(itemForm), payload={organization_id:budgetOrganizationId,budget_id:budget.id,family_id:itemForm.family_id,position:itemForm.id?(items.find(x=>x.id===itemForm.id)?.position??1):items.length+1,presentation:itemForm.presentation,environment:itemForm.environment.trim()||null,description:itemForm.description.trim(),quantity:itemForm.quantity,configuration:{...previousConfiguration,manufacturer_cost:itemForm.manufacturer_cost,additional_cost:itemForm.additional_cost,...(formKey==='confection'&&itemForm.confection_subitem?{confection_subitem:itemForm.confection_subitem}:{})},cost_total:cost,margin_percent:itemForm.margin_percent,sale_total:itemForm.sale_total,affects_total:itemForm.presentation==='principal'}
     const result=itemForm.id?await supabase.from('budget_items').update(payload).eq('id',itemForm.id).eq('organization_id',budgetOrganizationId).select('id').single():await supabase.from('budget_items').insert(payload).select('id').single()
     if(result.error){
       const detail=result.error.code==='42501'?'Você não tem permissão para alterar este orçamento.':result.error.code==='23514'?'Revise os dados obrigatórios e os valores do item.':result.error.message
@@ -322,7 +324,6 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     else {
       const lines=[
         ...(itemForm.manufacturer_cost>0?[{kind:'product',supply_id:null,description:'Custo do fabricante',quantity:1,unit:'un',unit_cost:itemForm.manufacturer_cost}]:[]),
-        ...(itemForm.installation_cost>0?[{kind:'installation',supply_id:null,description:'Instalação',quantity:1,unit:'serviço',unit_cost:itemForm.installation_cost}]:[]),
         ...(itemForm.additional_cost>0?[{kind:'other',supply_id:null,description:'Custos adicionais',quantity:1,unit:'un',unit_cost:itemForm.additional_cost}]:[]),
         ...supplyLines.filter(line=>line.supply_id&&line.quantity>0).map(line=>({kind:'supply',...line})),
         ...laborLines.filter(line=>line.supplier_id&&line.amount>0&&line.days>0).map(line=>({kind:'service',supplier_id:line.supplier_id,description:line.description.trim()||'Mão de obra',quantity:1,unit:'serviço',unit_cost:line.amount,labor_days:line.days,labor_start_date:line.start_date||null}))
@@ -596,19 +597,17 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <option value="option">Opção (não soma)</option>
 </select>
 </label>
-<label className="field">Custo do fabricante<input type="number" min="0" step="0.01" value={itemForm.manufacturer_cost} onChange={e=>setItemForm(current=>withMargin({...current,manufacturer_cost:Number(e.target.value)}))}/>
+<label className="field">Custo do fabricante<DecimalInput value={itemForm.manufacturer_cost} decimalScale={2} onValueChange={value=>setItemForm(current=>withMargin({...current,manufacturer_cost:value}))}/>
 </label>
-<label className="field">Instalação<input type="number" min="0" step="0.01" value={itemForm.installation_cost} onChange={e=>setItemForm(current=>withMargin({...current,installation_cost:Number(e.target.value)}))}/>
-</label>
-<label className="field">Custos adicionais<input type="number" min="0" step="0.01" value={itemForm.additional_cost} onChange={e=>setItemForm(current=>withMargin({...current,additional_cost:Number(e.target.value)}))}/>
+<label className="field">Custos adicionais<DecimalInput value={itemForm.additional_cost} decimalScale={2} onValueChange={value=>setItemForm(current=>withMargin({...current,additional_cost:value}))}/>
 </label>
 <ItemCostComposition supplies={supplies} lines={supplyLines} onChange={changeSupplyLines}/>
 <ItemLaborComposition providers={providers} lines={laborLines} onChange={changeLaborLines}/>
 <div className="item-pricing-row span-2"><label className="field">Custo total<input readOnly value={money.format(costOf(itemForm))}/>
 </label>
-<label className="field">Margem (%)<input type="number" min="0" step="0.1" value={itemForm.margin_percent} onChange={e=>setItemForm(current=>withMargin({...current,margin_percent:Number(e.target.value)}))}/>
+<label className="field">Margem (%)<DecimalInput value={itemForm.margin_percent} decimalScale={3} onValueChange={value=>setItemForm(current=>withMargin({...current,margin_percent:value}))}/>
 </label>
-<label className="field">Preço de venda<input type="number" min="0" step="0.01" value={itemForm.sale_total} onChange={e=>{const sale=Number(e.target.value),cost=costOf(itemForm);setItemForm({...itemForm,sale_total:sale,margin_percent:cost>0?Number((((sale/cost)-1)*100).toFixed(2)):0})}}/>
+<label className="field">Preço de venda<DecimalInput value={itemForm.sale_total} decimalScale={2} onValueChange={sale=>{const cost=costOf(itemForm);setItemForm({...itemForm,sale_total:sale,margin_percent:marginFromSalePrice(cost,sale)})}}/>
 <small className="field-note">Margem e preço são sincronizados automaticamente.</small>
 </label></div>
 <ItemPaymentOptions saleTotal={itemForm.sale_total} options={paymentOptions} onChange={setPaymentOptions}/>

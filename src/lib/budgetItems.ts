@@ -1,6 +1,5 @@
 export type ItemCosts = {
   manufacturer_cost:number
-  installation_cost:number
   additional_cost:number
   margin_percent:number
 }
@@ -10,7 +9,7 @@ export type SupplyCost={quantity:number;unit_cost:number}
 const positive=(value:number)=>Number.isFinite(value)?Math.max(0,value):0
 
 export function itemCostTotal(item:ItemCosts) {
-  return Number((positive(item.manufacturer_cost)+positive(item.installation_cost)+positive(item.additional_cost)).toFixed(2))
+  return Number((positive(item.manufacturer_cost)+positive(item.additional_cost)).toFixed(2))
 }
 
 export function salePriceFromMargin(item:ItemCosts) {
@@ -31,5 +30,5 @@ export function salePriceFromCostAndMargin(cost:number,marginPercent:number){
 
 export function marginFromSalePrice(cost:number,salePrice:number){
   const safeCost=positive(cost)
-  return safeCost>0?Number((((positive(salePrice)/safeCost)-1)*100).toFixed(2)):0
+  return safeCost>0?Number((((positive(salePrice)/safeCost)-1)*100).toFixed(3)):0
 }
