@@ -32,4 +32,24 @@ Total com Impostos: 1.493,10`)
   it('does not interpret accessory rows as main items',()=>{
     expect(parseManufacturerText(`DL - KIT BARRA NIVELADORA - CINZA Acresc.: 16,43 - L 22,51`).items).toHaveLength(0)
   })
+
+  it('reads the New York online quotation layout for curtains',()=>{
+    const parsed=parseManufacturerText(`Cotação online New York
+Número: #22063075 Cliente: Michelle
+Data: 15/07/2026
+Descrição da Cortina Sala Largura Altura Quantidade
+Ambiente: Sala 2,85 2,66 1
+Tecido: ALBUM 04 CORTINAS - LINHO MOOREA - 13992 BRANCO
+Posição: Voil
+Trilho: Sem Trilho
+Acionamento: Sem Corda
+Valor do Trilho 0,00
+Valor Cortina 457,98
+Total 457,98
+Cotação válida até 05/08/2026.`)
+    expect(parsed).toMatchObject({documentDate:'2026-07-15',externalNumber:'#22063075'})
+    expect(parsed.items).toHaveLength(1)
+    expect(parsed.items[0]).toMatchObject({environment:'Sala',width:2.85,height:2.66,quantity:1,value:457.98,operation:'manual'})
+    expect(parsed.items[0].description).toContain('LINHO MOOREA')
+  })
 })

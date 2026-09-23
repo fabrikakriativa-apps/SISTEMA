@@ -198,7 +198,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   const [supplies,setSupplies]=useState<SupplyOption[]>([]),[supplyLines,setSupplyLines]=useState<SupplyLine[]>([])
   const [providers,setProviders]=useState<ProviderOption[]>([]),[laborLines,setLaborLines]=useState<LaborLine[]>([])
   const [paymentOptions,setPaymentOptions]=useState<ItemPaymentOption[]>([]),[itemPaymentOptions,setItemPaymentOptions]=useState<Record<string,ItemPaymentOption[]>>({})
-  const [pdfReading,setPdfReading]=useState(false),[pdfResult,setPdfResult]=useState<ParsedManufacturerDocument|null>(null),[pdfName,setPdfName]=useState(''),[pdfCandidate,setPdfCandidate]=useState(0)
+  const [pdfReading,setPdfReading]=useState(false),[pdfDragging,setPdfDragging]=useState(false),[pdfResult,setPdfResult]=useState<ParsedManufacturerDocument|null>(null),[pdfName,setPdfName]=useState(''),[pdfCandidate,setPdfCandidate]=useState(0)
   const [pdfFile,setPdfFile]=useState<File|null>(null),[attachments,setAttachments]=useState<Attachment[]>([])
   const [pdfRows,setPdfRows]=useState<PdfRow[]>([])
   const [confirmDelete,setConfirmDelete]=useState(false)
@@ -263,7 +263,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     const family=families.find(x=>x.form_key===(/CORTINA|TRILHO/i.test(candidate.description)?'curtain':'blind'))
     const operation=candidate.operation==='motorized'?'motorizado':candidate.operation==='manual'?'manual':''
     const measures=candidate.width&&candidate.height?`, medindo ${candidate.width.toLocaleString('pt-BR')} × ${candidate.height.toLocaleString('pt-BR')} m`:''
-    setPdfCandidate(index);setItemForm(current=>withMargin({...current,family_id:family?.id??current.family_id,description:`${candidate.description}${measures}${operation?`, acionamento ${operation}`:''}.`,quantity:candidate.quantity,manufacturer_cost:candidate.value}))
+    setPdfCandidate(index);setItemForm(current=>withMargin({...current,family_id:family?.id??current.family_id,environment:candidate.environment??current.environment,description:`${candidate.description}${measures}${operation?`, acionamento ${operation}`:''}.`,quantity:candidate.quantity,manufacturer_cost:candidate.value}))
   }
   const pdfFamily=(description:string)=>families.find(x=>x.form_key===(/CORTINA|TRILHO/i.test(description)?'curtain':'blind'))
   const pdfDescription=(candidate:ParsedManufacturerDocument['items'][number])=>{
@@ -278,7 +278,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     try{
       const parsed=parseManufacturerText(await extractPdfText(file))
       if(!parsed.items.length)throw new Error('Nenhum item reconhecido')
-      setPdfResult(parsed);setPdfName(file.name);setPdfRows(parsed.items.map(item=>({selected:true,environment:'',presentation:'principal',margin_percent:50,sale_total:Number((item.value*1.5).toFixed(2))})));applyPdfCandidate(parsed,0)
+      setPdfResult(parsed);setPdfName(file.name);setPdfRows(parsed.items.map(item=>({selected:true,environment:item.environment??'',presentation:'principal',margin_percent:50,sale_total:Number((item.value*1.5).toFixed(2))})));applyPdfCandidate(parsed,0)
       show(`${parsed.items.length} item(ns) identificado(s). Confira antes de salvar.`,'success')
     }catch{setPdfResult(null);setPdfFile(null);show('Não foi possível reconhecer os itens desse PDF. O arquivo não foi incluído.','error')}
     finally{setPdfReading(false)}
@@ -294,7 +294,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     const {data:created,error}=await supabase.from('budget_items').insert(payloads).select('id,cost_total')
     if(error)show('Não foi possível importar os itens selecionados. Nenhum item foi incluído.','error')
     else {
-      const compositions=await Promise.all((created??[]).map((saved,index)=>supabase!.rpc('replace_budget_item_cost_lines',{org_id:access.organizationId,target_budget_item_id:saved.id,new_lines:[{kind:'product',supply_id:null,description:'Custo do fabricante',quantity:1,unit:'un',unit_cost:selected[index].item.value}]})))
+      const compositions=await Promise.all((created??[]).map((saved,index)=>supabase!.rpc('replace_budget_item_cost_lines',{org_id:budgetOrganizationId,target_budget_item_id:saved.id,new_lines:[{kind:'product',supply_id:null,description:'Custo do fabricante',quantity:1,unit:'un',unit_cost:selected[index].item.value}]})))
       if(compositions.some(result=>result.error))show('Os itens foram importados, mas uma composição de custos precisa ser conferida.','error')
       else {
         if(pdfFile){
@@ -557,10 +557,10 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 </button>
 </header>
 <div className="pdf-import">
-<label className={`pdf-drop ${pdfReading?'reading':''}`}>
+<label className={`pdf-drop ${pdfReading?'reading':''} ${pdfDragging?'dragging':''}`} onDragEnter={event=>{event.preventDefault();if(!pdfReading)setPdfDragging(true)}} onDragOver={event=>event.preventDefault()} onDragLeave={event=>{if(event.currentTarget===event.target)setPdfDragging(false)}} onDrop={event=>{event.preventDefault();setPdfDragging(false);void readPdf(event.dataTransfer.files?.[0])}}>
 <input type="file" accept="application/pdf,.pdf" onChange={e=>void readPdf(e.target.files?.[0])}/>
-<strong>{pdfReading?'Lendo o documento…':'Anexar cotação ou pedido em PDF'}</strong>
-<span>A leitura procura significado e valores, sem depender de coordenadas fixas.</span>
+<strong>{pdfReading?'Lendo o documento…':'Arraste o PDF aqui ou clique para anexar'}</strong>
+<span>Reconhece cotações New York e tabelas de persianas; confira os itens destacados antes de importar.</span>
 </label>{pdfResult&&<div className="pdf-result">
 <strong>{pdfName} · {pdfResult.items.length} item(ns)</strong>
 <div className="pdf-bulk-list">{pdfResult.items.map((item,index)=>
@@ -568,7 +568,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <input aria-label={`Importar item ${index+1}`} type="checkbox" checked={pdfRows[index]?.selected??false} onChange={e=>setPdfRows(current=>current.map((row,i)=>i===index?{...row,selected:e.target.checked}:row))}/>
 <button type="button" onClick={()=>applyPdfCandidate(pdfResult,index)}>
 <strong>{index+1}. {item.description}</strong>
-<span>{money.format(item.value)} · confiança {Math.round(item.confidence*100)}%</span>
+<span>{item.environment?`${item.environment} · `:''}{money.format(item.value)} · confiança {Math.round(item.confidence*100)}%</span>
 </button>
 <input aria-label={`Ambiente do item ${index+1}`} placeholder="Ambiente" value={pdfRows[index]?.environment??''} onChange={e=>setPdfRows(current=>current.map((row,i)=>i===index?{...row,environment:e.target.value}:row))}/>
 <select aria-label={`Apresentação do item ${index+1}`} value={pdfRows[index]?.presentation??'principal'} onChange={e=>setPdfRows(current=>current.map((row,i)=>i===index?{...row,presentation:e.target.value as PdfRow['presentation']}:row))}>
