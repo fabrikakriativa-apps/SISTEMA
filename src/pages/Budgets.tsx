@@ -22,11 +22,13 @@ import { DecimalInput } from '../components/DecimalInput'
 
 type Budget = {
   id:string; organization_id:string; number:number; display_number:string; current_revision:number; client_id:string|null
+  document_type:DocumentType; pre_budget_display_number:string|null
   status:BudgetStatus; valid_until:string|null; payment_terms:string|null; delivery_terms:string|null
   client_address:string|null; client_address_edited:boolean
   notes:string|null; internal_notes:string|null; subtotal:number; discount:number; total:number
   created_at:string; updated_at:string; client:{name:string}|null
 }
+type DocumentType='pre_budget'|'budget'
 type Client = { id:string; name:string; phone:string|null; address:string|null; city:string|null; client_type:string; master_client_id:string|null; master:{name:string;address:string|null;city:string|null}[] }
 type Editable = Pick<Budget,'client_id'|'client_address'|'client_address_edited'|'valid_until'|'payment_terms'|'delivery_terms'|'notes'|'internal_notes'|'discount'>
 type Family={id:string;name:string;code:string;form_key:string}
@@ -37,7 +39,7 @@ type Attachment={id:string;original_name:string;storage_path:string;created_at:s
 
 const blankEditable:Editable = { client_id:null, client_address:'', client_address_edited:false, valid_until:null, payment_terms:'', delivery_terms:'', notes:'', internal_notes:'', discount:0 }
 const newBlankItem=():ItemForm=>({family_id:'',environment:'',description:'',quantity:1,presentation:'principal',manufacturer_cost:0,additional_cost:0,margin_percent:50,sale_total:0,confection_subitem:'',initial_configuration:{}})
-const columns = 'id,organization_id,number,display_number,current_revision,client_id,client_address,client_address_edited,status,valid_until,payment_terms,delivery_terms,notes,internal_notes,subtotal,discount,total,created_at,updated_at'
+const columns = 'id,organization_id,number,display_number,current_revision,client_id,client_address,client_address_edited,document_type,pre_budget_display_number,status,valid_until,payment_terms,delivery_terms,notes,internal_notes,subtotal,discount,total,created_at,updated_at'
 const withClient = (budget:Budget, clients:Client[]):Budget => ({...budget,client:clients.find(client=>client.id===budget.client_id)?{name:clients.find(client=>client.id===budget.client_id)!.name}:null})
 
 function errorMessage(error:unknown, fallback:string) {
@@ -50,7 +52,7 @@ export function Budgets() {
   const { show } = useToast()
   const [items,setItems] = useState<Budget[]>([]), [clients,setClients] = useState<Client[]>([])
   const [loading,setLoading] = useState(true), [creating,setCreating] = useState(false)
-  const [error,setError] = useState(''), [search,setSearch] = useState('')
+  const [error,setError] = useState(''), [search,setSearch] = useState(''),[documentFilter,setDocumentFilter]=useState<DocumentType>('budget')
   const [selected,setSelected] = useState<Budget|null>(null), [form,setForm] = useState<Editable>(blankEditable)
   const [saveState,setSaveState] = useState<'idle'|'waiting'|'saving'|'saved'|'error'>('idle')
   const saveTimer = useRef<number>(), initialized = useRef(false), saving = useRef(false), pending = useRef<Editable|null>(null), selectedRef = useRef<Budget|null>(null)
@@ -107,26 +109,28 @@ export function Budgets() {
     saveTimer.current=window.setTimeout(()=>{void persist(form)},700)
   },[form,persist,selected?.id])
 
-  const create = async () => {
+  const create = async (documentType:DocumentType) => {
     if(!supabase||!access||creating) return
     setCreating(true)
     try {
-      const {data,error}=await supabase.rpc('create_budget_draft',{org_id:access.organizationId})
+      const {data,error}=await supabase.rpc('create_commercial_draft',{org_id:access.organizationId,new_document_type:documentType})
       if(error) throw error
       const budget={...(data as Omit<Budget,'client'>),client:null} as Budget
-      setItems(current=>[budget,...current]); openEditor(budget); show('Rascunho criado e protegido no banco.','success')
-    } catch(reason){show(errorMessage(reason,'Não foi possível criar o orçamento.'),'error')}
+      setItems(current=>[budget,...current]); openEditor(budget); show(`${documentType==='pre_budget'?'Pré-orçamento':'Orçamento'} criado como rascunho.`, 'success')
+    } catch(reason){show(errorMessage(reason,'Não foi possível criar o registro.'),'error')}
     finally{setCreating(false)}
   }
 
-  const filtered=useMemo(()=>items.filter(item=>`${item.display_number} ${item.client?.name??''} ${labels[item.status]}`.toLowerCase().includes(search.toLowerCase())),[items,search])
-  const counts=useMemo(()=>({draft:items.filter(x=>x.status==='draft').length,sent:items.filter(x=>x.status==='sent').length,approved:items.filter(x=>x.status==='approved').length,rejected:items.filter(x=>x.status==='rejected').length}),[items])
+  const filtered=useMemo(()=>items.filter(item=>item.document_type===documentFilter&&`${item.display_number} ${item.client?.name??''} ${labels[item.status]}`.toLowerCase().includes(search.toLowerCase())),[items,search,documentFilter])
+  const counts=useMemo(()=>({draft:filtered.filter(x=>x.status==='draft').length,sent:filtered.filter(x=>x.status==='sent').length,approved:filtered.filter(x=>x.status==='approved').length,rejected:filtered.filter(x=>x.status==='rejected').length}),[filtered])
   if(selected) return <BudgetEditor access={access!} budget={selected} setBudget={budget=>{selectedRef.current=budget;setSelected(budget);setItems(current=>current.map(item=>item.id===budget.id?budget:item))}} form={form} setForm={setForm} clients={clients} saveState={saveState} close={()=>{initialized.current=false;selectedRef.current=null;setSelected(null);navigateTo('orcamentos')}}/>
 
-  return <Page title="Orçamentos" description="Rascunhos automáticos, revisões preservadas e uma única versão para tela, PDF e WhatsApp." action={<button className="button primary" disabled={creating} onClick={create}>
-<Plus/>{creating?'Criando…':'Novo orçamento'}</button>}>
+  return <Page title={documentFilter==='pre_budget'?'Pré-orçamentos':'Orçamentos'} description={documentFilter==='pre_budget'?'Estimativas rápidas, sem compromisso de valor final, para evoluir com o cliente.':'Propostas formais, revisões preservadas e uma única versão para tela, PDF e WhatsApp.'} action={<div className="page-actions">
+<button className="button secondary" disabled={creating} onClick={()=>void create('pre_budget')}><Plus/>{creating?'Criando…':'Novo pré-orçamento'}</button>
+<button className="button primary" disabled={creating} onClick={()=>void create('budget')}><Plus/>Novo orçamento</button></div>}>
     {loading&&<p role="status">Carregando orçamentos…</p>}{error&&<p role="alert">{error} <button className="button secondary" onClick={load}>Tentar novamente</button>
 </p>}
+    <div className="segmented-control" role="tablist" aria-label="Tipo de documento"><button className={documentFilter==='pre_budget'?'active':''} onClick={()=>setDocumentFilter('pre_budget')}>Pré-orçamentos</button><button className={documentFilter==='budget'?'active':''} onClick={()=>setDocumentFilter('budget')}>Orçamentos</button></div>
     <section className="status-grid">
 <article>
 <span>Rascunhos</span>
@@ -158,6 +162,7 @@ export function Budgets() {
 <thead>
 <tr>
 <th>Número / cliente</th>
+<th>Tipo</th>
 <th>Revisão</th>
 <th>Criação</th>
 <th>Valor</th>
@@ -170,7 +175,8 @@ export function Budgets() {
 <strong>{item.display_number}</strong>
 <small>{item.client?.name??'Cliente não informado'}</small>
 </td>
-<td>{item.status==='draft'?'—':`v${item.current_revision}`}</td>
+<td><span className={`badge ${item.document_type==='pre_budget'?'gold':''}`}>{item.document_type==='pre_budget'?'Pré-orçamento':'Orçamento'}</span></td>
+<td>{item.document_type==='pre_budget'||item.status==='draft'?'—':`v${item.current_revision}`}</td>
 <td>{new Date(item.created_at).toLocaleDateString('pt-BR')}</td>
 <td>
 <strong>{money.format(Number(item.total))}</strong>
@@ -208,6 +214,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   const [availableClients,setAvailableClients]=useState(clients),[clientSearch,setClientSearch]=useState(clients.find(item=>item.id===form.client_id)?.name??'')
   const [newClientOpen,setNewClientOpen]=useState(false),[newClientSaving,setNewClientSaving]=useState(false)
   const [newClient,setNewClient]=useState({name:'',phone:'',address:'',city:'',origin:'',notes:'',master_client_id:''})
+  const isPreBudget=budget.document_type==='pre_budget'
   const client=availableClients.find(item=>item.id===form.client_id)
   const master=availableClients.find(item=>item.id===client?.master_client_id)
   const masterAddress=master?[master.address,master.city].filter(Boolean).join(' · '):''
@@ -376,6 +383,15 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     else {setBudget(data as unknown as Budget);show('Orçamento marcado como enviado e versão preservada.','success')}
     setWorkflowBusy(false)
   }
+  const convertToBudget=async()=>{
+    if(!supabase||workflowBusy||!isPreBudget)return
+    if(saveState==='waiting'||saveState==='saving'){show('Aguarde o salvamento do pré-orçamento antes de converter.','info');return}
+    setWorkflowBusy(true)
+    const {data,error}=await supabase.rpc('convert_pre_budget_to_budget',{org_id:access.organizationId,target_budget_id:budget.id})
+    if(error)show('Não foi possível converter este pré-orçamento. Confira se ele ainda está como rascunho.','error')
+    else {setBudget(data as unknown as Budget);show('Pré-orçamento convertido em orçamento rascunho. Agora confirme materiais e valor final.','success')}
+    setWorkflowBusy(false)
+  }
   const approve=async()=>{
     if(!supabase||workflowBusy)return
     setWorkflowBusy(true)
@@ -400,8 +416,9 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     setWorkflowBusy(false)
   }
   const openAttachment=async(attachment:Attachment)=>{if(!supabase)return;const {data,error}=await supabase.storage.from('documents').createSignedUrl(attachment.storage_path,300);if(error||!data?.signedUrl)show('Não foi possível abrir o documento.','error');else window.open(data.signedUrl,'_blank','noopener,noreferrer')}
-  return <Page title="Construção do orçamento" description="Monte os dados comerciais e os itens que o cliente receberá." action={<div className="page-actions">
+  return <Page title={isPreBudget?'Construção do pré-orçamento':'Construção do orçamento'} description={isPreBudget?'Registre a estimativa e as referências. Valor, medidas e materiais serão confirmados depois.':'Monte os dados comerciais e os itens que o cliente receberá.'} action={<div className="page-actions">
 <button className="button secondary" onClick={()=>setPreviewOpen(true)}>Prévia do cliente</button>
+{isPreBudget&&budget.status==='draft'&&<button className="button primary" disabled={workflowBusy} onClick={()=>void convertToBudget()}>Converter em orçamento</button>}
 <button className="button secondary" onClick={close}>
 <ArrowLeft/>Voltar aos orçamentos</button>
 </div>}>
@@ -467,13 +484,13 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <section className="panel budget-form">
 <header>
 <div>
-<h2>Dados comerciais</h2>
-<p>{budget.display_number}{budget.status==='draft'?'':` · revisão ${budget.current_revision}`}</p>
+<h2>{isPreBudget?'Dados iniciais':'Dados comerciais'}</h2>
+<p>{budget.display_number}{isPreBudget?' · estimativa preliminar':budget.status==='draft'?'':` · revisão ${budget.current_revision}`}</p>
 </div>
 <span className={`save-state ${saveState}`}>{stateLabel}</span>
 </header>
 <div className="form-grid">
-      <label className="field">Status<select value={budget.status} disabled={workflowBusy} onChange={e=>requestStatus(e.target.value as BudgetStatus)}>{budgetStatusOptions(budget.status).map(status=>
+      <label className="field">{isPreBudget?'Etapa':'Status'}<select value={budget.status} disabled={workflowBusy} onChange={e=>requestStatus(e.target.value as BudgetStatus)}>{(isPreBudget?[budget.status,...(budget.status==='draft'?['cancelled' as BudgetStatus]:[])]:budgetStatusOptions(budget.status)).map(status=>
 <option value={status} key={status}>{labels[status]}</option>)}</select>
 </label>
 <div className="field">
@@ -488,7 +505,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
       {master&&<label className="field span-2">Endereço do Parceiro/master<input readOnly value={masterAddress}/>
 <small className="field-note">{master.name}</small>
 </label>}
-      <label className="field">Validade<input type="date" value={form.valid_until??''} onChange={e=>setForm({...form,valid_until:e.target.value})}/>
+      <label className="field">{isPreBudget?'Validade da estimativa':'Validade'}<input type="date" value={form.valid_until??''} onChange={e=>setForm({...form,valid_until:e.target.value})}/>
 </label>
 <label className="field">Previsão<input value={form.delivery_terms??''} onChange={e=>setForm({...form,delivery_terms:e.target.value})} placeholder="Ex.: 25 dias úteis"/>
 </label>
@@ -530,8 +547,8 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     <section className="panel budget-items">
 <header>
 <div>
-<h2>Itens do orçamento</h2>
-<p>Cada item mantém seu ambiente, custo, margem e forma de apresentação.</p>
+<h2>{isPreBudget?'Itens da estimativa':'Itens do orçamento'}</h2>
+<p>{isPreBudget?'Comece pelo item, medidas aproximadas e valor de referência.':'Cada item mantém seu ambiente, custo, margem e forma de apresentação.'}</p>
 </div>
 {canEditItems?<button className="button primary" onClick={()=>openItem()}><Plus/>Adicionar item</button>:<span className="field-note">{budget.status!=='draft'?'Itens bloqueados neste status.':'Seu perfil atual não pode alterar itens.'}</span>}
 </header>{itemsLoading?<p className="panel-message">Carregando itens…</p>:items.length?<div className="table-wrap">
