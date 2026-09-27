@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { ArrowLeft, FileText, ImagePlus, Plus, Search, X } from 'lucide-react'
+import { ArrowLeft, CalendarPlus, FileText, ImagePlus, Plus, Search, X } from 'lucide-react'
 import { Page } from '../components/Page'
 import { useAccess } from '../components/AuthorizedAccess'
 import { useToast } from '../components/ToastProvider'
@@ -214,6 +214,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   const [pendingStatus,setPendingStatus]=useState<BudgetStatus|null>(null),[statusReason,setStatusReason]=useState('')
   const [availableClients,setAvailableClients]=useState(clients),[clientSearch,setClientSearch]=useState(clients.find(item=>item.id===form.client_id)?.name??'')
   const [newClientOpen,setNewClientOpen]=useState(false),[newClientSaving,setNewClientSaving]=useState(false)
+  const [visitOpen,setVisitOpen]=useState(false),[visitSaving,setVisitSaving]=useState(false),[visit,setVisit]=useState({date:new Date().toISOString().slice(0,10),time:'10:00',duration:60,address:form.client_address??'',notes:''})
   const [newClient,setNewClient]=useState({name:'',phone:'',address:'',city:'',origin:'',notes:'',master_client_id:''})
   const isPreBudget=budget.document_type==='pre_budget'
   const client=availableClients.find(item=>item.id===form.client_id)
@@ -396,6 +397,17 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     else {setBudget(data as unknown as Budget);show('Pré-orçamento convertido em orçamento rascunho. Agora confirme materiais e valor final.','success')}
     setWorkflowBusy(false)
   }
+  const scheduleVisit=async(e:FormEvent)=>{
+    e.preventDefault();if(!supabase||visitSaving||!isPreBudget)return
+    if(!form.client_id){show('Selecione o cliente antes de agendar a visita técnica.','error');return}
+    const startsAt=new Date(`${visit.date}T${visit.time}:00`),endsAt=new Date(startsAt.getTime()+Number(visit.duration)*60000)
+    if(Number.isNaN(startsAt.getTime())||Number(visit.duration)<15){show('Informe data, horário e duração válidos.','error');return}
+    setVisitSaving(true)
+    const {error}=await supabase.rpc('schedule_pre_budget_visit',{org_id:access.organizationId,target_budget_id:budget.id,visit_starts_at:startsAt.toISOString(),visit_ends_at:endsAt.toISOString(),visit_address:visit.address.trim(),visit_notes:visit.notes.trim()||null})
+    if(error)show('Não foi possível agendar a visita técnica.','error')
+    else {setVisitOpen(false);show('Visita técnica agendada na Agenda.','success')}
+    setVisitSaving(false)
+  }
   const approve=async()=>{
     if(!supabase||workflowBusy)return
     setWorkflowBusy(true)
@@ -442,6 +454,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   }
   return <Page title={isPreBudget?'Construção do pré-orçamento':'Construção do orçamento'} description={isPreBudget?'Registre a estimativa e as referências. Valor, medidas e materiais serão confirmados depois.':'Monte os dados comerciais e os itens que o cliente receberá.'} action={<div className="page-actions">
 <button className="button secondary" onClick={()=>setPreviewOpen(true)}>Prévia do cliente</button>
+{isPreBudget&&budget.status==='draft'&&<button className="button secondary" onClick={()=>{setVisit({...visit,address:form.client_address??''});setVisitOpen(true)}}><CalendarPlus/>Agendar visita</button>}
 {isPreBudget&&budget.status==='draft'&&<button className="button primary" disabled={workflowBusy} onClick={()=>void convertToBudget()}>Converter em orçamento</button>}
 <button className="button secondary" onClick={close}>
 <ArrowLeft/>Voltar aos orçamentos</button>
@@ -489,6 +502,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 </footer>
 </form>
 </div>}
+    {visitOpen&&<div className="dialog-backdrop"><form className="dialog" onSubmit={scheduleVisit}><header><div><span className="eyebrow">Pré-orçamento</span><h2>Agendar visita técnica</h2><p>O compromisso será vinculado a este pré-orçamento e aparecerá na Agenda.</p></div><button type="button" className="icon-button" aria-label="Fechar" onClick={()=>setVisitOpen(false)}><X/></button></header><div className="form-grid"><label className="field">Data<input required type="date" value={visit.date} onChange={e=>setVisit({...visit,date:e.target.value})}/></label><label className="field">Horário<input required type="time" value={visit.time} onChange={e=>setVisit({...visit,time:e.target.value})}/></label><label className="field">Duração (minutos)<input required type="number" min="15" step="15" value={visit.duration} onChange={e=>setVisit({...visit,duration:Number(e.target.value)})}/></label><label className="field span-2">Endereço da visita<input value={visit.address} onChange={e=>setVisit({...visit,address:e.target.value})} placeholder="Endereço a confirmar"/></label><label className="field span-2">Observações<textarea value={visit.notes} onChange={e=>setVisit({...visit,notes:e.target.value})} placeholder="Ex.: conferir medidas, tecido e condições de instalação"/></label></div><footer><button type="button" className="button secondary" onClick={()=>setVisitOpen(false)}>Cancelar</button><button className="button primary" disabled={visitSaving}>{visitSaving?'Agendando…':'Agendar visita'}</button></footer></form></div>}
     {confirmApproval&&<div className="workflow-confirm">
 <div>
 <strong>Aprovar este orçamento e gerar o pedido?</strong>
