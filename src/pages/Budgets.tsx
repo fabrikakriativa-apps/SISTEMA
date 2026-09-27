@@ -627,9 +627,9 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <form className="dialog item-dialog" onSubmit={saveItem}>
 <header>
 <div>
-<span className="eyebrow">Item do orçamento</span>
+<span className="eyebrow">{isPreBudget?'Item do pré-orçamento':'Item do orçamento'}</span>
 <h2>{itemForm.id?'Editar item':'Adicionar item'}</h2>
-<p>Cortina e Persiana podem ser preenchidas pela leitura do PDF e sempre passam por conferência.</p>
+<p>{isPreBudget?'Registre a referência, as medidas aproximadas e o valor estimado.':'Cortina e Persiana podem ser preenchidas pela leitura do PDF e sempre passam por conferência.'}</p>
 </div>
 <button type="button" className="icon-button" onClick={()=>setItemOpen(false)}>
 <X/>
@@ -681,6 +681,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <option value="option">Opção (não soma)</option>
 </select>
 </label>
+{isPreBudget?<label className="field span-2 pre-budget-value">Valor estimado<DecimalInput value={itemForm.sale_total} decimalScale={2} onValueChange={sale=>setItemForm(current=>({...current,sale_total:sale}))}/><small className="field-note">O custo e a composição real serão definidos ao converter em orçamento.</small></label>:<>
 <label className="field">Custo do fabricante<DecimalInput value={itemForm.manufacturer_cost} decimalScale={2} onValueChange={value=>setItemForm(current=>withMargin({...current,manufacturer_cost:value}))}/>
 </label>
 <label className="field">Custos adicionais<DecimalInput value={itemForm.additional_cost} decimalScale={2} onValueChange={value=>setItemForm(current=>withMargin({...current,additional_cost:value}))}/>
@@ -693,7 +694,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 </label>
 <label className="field">Preço de venda<DecimalInput value={itemForm.sale_total} decimalScale={2} onValueChange={sale=>{const cost=costOf(itemForm);setItemForm({...itemForm,sale_total:sale,margin_percent:marginFromSalePrice(cost,sale)})}}/>
 <small className="field-note">Margem e preço são sincronizados automaticamente.</small>
-</label></div>
+</label></div></>}
 <ItemPaymentOptions saleTotal={itemForm.sale_total} options={paymentOptions} onChange={setPaymentOptions}/>
 </div>{confirmDelete&&<div className="inline-confirm">
 <div>
