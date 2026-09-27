@@ -22,13 +22,15 @@ begin
   if auth.uid() is null or not private.has_org_role(org_id,array['admin','comercial']::public.app_role[]) then
     raise exception 'Not authorized' using errcode='42501';
   end if;
-  select b.*,c.name into target,client_name
-  from public.budgets b join public.clients c on c.id=b.client_id and c.organization_id=b.organization_id
-  where b.id=target_budget_id and b.organization_id=org_id for update;
+  select * into target from public.budgets
+  where id=target_budget_id and organization_id=org_id for update;
   if target.id is null then raise exception 'Pre-budget with client not found' using errcode='23503'; end if;
   if target.document_type<>'pre_budget' or target.status<>'draft' then
     raise exception 'Visits can only be scheduled for draft pre-budgets' using errcode='23514';
   end if;
+  select name into client_name from public.clients
+  where id=target.client_id and organization_id=org_id;
+  if client_name is null then raise exception 'Pre-budget with client not found' using errcode='23503'; end if;
   if visit_starts_at is null or visit_ends_at is null or visit_ends_at<=visit_starts_at then
     raise exception 'Invalid visit time' using errcode='23514';
   end if;
