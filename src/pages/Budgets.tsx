@@ -315,8 +315,13 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     setItemSaving(true)
     const formKey=families.find(family=>family.id===itemForm.family_id)?.form_key
     const {installation_cost:_,...previousConfiguration}=itemForm.initial_configuration
-    const cost=costOf(itemForm), payload={organization_id:budgetOrganizationId,budget_id:budget.id,family_id:itemForm.family_id,position:itemForm.id?(items.find(x=>x.id===itemForm.id)?.position??1):items.length+1,presentation:itemForm.presentation,environment:itemForm.environment.trim()||null,description:itemForm.description.trim(),quantity:itemForm.quantity,configuration:{...previousConfiguration,manufacturer_cost:itemForm.manufacturer_cost,additional_cost:itemForm.additional_cost,...(formKey==='confection'&&itemForm.confection_subitem?{confection_subitem:itemForm.confection_subitem}:{})},cost_total:cost,margin_percent:itemForm.margin_percent,sale_total:itemForm.sale_total,affects_total:itemForm.presentation==='principal'}
-    const result=itemForm.id?await supabase.from('budget_items').update(payload).eq('id',itemForm.id).eq('organization_id',budgetOrganizationId).select('id').single():await supabase.from('budget_items').insert(payload).select('id').single()
+    const cost=costOf(itemForm)
+    const itemPayload={family_id:itemForm.family_id,position:itemForm.id?(items.find(x=>x.id===itemForm.id)?.position??1):items.length+1,presentation:itemForm.presentation,environment:itemForm.environment.trim()||null,description:itemForm.description.trim(),quantity:itemForm.quantity,configuration:{...previousConfiguration,manufacturer_cost:itemForm.manufacturer_cost,additional_cost:itemForm.additional_cost,...(formKey==='confection'&&itemForm.confection_subitem?{confection_subitem:itemForm.confection_subitem}:{})},cost_total:cost,margin_percent:itemForm.margin_percent,sale_total:itemForm.sale_total,affects_total:itemForm.presentation==='principal'}
+    // Organization and budget links are immutable after creation. Including them
+    // in an update makes Postgres correctly reject the request as unauthorized.
+    const result=itemForm.id
+      ? await supabase.from('budget_items').update(itemPayload).eq('id',itemForm.id).eq('organization_id',budgetOrganizationId).select('id').single()
+      : await supabase.from('budget_items').insert({...itemPayload,organization_id:budgetOrganizationId,budget_id:budget.id}).select('id').single()
     if(result.error){
       const detail=result.error.code==='42501'?'Você não tem permissão para alterar este orçamento.':result.error.code==='23514'?'Revise os dados obrigatórios e os valores do item.':result.error.message
       show(`Não foi possível salvar o item: ${detail}`,'error')
