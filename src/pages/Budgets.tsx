@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { ArrowLeft, FileText, Plus, Search, X } from 'lucide-react'
+import { ArrowLeft, FileText, ImagePlus, Plus, Search, X } from 'lucide-react'
 import { Page } from '../components/Page'
 import { useAccess } from '../components/AuthorizedAccess'
 import { useToast } from '../components/ToastProvider'
@@ -36,6 +36,7 @@ type BudgetItem={id:string;family_id:string|null;position:number;presentation:st
 type ItemForm={id?:string;family_id:string;environment:string;description:string;quantity:number;presentation:'principal'|'option';manufacturer_cost:number;additional_cost:number;margin_percent:number;sale_total:number;confection_subitem:string;initial_configuration:Record<string,unknown>}
 type PdfRow={selected:boolean;environment:string;presentation:'principal'|'option';margin_percent:number;sale_total:number}
 type Attachment={id:string;original_name:string;storage_path:string;created_at:string}
+type ItemPhoto={id:string;original_name:string;storage_path:string;created_at:string}
 
 const blankEditable:Editable = { client_id:null, client_address:'', client_address_edited:false, valid_until:null, payment_terms:'', delivery_terms:'', notes:'', internal_notes:'', discount:0 }
 const newBlankItem=():ItemForm=>({family_id:'',environment:'',description:'',quantity:1,presentation:'principal',manufacturer_cost:0,additional_cost:0,margin_percent:50,sale_total:0,confection_subitem:'',initial_configuration:{}})
@@ -205,7 +206,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   const [providers,setProviders]=useState<ProviderOption[]>([]),[laborLines,setLaborLines]=useState<LaborLine[]>([])
   const [paymentOptions,setPaymentOptions]=useState<ItemPaymentOption[]>([]),[itemPaymentOptions,setItemPaymentOptions]=useState<Record<string,ItemPaymentOption[]>>({})
   const [pdfReading,setPdfReading]=useState(false),[pdfDragging,setPdfDragging]=useState(false),[pdfResult,setPdfResult]=useState<ParsedManufacturerDocument|null>(null),[pdfName,setPdfName]=useState(''),[pdfCandidate,setPdfCandidate]=useState(0)
-  const [pdfFile,setPdfFile]=useState<File|null>(null),[attachments,setAttachments]=useState<Attachment[]>([])
+  const [pdfFile,setPdfFile]=useState<File|null>(null),[attachments,setAttachments]=useState<Attachment[]>([]),[itemPhotos,setItemPhotos]=useState<ItemPhoto[]>([]),[photoUploading,setPhotoUploading]=useState(false)
   const [pdfRows,setPdfRows]=useState<PdfRow[]>([])
   const [confirmDelete,setConfirmDelete]=useState(false)
   const [previewOpen,setPreviewOpen]=useState(false)
@@ -258,12 +259,15 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   }
   const openItem=async(item?:BudgetItem)=>{
     setPdfResult(null);setPdfName('');setPdfCandidate(0);setPdfRows([]);setConfirmDelete(false)
-    setSupplyLines([]);setLaborLines([]);setPaymentOptions([])
+    setSupplyLines([]);setLaborLines([]);setPaymentOptions([]);setItemPhotos([])
     if(!item){setItemForm(newBlankItem());setPaymentOptions(standardItemPaymentOptions());setItemOpen(true);return}
     const c=item.configuration??{}
     setItemForm({id:item.id,family_id:item.family_id??'',environment:item.environment??'',description:item.description,quantity:Number(item.quantity),presentation:item.presentation==='option'?'option':'principal',manufacturer_cost:Number(c.manufacturer_cost??item.cost_total),additional_cost:Number(c.additional_cost??0),margin_percent:Number(item.margin_percent??0),sale_total:Number(item.sale_total),confection_subitem:typeof c.confection_subitem==='string'?c.confection_subitem:'',initial_configuration:c})
     setPaymentOptions(itemPaymentOptions[item.id]??[]);setItemOpen(true)
-    if(supabase){const {data}=await supabase.from('item_cost_lines').select('kind,supply_id,supplier_id,description,quantity,unit,unit_cost,labor_days,labor_start_date').eq('organization_id',budgetOrganizationId).eq('budget_item_id',item.id);setSupplyLines((data??[]).filter(line=>line.kind==='supply').map(line=>({...line,supply_id:line.supply_id??'',quantity:Number(line.quantity),unit_cost:Number(line.unit_cost)})) as SupplyLine[]);setLaborLines((data??[]).filter(line=>line.kind==='service').map(line=>({supplier_id:line.supplier_id??'',description:line.description,days:Number(line.labor_days??1),amount:Number(line.unit_cost),start_date:line.labor_start_date??''})) as LaborLine[])}
+    if(supabase){const [costResult,photoResult]=await Promise.all([
+      supabase.from('item_cost_lines').select('kind,supply_id,supplier_id,description,quantity,unit,unit_cost,labor_days,labor_start_date').eq('organization_id',budgetOrganizationId).eq('budget_item_id',item.id),
+      supabase.from('attachments').select('id,original_name,storage_path,created_at').eq('organization_id',budgetOrganizationId).eq('entity_type','budget_item').eq('entity_id',item.id).eq('purpose','item_reference_photo').order('created_at',{ascending:false})
+    ]);setSupplyLines((costResult.data??[]).filter(line=>line.kind==='supply').map(line=>({...line,supply_id:line.supply_id??'',quantity:Number(line.quantity),unit_cost:Number(line.unit_cost)})) as SupplyLine[]);setLaborLines((costResult.data??[]).filter(line=>line.kind==='service').map(line=>({supplier_id:line.supplier_id??'',description:line.description,days:Number(line.labor_days??1),amount:Number(line.unit_cost),start_date:line.labor_start_date??''})) as LaborLine[]);setItemPhotos((photoResult.data??[]) as ItemPhoto[])}
   }
   const applyPdfCandidate=(document:ParsedManufacturerDocument,index:number)=>{
     const candidate=document.items[index];if(!candidate)return
@@ -416,6 +420,26 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     setWorkflowBusy(false)
   }
   const openAttachment=async(attachment:Attachment)=>{if(!supabase)return;const {data,error}=await supabase.storage.from('documents').createSignedUrl(attachment.storage_path,300);if(error||!data?.signedUrl)show('Não foi possível abrir o documento.','error');else window.open(data.signedUrl,'_blank','noopener,noreferrer')}
+  const openItemPhoto=async(photo:ItemPhoto)=>{if(!supabase)return;const {data,error}=await supabase.storage.from('documents').createSignedUrl(photo.storage_path,300);if(error||!data?.signedUrl)show('Não foi possível abrir a foto.','error');else window.open(data.signedUrl,'_blank','noopener,noreferrer')}
+  const safePhotoName=(name:string)=>{const extension=name.match(/\.[a-zA-Z0-9]{1,8}$/)?.[0].toLowerCase()??'';const base=name.slice(0,name.length-extension.length).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9._-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,80)||'foto';return `${base}${extension}`}
+  const addItemPhotos=async(files:FileList|null)=>{
+    if(!supabase||!itemForm.id||photoUploading||!files?.length)return
+    const selected=[...files]
+    if(selected.some(file=>!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>10485760)){show('Use fotos JPG, PNG ou WebP de até 10 MB.','error');return}
+    setPhotoUploading(true)
+    let added=0
+    for(const file of selected){
+      const path=`${budgetOrganizationId}/budget-items/${itemForm.id}/photos/${crypto.randomUUID()}-${safePhotoName(file.name)}`
+      const upload=await supabase.storage.from('documents').upload(path,file,{contentType:file.type,upsert:false})
+      if(upload.error)continue
+      const registration=await supabase.rpc('register_budget_item_photo',{org_id:budgetOrganizationId,target_budget_item_id:itemForm.id,object_path:path,file_name:file.name,content_type:file.type,byte_size:file.size})
+      if(registration.error){await supabase.storage.from('documents').remove([path]);continue}
+      added++
+    }
+    if(added){const {data}=await supabase.from('attachments').select('id,original_name,storage_path,created_at').eq('organization_id',budgetOrganizationId).eq('entity_type','budget_item').eq('entity_id',itemForm.id).eq('purpose','item_reference_photo').order('created_at',{ascending:false});setItemPhotos((data??[]) as ItemPhoto[]);show(`${added} foto(s) adicionada(s) ao histórico do item.`,'success')}
+    else show('Não foi possível adicionar as fotos.','error')
+    setPhotoUploading(false)
+  }
   return <Page title={isPreBudget?'Construção do pré-orçamento':'Construção do orçamento'} description={isPreBudget?'Registre a estimativa e as referências. Valor, medidas e materiais serão confirmados depois.':'Monte os dados comerciais e os itens que o cliente receberá.'} action={<div className="page-actions">
 <button className="button secondary" onClick={()=>setPreviewOpen(true)}>Prévia do cliente</button>
 {isPreBudget&&budget.status==='draft'&&<button className="button primary" disabled={workflowBusy} onClick={()=>void convertToBudget()}>Converter em orçamento</button>}
@@ -632,6 +656,10 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <small>O detalhamento comercial continua na descrição do item.</small>
 </label>}<label className="field span-2">Descrição para o cliente<textarea required value={itemForm.description} onChange={e=>setItemForm({...itemForm,description:e.target.value})} placeholder="Descreva modelo, material, medidas e acabamento"/>
 </label>
+<section className="item-photos span-2">
+<header><div><h3>Fotos e referências</h3><p>Opcional: fotos enviadas pelo cliente, do ambiente ou da visita técnica. Não aparecem ao cliente automaticamente.</p></div>{itemForm.id&&<label className="button secondary photo-upload"><ImagePlus/>{photoUploading?'Adicionando…':'Adicionar fotos'}<input type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={photoUploading} onChange={e=>void addItemPhotos(e.target.files)}/></label>}</header>
+{itemForm.id?(itemPhotos.length?<div className="item-photo-list">{itemPhotos.map(photo=><button type="button" key={photo.id} className="item-photo" onClick={()=>void openItemPhoto(photo)}><ImagePlus/><span>{photo.original_name}</span><small>{new Date(photo.created_at).toLocaleDateString('pt-BR')}</small></button>)}</div>:<div className="item-photo-empty">Nenhuma foto anexada a este item.</div>):<div className="item-photo-empty">Salve o item uma vez para anexar fotos e preservar seu histórico.</div>}
+</section>
 <label className="field">Quantidade<input type="number" min="0.001" step="0.001" value={itemForm.quantity} onChange={e=>setItemForm({...itemForm,quantity:Number(e.target.value)})}/>
 </label>
 <label className="field">Apresentação<select value={itemForm.presentation} onChange={e=>setItemForm({...itemForm,presentation:e.target.value as ItemForm['presentation']})}>
