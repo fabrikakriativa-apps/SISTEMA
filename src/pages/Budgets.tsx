@@ -266,6 +266,15 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     setPdfCandidate(index);setItemForm(current=>withMargin({...current,family_id:family?.id??current.family_id,environment:candidate.environment??current.environment,description:`${candidate.description}${measures}${operation?`, acionamento ${operation}`:''}.`,quantity:candidate.quantity,manufacturer_cost:candidate.value}))
   }
   const pdfFamily=(description:string)=>families.find(x=>x.form_key===(/CORTINA|TRILHO/i.test(description)?'curtain':'blind'))
+  const pdfMeasures=(candidate:ParsedManufacturerDocument['items'][number])=>[
+    `Qtd. ${Number(candidate.quantity).toLocaleString('pt-BR')}`,
+    candidate.width!==null?`Larg. ${Number(candidate.width).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:3})} m`:null,
+    candidate.height!==null?`Alt. ${Number(candidate.height).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:3})} m`:null
+  ].filter(Boolean).join(' · ')
+  const incompatiblePdfItem=(document:ParsedManufacturerDocument)=>{
+    if(!itemForm.family_id)return null
+    return document.items.find(item=>pdfFamily(item.description)?.id!==itemForm.family_id)??null
+  }
   const pdfDescription=(candidate:ParsedManufacturerDocument['items'][number])=>{
     const operation=candidate.operation==='motorized'?'motorizado':candidate.operation==='manual'?'manual':''
     const measures=candidate.width&&candidate.height?`, medindo ${candidate.width.toLocaleString('pt-BR')} × ${candidate.height.toLocaleString('pt-BR')} m`:''
@@ -278,6 +287,14 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     try{
       const parsed=parseManufacturerText(await extractPdfText(file))
       if(!parsed.items.length)throw new Error('Nenhum item reconhecido')
+      const incompatible=incompatiblePdfItem(parsed)
+      if(incompatible){
+        const expected=families.find(family=>family.id===itemForm.family_id)?.name??'tipo deste item'
+        const detected=pdfFamily(incompatible.description)?.name??'outro tipo'
+        setPdfFile(null)
+        show(`Este PDF contém ${detected} e não pode ser carregado em um item de ${expected}.`,'error')
+        return
+      }
       setPdfResult(parsed);setPdfName(file.name);setPdfRows(parsed.items.map(item=>({selected:true,environment:item.environment??'',presentation:'principal',margin_percent:50,sale_total:Number((item.value*1.5).toFixed(2))})));applyPdfCandidate(parsed,0)
       show(`${parsed.items.length} item(ns) identificado(s). Confira antes de salvar.`,'success')
     }catch{setPdfResult(null);setPdfFile(null);show('Não foi possível reconhecer os itens desse PDF. O arquivo não foi incluído.','error')}
@@ -287,6 +304,8 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     if(!supabase||!pdfResult||itemSaving)return
     const selected=pdfResult.items.map((item,index)=>({item,row:pdfRows[index]})).filter(({row})=>row?.selected)
     if(!selected.length){show('Selecione ao menos um item para importar.','error');return}
+    const incompatible=incompatiblePdfItem(pdfResult)
+    if(incompatible){show('O tipo do item aberto não corresponde ao tipo identificado no PDF.','error');return}
     const missing=selected.find(({item})=>!pdfFamily(item.description))
     if(missing){show('Não foi possível definir o tipo de um dos itens. Importe-o individualmente.','error');return}
     setItemSaving(true)
@@ -573,6 +592,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <input aria-label={`Importar item ${index+1}`} type="checkbox" checked={pdfRows[index]?.selected??false} onChange={e=>setPdfRows(current=>current.map((row,i)=>i===index?{...row,selected:e.target.checked}:row))}/>
 <button type="button" onClick={()=>applyPdfCandidate(pdfResult,index)}>
 <strong>{index+1}. {item.description}</strong>
+<span className="pdf-measures">{pdfMeasures(item)}</span>
 <span>{item.environment?`${item.environment} · `:''}{money.format(item.value)} · confiança {Math.round(item.confidence*100)}%</span>
 </button>
 <input aria-label={`Ambiente do item ${index+1}`} placeholder="Ambiente" value={pdfRows[index]?.environment??''} onChange={e=>setPdfRows(current=>current.map((row,i)=>i===index?{...row,environment:e.target.value}:row))}/>
