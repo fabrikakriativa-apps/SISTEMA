@@ -17,6 +17,15 @@ Total com Impostos: 3.346,66`)
     expect(parsed.total).toBe(3346.66)
   })
 
+  it('uses the OBS line as the blind item environment',()=>{
+    const parsed=parseManufacturerText(`${header}
+ROLLUX MANUAL - SCREEN 1% - 167 WHITE M2 1,00 1,150 2,560 0 0 2,9440 2,9440 0 E 102,00 169,500 - 21,5% 300,29
+OBS: sacada
+Acresc.: - - UN 0,00`)
+    expect(parsed.items).toHaveLength(1)
+    expect(parsed.items[0]).toMatchObject({environment:'sacada',width:1.15,height:2.56,quantity:1,value:300.29})
+  })
+
   it('groups a curtain and its rail as one commercial item',()=>{
     const parsed=parseManufacturerText(`Data: 20/05/2026 Nro Pedido: #11013707-1 Cód . Interno: 260038 Pág.: 1 de 1
 Condição de Pagamento: 30/60/90 DIAS Forma de Pagamento: BOLETO

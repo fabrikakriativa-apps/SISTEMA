@@ -36,6 +36,12 @@ export function parseManufacturerText(text:string):ParsedManufacturerDocument {
   const items:ParsedManufacturerItem[]=[]
   for(const source of normalized.split('\n')){
     const line=clean(source)
+    const observation=line.match(/^OBS\s*:\s*(.+)$/i)?.[1]
+    if(observation){
+      const previous=items.at(-1)
+      if(previous)previous.environment=clean(observation)
+      continue
+    }
     if(!line||/^(DESCRI|Data:|Cliente:|Endere|CNPJ|Transportadora|Condi|Entrega:|Observa|Valor-|Total:|IPI:|ICMS)/i.test(line)||/Acresc\.:/i.test(line))continue
     const head=line.match(/^(.+?)\s+(M2|UN|ML)\s+(\d+[,.]\d+)\s+(\d+[,.]\d+)\s+(\d+[,.]\d+)\s+(.+)$/i)
     if(!head)continue
