@@ -222,6 +222,8 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   const masterAddress=master?[master.address,master.city].filter(Boolean).join(' · '):''
   const selectedFormKey=families.find(family=>family.id===itemForm.family_id)?.form_key
   const confectionSelected=selectedFormKey==='confection'
+  const confectionFamily=families.find(family=>family.form_key==='confection')
+  const selectItemFamily=(value:string)=>{if(value==='confection-headboard'&&confectionFamily){setItemForm(current=>({...current,family_id:confectionFamily.id,confection_subitem:'Cabeceira'}));return}setItemForm(current=>({...current,family_id:value,confection_subitem:''}))}
   const stateLabel=saveState==='saving'?'Salvando…':saveState==='waiting'?'Alterações pendentes':saveState==='error'?'Falha ao salvar':'Rascunho sincronizado'
   const loadItems=useCallback(async()=>{
     if(!supabase)return
@@ -660,8 +662,8 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <button type="button" className="button primary" disabled={itemSaving} onClick={()=>void importSelected()}>{itemSaving?'Importando…':`Importar ${pdfRows.filter(row=>row.selected).length} selecionado(s)`}</button>
 </div>}</div>
 <div className="form-grid">
-<label className="field">Tipo<select required value={itemForm.family_id} onChange={e=>setItemForm({...itemForm,family_id:e.target.value,confection_subitem:''})}>
-<option value="">Selecione</option>{families.map(x=>
+<label className="field">Tipo<select required value={itemForm.family_id===confectionFamily?.id&&itemForm.confection_subitem==='Cabeceira'?'confection-headboard':itemForm.family_id} onChange={e=>selectItemFamily(e.target.value)}>
+<option value="">Selecione</option>{confectionFamily&&<option value="confection-headboard">Cabeceira</option>}{families.map(x=>
 <option key={x.id} value={x.id}>{x.name}</option>)}</select>
 </label>
 <label className="field">Ambiente<input value={itemForm.environment} onChange={e=>setItemForm({...itemForm,environment:e.target.value})} placeholder="Ex.: Sala"/>
