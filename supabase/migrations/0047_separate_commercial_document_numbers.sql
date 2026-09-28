@@ -32,7 +32,7 @@ begin
   if auth.uid() is null or not private.has_org_role(org_id,array['admin','comercial']::public.app_role[]) then raise exception 'Not authorized' using errcode='42501'; end if;
   if new_document_type not in ('pre_budget','budget') then raise exception 'Invalid document type' using errcode='23514'; end if;
   perform pg_advisory_xact_lock(hashtextextended('commercial-document:'||org_id::text||':'||new_document_type,0));
-  select case when new_document_type='budget' then greatest(coalesce(max(number) filter(where document_type='budget'),0),271)+1 else coalesce(max(number) filter(where document_type='pre_budget'),0)+1 end into next_number from public.budgets where organization_id=org_id;
+  select case when new_document_type='budget' then greatest(coalesce(max(number) filter(where document_type='budget'),0),271)+1 else greatest(coalesce(max(number) filter(where document_type='pre_budget'),0),271)+1 end into next_number from public.budgets where organization_id=org_id;
   prefix:=case when new_document_type='pre_budget' then 'PRE' else 'ORC' end;
   insert into public.budgets(organization_id,number,display_number,document_type,status,valid_until,payment_terms,delivery_terms,created_by)
   values(org_id,next_number,prefix||'-'||extract(year from current_date)::integer||'-'||lpad(next_number::text,6,'0'),new_document_type,'draft',current_date+10,'Conforme disposto em cada item','A definir',auth.uid()) returning * into created;
