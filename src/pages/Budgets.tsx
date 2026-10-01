@@ -19,6 +19,8 @@ import { standardItemPaymentOptions, type ItemPaymentOption } from '../lib/payme
 import { SearchSelect } from '../components/SearchSelect'
 import { budgetDocumentPath } from '../lib/documents'
 import { confectionSubitems } from '../domain'
+import { UpholsteryEstimateCalculator } from '../components/UpholsteryEstimateCalculator'
+import { newUpholsteryEstimate, type UpholsteryEstimate } from '../lib/upholsteryEstimate'
 
 type Budget = {
   id:string; organization_id:string; number:number; display_number:string; current_revision:number; client_id:string|null
@@ -209,6 +211,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   const [pdfFile,setPdfFile]=useState<File|null>(null),[attachments,setAttachments]=useState<Attachment[]>([]),[itemPhotos,setItemPhotos]=useState<ItemPhoto[]>([]),[photoUploading,setPhotoUploading]=useState(false)
   const [pdfRows,setPdfRows]=useState<PdfRow[]>([])
   const [itemPendingDelete,setItemPendingDelete]=useState<BudgetItem|null>(null)
+  const [upholsteryEstimate,setUpholsteryEstimate]=useState<UpholsteryEstimate>(newUpholsteryEstimate)
   const [previewOpen,setPreviewOpen]=useState(false)
   const [workflowBusy,setWorkflowBusy]=useState(false),[confirmApproval,setConfirmApproval]=useState(false)
   const [pendingStatus,setPendingStatus]=useState<BudgetStatus|null>(null),[statusReason,setStatusReason]=useState('')
@@ -222,6 +225,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   const masterAddress=master?[master.address,master.city].filter(Boolean).join(' · '):''
   const selectedFormKey=families.find(family=>family.id===itemForm.family_id)?.form_key
   const confectionSelected=selectedFormKey==='confection'
+  const supportsUpholsteryCalculator=selectedFormKey==='confection'||selectedFormKey==='upholstery'
   const selectItemFamily=(value:string)=>setItemForm(current=>({...current,family_id:value,confection_subitem:''}))
   const stateLabel=saveState==='saving'?'Salvando…':saveState==='waiting'?'Alterações pendentes':saveState==='error'?'Falha ao salvar':'Rascunho sincronizado'
   const loadItems=useCallback(async()=>{
@@ -262,8 +266,10 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   const openItem=async(item?:BudgetItem)=>{
     setPdfResult(null);setPdfName('');setPdfCandidate(0);setPdfRows([])
     setSupplyLines([]);setLaborLines([]);setPaymentOptions([]);setItemPhotos([])
-    if(!item){setItemForm(newBlankItem());setPaymentOptions(standardItemPaymentOptions());setItemOpen(true);return}
+    if(!item){setItemForm(newBlankItem());setUpholsteryEstimate(newUpholsteryEstimate());setPaymentOptions(standardItemPaymentOptions());setItemOpen(true);return}
     const c=item.configuration??{}
+    const storedEstimate=c.upholstery_estimate as Partial<UpholsteryEstimate>|undefined
+    setUpholsteryEstimate(Array.isArray(storedEstimate?.pieces)?storedEstimate as UpholsteryEstimate:newUpholsteryEstimate())
     setItemForm({id:item.id,family_id:item.family_id??'',environment:item.environment??'',description:item.description,quantity:Number(item.quantity),presentation:item.presentation==='option'?'option':'principal',manufacturer_cost:Number(c.manufacturer_cost??item.cost_total),additional_cost:Number(c.additional_cost??0),margin_percent:Number(item.margin_percent??0),sale_total:Number(item.sale_total),confection_subitem:typeof c.confection_subitem==='string'?c.confection_subitem:'',initial_configuration:c})
     setPaymentOptions(itemPaymentOptions[item.id]??[]);setItemOpen(true)
     if(supabase){const [costResult,photoResult]=await Promise.all([
@@ -346,9 +352,9 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     if(!itemForm.family_id||!itemForm.description.trim()){show('Informe o tipo e a descrição do item.','error');return}
     setItemSaving(true)
     const formKey=families.find(family=>family.id===itemForm.family_id)?.form_key
-    const {installation_cost:_,...previousConfiguration}=itemForm.initial_configuration
+    const {installation_cost:_,upholstery_estimate:__,...previousConfiguration}=itemForm.initial_configuration
     const cost=costOf(itemForm)
-    const itemPayload={family_id:itemForm.family_id,position:itemForm.id?(items.find(x=>x.id===itemForm.id)?.position??1):items.length+1,presentation:itemForm.presentation,environment:itemForm.environment.trim()||null,description:itemForm.description.trim(),quantity:itemForm.quantity,configuration:{...previousConfiguration,manufacturer_cost:itemForm.manufacturer_cost,additional_cost:itemForm.additional_cost,...(formKey==='confection'&&itemForm.confection_subitem?{confection_subitem:itemForm.confection_subitem}:{})},cost_total:cost,margin_percent:itemForm.margin_percent,sale_total:itemForm.sale_total,affects_total:itemForm.presentation==='principal'}
+    const itemPayload={family_id:itemForm.family_id,position:itemForm.id?(items.find(x=>x.id===itemForm.id)?.position??1):items.length+1,presentation:itemForm.presentation,environment:itemForm.environment.trim()||null,description:itemForm.description.trim(),quantity:itemForm.quantity,configuration:{...previousConfiguration,manufacturer_cost:itemForm.manufacturer_cost,additional_cost:itemForm.additional_cost,...(formKey==='confection'&&itemForm.confection_subitem?{confection_subitem:itemForm.confection_subitem}:{}),...(isPreBudget&&(formKey==='confection'||formKey==='upholstery')?{upholstery_estimate:upholsteryEstimate}:{})},cost_total:cost,margin_percent:itemForm.margin_percent,sale_total:itemForm.sale_total,affects_total:itemForm.presentation==='principal'}
     // Organization and budget links are immutable after creation. Including them
     // in an update makes Postgres correctly reject the request as unauthorized.
     const result=itemForm.id
@@ -688,6 +694,15 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <small>O detalhamento comercial continua na descrição do item.</small>
 </label>}<label className="field span-2">Descrição para o cliente<textarea required value={itemForm.description} onChange={e=>setItemForm({...itemForm,description:e.target.value})} placeholder="Descreva modelo, material, medidas e acabamento"/>
 </label>
+{isPreBudget&&supportsUpholsteryCalculator&&<UpholsteryEstimateCalculator
+  estimate={upholsteryEstimate}
+  onChange={setUpholsteryEstimate}
+  onApplyValue={value=>setItemForm(current=>({...current,sale_total:value}))}
+  onInsertDescription={summary=>setItemForm(current=>({
+    ...current,
+    description:current.description.includes(summary)?current.description:[current.description.trim(),summary].filter(Boolean).join('\n')
+  }))}
+/>}
 <section className="item-photos span-2">
 <header><div><h3>Fotos e referências</h3><p>Opcional: fotos enviadas pelo cliente, do ambiente ou da visita técnica. Não aparecem ao cliente automaticamente.</p></div>{itemForm.id&&<label className="button secondary photo-upload"><ImagePlus/>{photoUploading?'Adicionando…':'Adicionar fotos'}<input type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={photoUploading} onChange={e=>void addItemPhotos(e.target.files)}/></label>}</header>
 {itemForm.id?(itemPhotos.length?<div className="item-photo-list">{itemPhotos.map(photo=><button type="button" key={photo.id} className="item-photo" onClick={()=>void openItemPhoto(photo)}><ImagePlus/><span>{photo.original_name}</span><small>{new Date(photo.created_at).toLocaleDateString('pt-BR')}</small></button>)}</div>:<div className="item-photo-empty">Nenhuma foto anexada a este item.</div>):<div className="item-photo-empty">Salve o item uma vez para anexar fotos e preservar seu histórico.</div>}
