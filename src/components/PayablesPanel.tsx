@@ -53,6 +53,7 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
   const [search, setSearch] = useState('')
   const [open, setOpen] = useState(false)
   const [selected, setSelected] = useState<Payable | null>(null)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({ description: '', supplierId: '', orderId: '', budgetItemId: '', method: 'A combinar', total: 0, count: 1, firstDue: today() })
@@ -125,16 +126,17 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
     await load()
   }
 
-  const cancel = async () => {
+  const removeInstallment = async () => {
     if (!supabase || !selected) return
-    const { error } = await supabase.rpc('cancel_manual_payable', { org_id: organizationId, target_payable_id: selected.id })
-    if (error) { show('Somente lançamentos manuais ainda não pagos podem ser excluídos.', 'error'); return }
-    show('Lançamento excluído com segurança.', 'success')
+    const { error } = await supabase.rpc('delete_manual_payable_installment', { org_id: organizationId, target_payable_id: selected.id })
+    if (error) { show('Somente parcelas manuais ainda não pagas podem ser excluídas.', 'error'); return }
+    show('Parcela excluída definitivamente.', 'success')
+    setConfirmingDelete(false)
     setSelected(null)
     await load()
   }
 
-  const canCancel = Boolean(selected && !selected.purchase_id && !selected.order_id && !selected.budget_item_id && Number(selected.paid_amount) === 0 && ['open', 'overdue'].includes(selected.status))
+  const canDelete = Boolean(selected && !selected.purchase_id && Number(selected.paid_amount) === 0 && ['open', 'overdue'].includes(selected.status))
   const selectedOrder = orders.find(order => order.id === form.orderId)
 
   return <>
@@ -143,12 +145,12 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
         <label className="search"><Search /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar fornecedor ou lançamento" /></label>
         <button className="button primary" onClick={beginCreate}><Plus /> Nova conta a pagar</button>
       </div>
-      <div className="table-wrap"><table><thead><tr><th>Parcelas</th><th>Pedido / fornecedor</th><th>Vencimento</th><th>Valor / pago</th><th>Status</th></tr></thead><tbody>
+      <div className="table-wrap"><table><thead><tr><th>Parcelas</th><th>Pedido / fornecedor</th><th>Vencimento</th><th>Valor / saldo</th><th>Status</th></tr></thead><tbody>
         {visible.map(item => <tr className="clickable-row" key={item.id} onClick={() => setSelected(item)}>
           <td><strong>Parcela {item.installment}/{item.installment_count}</strong><small>{item.installment_count > 1 ? `${item.installment_count} parcelas vinculadas` : 'Lançamento único'}</small></td>
           <td>{item.purchase?.display_number ? <><strong>{item.purchase.display_number}</strong><small>{item.purchase.supplier?.name ?? item.supplier?.name ?? 'Fornecedor não informado'}</small></> : item.order?.display_number ? <><strong>{item.order.display_number}{item.budget_item ? ` · ${itemLabel(item.budget_item)}` : ''}</strong><small>{item.supplier?.name ?? 'Fornecedor não informado'}</small></> : <>{item.supplier?.name ?? 'Fornecedor não informado'}</>}</td>
           <td>{formatDate(item.due_date)}</td>
-          <td><strong>{money.format(Number(item.amount))}</strong><small>Pago: {money.format(Number(item.paid_amount))}</small></td>
+          <td className="payable-value"><strong>{money.format(Number(item.amount))}</strong><small><span>Pago: {money.format(Number(item.paid_amount))}</span><span>Saldo: {money.format(Math.max(0, Number(item.amount) - Number(item.paid_amount)))}</span></small></td>
           <td>{statusLabel[item.status] ?? item.status}</td>
         </tr>)}
         {!visible.length && <tr><td colSpan={5} className="empty">Nenhuma conta a pagar encontrada.</td></tr>}
@@ -171,6 +173,7 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
           setInstallments(redistributeInstallments(form.total, form.count, form.firstDue, lockedInstallments))
         }}>Redistribuir parcelas</button>
         <div className="manual-installments span-2">
+          <div className="manual-installments-head" aria-hidden="true"><span>Parcela</span><span>Vencimento</span><span>Valor</span></div>
           {installments.map((installment, index) => <div key={index}>
             <b>{index + 1}/{installments.length}{installment.locked ? ' · pago' : ''}</b>
             <input aria-label={`Vencimento parcela ${index + 1}`} type="date" disabled={installment.locked} value={installment.due_date} onChange={event => updateInstallment(index, { due_date: event.target.value })} />
@@ -182,6 +185,6 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
       <footer><button type="button" className="button secondary" onClick={() => { setOpen(false); setEditingGroupId(null) }}>Cancelar</button><button className="button primary" disabled={saving || form.total <= 0 || !totalsMatch}>{saving ? 'Salvando...' : editingGroupId ? 'Salvar alterações' : 'Salvar conta e parcelas'}</button></footer>
     </form></div>}
 
-    {selected && <div className="dialog-backdrop"><div className="dialog"><header><div><span className="eyebrow">Parcela {selected.installment}/{selected.installment_count}</span><h2>{selected.description}</h2><p>{selected.supplier?.name ?? selected.purchase?.supplier?.name ?? 'Fornecedor não informado'} · Vencimento: {formatDate(selected.due_date)} · {money.format(Number(selected.amount))}{selected.order ? ` · ${selected.order.display_number}${selected.budget_item ? ` · ${itemLabel(selected.budget_item)}` : ''}` : ''}</p></div><button className="icon-button" onClick={() => setSelected(null)}><X /></button></header><footer><button className="button primary" disabled={selected.status === 'cancelled'} onClick={beginEdit}>Editar conta e parcelas</button>{canCancel && <button className="button danger" onClick={() => void cancel()}><Trash2 /> Excluir lançamento</button>}<button className="button secondary" onClick={() => setSelected(null)}>Fechar</button></footer></div></div>}
+    {selected && <div className="dialog-backdrop"><div className="dialog"><header><div><span className="eyebrow">Parcela {selected.installment}/{selected.installment_count}</span><h2>{selected.description}</h2><p>{selected.supplier?.name ?? selected.purchase?.supplier?.name ?? 'Fornecedor não informado'} · Vencimento: {formatDate(selected.due_date)} · {money.format(Number(selected.amount))}{selected.order ? ` · ${selected.order.display_number}${selected.budget_item ? ` · ${itemLabel(selected.budget_item)}` : ''}` : ''}</p></div><button className="icon-button" onClick={() => { setConfirmingDelete(false); setSelected(null) }}><X /></button></header>{confirmingDelete && <div className="inline-confirm"><div><strong>Excluir esta parcela definitivamente?</strong><span>Ela será removida do grupo; as demais serão renumeradas.</span></div><button className="button danger" onClick={() => void removeInstallment()}>Confirmar exclusão</button></div>}<footer><button className="button primary" disabled={selected.status === 'cancelled'} onClick={beginEdit}>Editar conta e parcelas</button>{canDelete && !confirmingDelete && <button className="button danger" onClick={() => setConfirmingDelete(true)}><Trash2 /> Excluir parcela</button>}<button className="button secondary" onClick={() => { setConfirmingDelete(false); setSelected(null) }}>Fechar</button></footer></div></div>}
   </>
 }
