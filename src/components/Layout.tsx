@@ -11,7 +11,7 @@ const groups: { label: string; items: NavItem[] }[] = [
     { key:'pedidos', label:'Pedidos', icon:PackageCheck }, { key:'agenda', label:'Agenda', icon:CalendarDays },
   ]},
   { label: 'Operação', items: [{ key:'compras', label:'Compras', icon:ShoppingCart },{ key:'prestadores', label:'Carga de prestadores', icon:CalendarDays }] },
-  { label: 'Financeiro', items: [{ key:'financeiro', label:'Gestão financeira', icon:CircleDollarSign }] },
+  { label: 'Financeiro', items: [{ key:'financeiro', label:'Painel financeiro', icon:CircleDollarSign },{ key:'financeiro-lancamentos', label:'Lançamentos', icon:FileText }] },
   { label: 'Cadastros', items: [{ key:'insumos', label:'Insumos e produtos', icon:ContactRound },{ key:'fornecedores', label:'Fornecedores', icon:UsersRound }] },
   { label: 'Administração', items: [{ key:'administracao', label:'Administração', icon:Settings }] },
 ]
@@ -26,7 +26,7 @@ export function Layout({ active, setActive, children }: { active: ModuleKey; set
         {open[group.label] && group.items.map(item => <button className={`nav-item ${active === item.key ? 'active' : ''}`} key={item.key} onClick={() => { setActive(item.key); setMobile(false) }}><item.icon/><span>{item.label}</span></button>)}</section>)}</nav>
       <div className="sidebar-bottom"><button className="nav-item" onClick={() => supabase?.auth.signOut()}><LogOut/><span>Sair</span></button><button className="collapse-button" onClick={() => setCompact(value => !value)}><PanelLeftClose/></button></div>
     </aside>
-    <header className="mobile-header"><button className="icon-button" onClick={() => setMobile(value => !value)}><Menu/></button><strong>Fábrika Kriativa</strong></header>
+    <header className="mobile-header"><button className="icon-button" aria-label="Abrir menu" onClick={() => setMobile(value => !value)}><Menu/></button></header>
     <main className="main-content">{children}</main>
   </div>
 }

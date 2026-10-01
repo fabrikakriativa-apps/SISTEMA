@@ -28,7 +28,8 @@ export function App() {
     : active === 'insumos' ? <Supplies/>
     : active === 'orcamentos' ? <Budgets/>
     : active === 'pedidos' ? <Orders/>
-    : active === 'financeiro' ? <Finance/>
+    : active === 'financeiro' ? <Finance mode="overview" navigate={navigate}/>
+    : active === 'financeiro-lancamentos' ? <Finance mode="entries" navigate={navigate}/>
     : active === 'compras' ? <PurchasesConnected/>
     : active === 'prestadores' ? <ProviderWorkload/>
     : active === 'fornecedores' ? <Suppliers/>
