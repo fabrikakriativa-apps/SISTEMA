@@ -221,9 +221,8 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   const master=availableClients.find(item=>item.id===client?.master_client_id)
   const masterAddress=master?[master.address,master.city].filter(Boolean).join(' · '):''
   const selectedFormKey=families.find(family=>family.id===itemForm.family_id)?.form_key
-  const confectionSelected=selectedFormKey==='confection'&&itemForm.confection_subitem!=='Cabeceira'
-  const confectionFamily=families.find(family=>family.form_key==='confection')
-  const selectItemFamily=(value:string)=>{if(value==='confection-headboard'&&confectionFamily){setItemForm(current=>({...current,family_id:confectionFamily.id,confection_subitem:'Cabeceira'}));return}setItemForm(current=>({...current,family_id:value,confection_subitem:''}))}
+  const confectionSelected=selectedFormKey==='confection'
+  const selectItemFamily=(value:string)=>setItemForm(current=>({...current,family_id:value,confection_subitem:''}))
   const stateLabel=saveState==='saving'?'Salvando…':saveState==='waiting'?'Alterações pendentes':saveState==='error'?'Falha ao salvar':'Rascunho sincronizado'
   const loadItems=useCallback(async()=>{
     if(!supabase)return
@@ -679,13 +678,13 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <button type="button" className="button primary" disabled={itemSaving} onClick={()=>void importSelected()}>{itemSaving?'Importando…':`Importar ${pdfRows.filter(row=>row.selected).length} selecionado(s)`}</button>
 </div>}</div>
 <div className="form-grid">
-<label className="field">Tipo<select required value={itemForm.family_id===confectionFamily?.id&&itemForm.confection_subitem==='Cabeceira'?'confection-headboard':itemForm.family_id} onChange={e=>selectItemFamily(e.target.value)}>
-<option value="">Selecione</option>{confectionFamily&&<option value="confection-headboard">Cabeceira</option>}{families.map(x=>
+<label className="field">Tipo<select required value={itemForm.family_id} onChange={e=>selectItemFamily(e.target.value)}>
+<option value="">Selecione</option>{families.map(x=>
 <option key={x.id} value={x.id}>{x.name}</option>)}</select>
 </label>
 <label className="field">Ambiente<input value={itemForm.environment} onChange={e=>setItemForm({...itemForm,environment:e.target.value})} placeholder="Ex.: Sala"/>
 </label>{confectionSelected&&<label className="field span-2">Subitem de confecção<select required value={itemForm.confection_subitem} onChange={e=>setItemForm({...itemForm,confection_subitem:e.target.value})}>
-<option value="">Selecione</option>{confectionSubitems.filter(subitem=>subitem!=='Cabeceira').map(subitem=><option key={subitem} value={subitem}>{subitem}</option>)}</select>
+<option value="">Selecione</option>{confectionSubitems.map(subitem=><option key={subitem} value={subitem}>{subitem}</option>)}</select>
 <small>O detalhamento comercial continua na descrição do item.</small>
 </label>}<label className="field span-2">Descrição para o cliente<textarea required value={itemForm.description} onChange={e=>setItemForm({...itemForm,description:e.target.value})} placeholder="Descreva modelo, material, medidas e acabamento"/>
 </label>
