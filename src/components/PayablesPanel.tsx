@@ -6,7 +6,7 @@ import { money } from '../lib/format'
 import { supabase } from '../lib/supabase'
 
 type Supplier = { id: string; name: string }
-type Installment = { due_date: string; amount: number }
+type Installment = { id?: string; due_date: string; amount: number }
 type OrderItem = { id: string; budget_item_id: string; snapshot: { description?: string; environment?: string | null } }
 type Order = { id: string; display_number: string; client: { name: string } | null; order_items: OrderItem[] }
 type Payable = {
@@ -14,7 +14,7 @@ type Payable = {
   description: string; due_date: string | null; amount: number; paid_amount: number
   status: string; payment_method: string | null; purchase_id: string | null
   order_id: string | null; budget_item_id: string | null
-  supplier: { name: string } | null
+  supplier: { id: string; name: string } | null
   purchase: { display_number: string; supplier: { name: string } | null } | null
   order: { display_number: string; client: { name: string } | null } | null
   budget_item: { description: string; environment: string | null } | null
@@ -43,6 +43,7 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
   const [search, setSearch] = useState('')
   const [open, setOpen] = useState(false)
   const [selected, setSelected] = useState<Payable | null>(null)
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({ description: '', supplierId: '', orderId: '', budgetItemId: '', method: 'A combinar', total: 0, count: 1, firstDue: today() })
   const [installments, setInstallments] = useState<Installment[]>([])
@@ -50,7 +51,7 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
   const load = useCallback(async () => {
     if (!supabase) return
     const [payablesResult, suppliersResult, ordersResult] = await Promise.all([
-      supabase.from('payables').select('id,group_id,installment,installment_count,description,due_date,amount,paid_amount,status,payment_method,purchase_id,order_id,budget_item_id,supplier:suppliers!payables_supplier_id_fkey(name),purchase:purchases!payables_purchase_id_fkey(display_number,supplier:suppliers!purchases_supplier_id_fkey(name)),order:orders!payables_order_id_fkey(display_number,client:clients!orders_client_id_fkey(name)),budget_item:budget_items!payables_budget_item_id_fkey(description,environment)').eq('organization_id', organizationId).order('due_date'),
+      supabase.from('payables').select('id,group_id,installment,installment_count,description,due_date,amount,paid_amount,status,payment_method,purchase_id,order_id,budget_item_id,supplier:suppliers!payables_supplier_id_fkey(id,name),purchase:purchases!payables_purchase_id_fkey(display_number,supplier:suppliers!purchases_supplier_id_fkey(name)),order:orders!payables_order_id_fkey(display_number,client:clients!orders_client_id_fkey(name)),budget_item:budget_items!payables_budget_item_id_fkey(description,environment)').eq('organization_id', organizationId).order('due_date'),
       supabase.from('suppliers').select('id,name').eq('organization_id', organizationId).eq('active', true).order('name'),
       supabase.from('orders').select('id,display_number,client:clients!orders_client_id_fkey(name),order_items:order_items!order_items_order_id_fkey(id,budget_item_id,snapshot)').eq('organization_id', organizationId).neq('status', 'cancelled').order('number', { ascending: false }),
     ])
@@ -76,6 +77,19 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
     const fresh = { description: '', supplierId: '', orderId: '', budgetItemId: '', method: 'A combinar', total: 0, count: 1, firstDue: today() }
     setForm(fresh)
     setInstallments(createInstallments(fresh.total, fresh.count, fresh.firstDue))
+    setEditingGroupId(null)
+    setOpen(true)
+  }
+
+  const beginEdit = () => {
+    if (!selected) return
+    const group = items.filter(item => item.group_id === selected.group_id).sort((a, b) => a.installment - b.installment)
+    const first = group[0]
+    if (!first) return
+    setForm({ description: first.description, supplierId: first.supplier?.id ?? '', orderId: first.order_id ?? '', budgetItemId: first.budget_item_id ?? '', method: first.payment_method ?? 'A combinar', total: rounded(group.reduce((sum, item) => sum + Number(item.amount), 0)), count: group.length, firstDue: first.due_date ?? today() })
+    setInstallments(group.map(item => ({ id: item.id, due_date: item.due_date ?? today(), amount: Number(item.amount) })))
+    setEditingGroupId(selected.group_id)
+    setSelected(null)
     setOpen(true)
   }
 
@@ -84,14 +98,14 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
     if (!supabase || saving) return
     if (!totalsMatch) { show('A soma das parcelas deve ser igual ao valor total.', 'error'); return }
     setSaving(true)
-    const { error } = await supabase.rpc('create_manual_payable_group_with_link', {
-      org_id: organizationId, payable_description: form.description, payable_supplier_id: form.supplierId,
-      payable_order_id: form.orderId || null, payable_budget_item_id: form.budgetItemId || null, payable_method: form.method, installments_json: installments,
-    })
+    const { error } = editingGroupId
+      ? await supabase.rpc('update_manual_payable_group', { org_id: organizationId, target_group_id: editingGroupId, payable_description: form.description, payable_supplier_id: form.supplierId, payable_order_id: form.orderId || null, payable_budget_item_id: form.budgetItemId || null, payable_method: form.method, installments_json: installments })
+      : await supabase.rpc('create_manual_payable_group_with_link', { org_id: organizationId, payable_description: form.description, payable_supplier_id: form.supplierId, payable_order_id: form.orderId || null, payable_budget_item_id: form.budgetItemId || null, payable_method: form.method, installments_json: installments })
     setSaving(false)
     if (error) { show('Não foi possível salvar. Confira fornecedor, vencimentos e valores.', 'error'); return }
-    show('Conta e parcelas vinculadas foram criadas.', 'success')
+    show(editingGroupId ? 'Conta e parcelas atualizadas.' : 'Conta e parcelas vinculadas foram criadas.', 'success')
     setOpen(false)
+    setEditingGroupId(null)
     await load()
   }
 
@@ -126,7 +140,7 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
     </section>
 
     {open && <div className="dialog-backdrop"><form className="dialog manual-payable-dialog" onSubmit={save}>
-      <header><div><span className="eyebrow">Contas a pagar</span><h2>Nova conta a pagar</h2><p>Defina o fornecedor e ajuste o vencimento real de cada parcela antes de salvar.</p></div><button type="button" className="icon-button" onClick={() => setOpen(false)}><X /></button></header>
+      <header><div><span className="eyebrow">Contas a pagar</span><h2>{editingGroupId ? 'Editar conta a pagar' : 'Nova conta a pagar'}</h2><p>{editingGroupId ? 'Todas as parcelas vinculadas estão abaixo. Ajuste o que for necessário antes de salvar.' : 'Defina o fornecedor e ajuste o vencimento real de cada parcela antes de salvar.'}</p></div><button type="button" className="icon-button" onClick={() => { setOpen(false); setEditingGroupId(null) }}><X /></button></header>
       <div className="form-grid">
         <label className="field span-2">Descrição<input required value={form.description} onChange={event => setForm({ ...form, description: event.target.value })} placeholder="Ex.: Tecidos para cabeceira" /></label>
         <label className="field span-2">Fornecedor<select required value={form.supplierId} onChange={event => setForm({ ...form, supplierId: event.target.value })}><option value="">Selecione o fornecedor</option>{suppliers.map(supplier => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}</select></label>
@@ -146,9 +160,9 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
           <div className="installments-total"><span>Total das parcelas</span><strong>{money.format(installmentsTotal)}</strong>{!totalsMatch && <small>Precisa somar {money.format(rounded(form.total))}.</small>}</div>
         </div>
       </div>
-      <footer><button type="button" className="button secondary" onClick={() => setOpen(false)}>Cancelar</button><button className="button primary" disabled={saving || form.total <= 0 || !totalsMatch}>{saving ? 'Salvando...' : 'Salvar conta e parcelas'}</button></footer>
+      <footer><button type="button" className="button secondary" onClick={() => { setOpen(false); setEditingGroupId(null) }}>Cancelar</button><button className="button primary" disabled={saving || form.total <= 0 || !totalsMatch}>{saving ? 'Salvando...' : editingGroupId ? 'Salvar alterações' : 'Salvar conta e parcelas'}</button></footer>
     </form></div>}
 
-    {selected && <div className="dialog-backdrop"><div className="dialog"><header><div><span className="eyebrow">Parcela {selected.installment}/{selected.installment_count}</span><h2>{selected.description}</h2><p>{selected.supplier?.name ?? selected.purchase?.supplier?.name ?? 'Fornecedor não informado'} · Vencimento: {formatDate(selected.due_date)} · {money.format(Number(selected.amount))}{selected.order ? ` · ${selected.order.display_number}${selected.budget_item ? ` · ${itemLabel(selected.budget_item)}` : ''}` : ''}</p></div><button className="icon-button" onClick={() => setSelected(null)}><X /></button></header><footer>{canCancel && <button className="button danger" onClick={() => void cancel()}><Trash2 /> Excluir lançamento</button>}<button className="button secondary" onClick={() => setSelected(null)}>Fechar</button></footer></div></div>}
+    {selected && <div className="dialog-backdrop"><div className="dialog"><header><div><span className="eyebrow">Parcela {selected.installment}/{selected.installment_count}</span><h2>{selected.description}</h2><p>{selected.supplier?.name ?? selected.purchase?.supplier?.name ?? 'Fornecedor não informado'} · Vencimento: {formatDate(selected.due_date)} · {money.format(Number(selected.amount))}{selected.order ? ` · ${selected.order.display_number}${selected.budget_item ? ` · ${itemLabel(selected.budget_item)}` : ''}` : ''}</p></div><button className="icon-button" onClick={() => setSelected(null)}><X /></button></header><footer><button className="button primary" disabled={Number(selected.paid_amount) > 0 || ['settled','cancelled'].includes(selected.status)} onClick={beginEdit}>Editar conta e parcelas</button>{canCancel && <button className="button danger" onClick={() => void cancel()}><Trash2 /> Excluir lançamento</button>}<button className="button secondary" onClick={() => setSelected(null)}>Fechar</button></footer></div></div>}
   </>
 }
