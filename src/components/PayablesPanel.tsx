@@ -134,7 +134,7 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
           <div className="installments-total"><span>Total das parcelas</span><strong>{money.format(installmentsTotal)}</strong>{!totalsMatch && <small>Precisa somar {money.format(rounded(form.total))}.</small>}</div>
         </div>
       </div>
-      <footer><button type="button" className="button secondary" onClick={() => setOpen(false)}>Cancelar</button><button className="button primary" disabled={saving || !totalsMatch}>{saving ? 'Salvando...' : 'Salvar conta e parcelas'}</button></footer>
+      <footer><button type="button" className="button secondary" onClick={() => setOpen(false)}>Cancelar</button><button className="button primary" disabled={saving || form.total <= 0 || !totalsMatch}>{saving ? 'Salvando...' : 'Salvar conta e parcelas'}</button></footer>
     </form></div>}
 
     {selected && <div className="dialog-backdrop"><div className="dialog"><header><div><span className="eyebrow">Parcela {selected.installment}/{selected.installment_count}</span><h2>{selected.description}</h2><p>{selected.supplier?.name ?? selected.purchase?.supplier?.name ?? 'Fornecedor não informado'} · Vencimento: {formatDate(selected.due_date)} · {money.format(Number(selected.amount))}</p></div><button className="icon-button" onClick={() => setSelected(null)}><X /></button></header><footer>{canCancel && <button className="button danger" onClick={() => void cancel()}><Trash2 /> Excluir lançamento</button>}<button className="button secondary" onClick={() => setSelected(null)}>Fechar</button></footer></div></div>}
