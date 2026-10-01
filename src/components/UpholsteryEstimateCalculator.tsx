@@ -38,7 +38,7 @@ export function UpholsteryEstimateCalculator({estimate,onChange,onApplyValue,onI
       <div><span>Custo estimado</span><strong>{money.format(result.base_total)}</strong></div>
       <div className="upholstery-sale"><span>Valor sugerido</span><strong>{money.format(result.sale_total)}</strong></div>
     </div>
-    <div className="upholstery-fabric-groups"><strong>Metragem estimada por tecido</strong>{result.fabric_groups.length?<ul>{result.fabric_groups.map(group=><li key={group.reference}><span>{group.reference} <small>{group.piece_count} peça(s)</small></span><b>{group.meters.toLocaleString('pt-BR')} m</b></li>)}</ul>:<span>Informe as medidas das peças para calcular.</span>}</div>
+    {result.fabric_groups.length>0&&<div className="upholstery-fabric-groups"><strong>Metragem estimada por tecido</strong><ul>{result.fabric_groups.map(group=><li key={group.reference}><span>{group.reference} <small>{group.piece_count} peça(s)</small></span><b>{group.meters.toLocaleString('pt-BR')} m</b></li>)}</ul></div>}
     <footer><button type="button" className="button secondary" disabled={!description} onClick={()=>onInsertDescription(description)}>Inserir resumo na descrição</button><button type="button" className="button primary" disabled={!result.pieces.length} onClick={()=>onApplyValue(result.sale_total)}>Usar valor sugerido</button></footer>
   </section>
 }
