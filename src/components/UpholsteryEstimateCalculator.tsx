@@ -35,10 +35,10 @@ export function UpholsteryEstimateCalculator({estimate,onChange,onApplyValue,onI
     <div className="upholstery-summary">
       <div><span>Custo por m²</span><strong>{money.format(result.cost_per_square_meter)}</strong></div>
       <div><span>Qtd. de espuma</span><strong>{result.foam_quantity.toLocaleString('pt-BR',{minimumFractionDigits:3,maximumFractionDigits:3})} m²</strong></div>
+      <div className="upholstery-fabric-result"><span>Metragem de tecido</span><strong>{result.fabric_groups.reduce((total,group)=>total+group.meters,0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})} m</strong>{result.fabric_groups.length>0&&<small>{result.fabric_groups.map(group=>`${group.reference}: ${group.meters.toLocaleString('pt-BR')} m`).join(' · ')}</small>}</div>
       <div><span>Custo estimado</span><strong>{money.format(result.base_total)}</strong></div>
       <div className="upholstery-sale"><span>Valor sugerido</span><strong>{money.format(result.sale_total)}</strong></div>
     </div>
-    {result.fabric_groups.length>0&&<div className="upholstery-fabric-groups"><strong>Metragem estimada por tecido</strong><ul>{result.fabric_groups.map(group=><li key={group.reference}><span>{group.reference} <small>{group.piece_count} peça(s)</small></span><b>{group.meters.toLocaleString('pt-BR')} m</b></li>)}</ul></div>}
     <footer><button type="button" className="button secondary" disabled={!description} onClick={()=>onInsertDescription(description)}>Inserir resumo na descrição</button><button type="button" className="button primary" disabled={!result.pieces.length} onClick={()=>onApplyValue(result.sale_total)}>Usar valor sugerido</button></footer>
   </section>
 }

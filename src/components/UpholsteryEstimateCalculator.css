@@ -1,5 +1,13 @@
 .upholstery-calculator .upholstery-summary{
-  grid-template-columns:repeat(4,minmax(0,1fr));
+  grid-template-columns:repeat(5,minmax(0,1fr));
+}
+
+.upholstery-calculator .upholstery-fabric-result small{
+  display:block;
+  margin-top:4px;
+  color:var(--muted);
+  font-size:10px;
+  line-height:1.3;
 }
 
 @media (max-width:900px){
