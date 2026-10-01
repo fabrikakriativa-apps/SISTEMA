@@ -9,7 +9,8 @@ describe('calculateUpholsteryEstimate',()=>{
       {id:'3',name:'Encosto',width:1,height:.5,thickness:3,density:'d28',fabric_reference:'Veludo'},
     ]}
     const result=calculateUpholsteryEstimate(estimate)
-    expect(result.foam_total).toBe(1116)
+    expect(result.cost_per_square_meter).toBe(1116)
+    expect(result.foam_quantity).toBe(3)
     expect(result.fabric_groups).toEqual([{reference:'Linho',meters:3.5,piece_count:2},{reference:'Veludo',meters:1.5,piece_count:1}])
     expect(result.base_total).toBe(1296)
     expect(result.sale_total).toBe(1944)

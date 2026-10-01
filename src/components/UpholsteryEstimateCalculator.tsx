@@ -12,7 +12,7 @@ export function UpholsteryEstimateCalculator({estimate,onChange,onApplyValue,onI
   const updatePiece=(id:string,change:Partial<UpholsteryPiece>)=>onChange({...estimate,pieces:estimate.pieces.map(piece=>piece.id===id?{...piece,...change}:piece)})
   const description=result.pieces.length?result.pieces.map(piece=>`${piece.name || 'Peça'}: ${piece.width.toLocaleString('pt-BR')} m × ${piece.height.toLocaleString('pt-BR')} m · espuma ${foamDensityLabels[piece.density]}, ${piece.thickness.toLocaleString('pt-BR')} cm`).join('\n')+(result.fabric_groups.length?`\n${result.fabric_groups.map(group=>`Tecido: ${group.reference} — metragem estimada ${group.meters.toLocaleString('pt-BR')} m`).join('\n')}`:''):''
   return <section className="upholstery-calculator span-2">
-    <header><div><h3>Calculador rápido de estofado</h3><p>Calcula a espuma e a metragem de tecido. O tecido é incluído como valor separado, sem gerar lista de compras.</p></div><button type="button" className="button secondary compact-button" onClick={()=>onChange({...estimate,pieces:[...estimate.pieces,emptyPiece()]})}><Plus/>Adicionar peça</button></header>
+    <header><div><h3>Calculador rápido de estofado</h3><p>Calcula o custo por m², a quantidade de espuma e a metragem de tecido. O tecido é incluído como valor separado, sem gerar lista de compras.</p></div><button type="button" className="button secondary compact-button" onClick={()=>onChange({...estimate,pieces:[...estimate.pieces,emptyPiece()]})}><Plus/>Adicionar peça</button></header>
     <div className="upholstery-piece-list">
       {estimate.pieces.map((piece,index)=><div className="upholstery-piece" key={piece.id}>
         <div className="upholstery-piece-heading"><strong>Peça {index+1}</strong>{estimate.pieces.length>1&&<button type="button" className="text-button danger-text" onClick={()=>onChange({...estimate,pieces:estimate.pieces.filter(current=>current.id!==piece.id)})}><X/>Remover</button>}</div>
@@ -32,7 +32,8 @@ export function UpholsteryEstimateCalculator({estimate,onChange,onApplyValue,onI
       <label className="field">Margem (%)<DecimalInput value={estimate.margin_percent} decimalScale={2} onValueChange={value=>onChange({...estimate,margin_percent:value})}/></label>
     </div>
     <div className="upholstery-summary">
-      <div><span>Espuma calculada</span><strong>{money.format(result.foam_total)}</strong></div>
+      <div><span>Custo por m²</span><strong>{money.format(result.cost_per_square_meter)}</strong></div>
+      <div><span>Qtd. de espuma</span><strong>{result.foam_quantity.toLocaleString('pt-BR',{minimumFractionDigits:3,maximumFractionDigits:3})} m²</strong></div>
       <div><span>Custo estimado</span><strong>{money.format(result.base_total)}</strong></div>
       <div className="upholstery-sale"><span>Valor sugerido</span><strong>{money.format(result.sale_total)}</strong></div>
     </div>
