@@ -1,0 +1,12 @@
+.pre-budget-item-basics{
+  display:grid;
+  grid-template-columns:minmax(130px,.5fr) minmax(230px,1fr) minmax(190px,.75fr);
+  gap:14px;
+  align-items:start;
+}
+
+.pre-budget-item-basics .field{min-width:0}
+
+@media (max-width:700px){
+  .pre-budget-item-basics{grid-template-columns:1fr}
+}

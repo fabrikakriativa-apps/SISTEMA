@@ -21,6 +21,7 @@ import { budgetDocumentPath } from '../lib/documents'
 import { confectionSubitems } from '../domain'
 import { UpholsteryEstimateCalculator } from '../components/UpholsteryEstimateCalculator'
 import { newUpholsteryEstimate, type UpholsteryEstimate } from '../lib/upholsteryEstimate'
+import './Budgets.css'
 
 type Budget = {
   id:string; organization_id:string; number:number; display_number:string; current_revision:number; client_id:string|null
@@ -707,14 +708,19 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <header><div><h3>Fotos e referências</h3><p>Opcional: fotos enviadas pelo cliente, do ambiente ou da visita técnica. Não aparecem ao cliente automaticamente.</p></div>{itemForm.id&&<label className="button secondary photo-upload"><ImagePlus/>{photoUploading?'Adicionando…':'Adicionar fotos'}<input type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={photoUploading} onChange={e=>void addItemPhotos(e.target.files)}/></label>}</header>
 {itemForm.id?(itemPhotos.length?<div className="item-photo-list">{itemPhotos.map(photo=><button type="button" key={photo.id} className="item-photo" onClick={()=>void openItemPhoto(photo)}><ImagePlus/><span>{photo.original_name}</span><small>{new Date(photo.created_at).toLocaleDateString('pt-BR')}</small></button>)}</div>:<div className="item-photo-empty">Nenhuma foto anexada a este item.</div>):<div className="item-photo-empty">Salve o item uma vez para anexar fotos e preservar seu histórico.</div>}
 </section>
-<label className="field">Quantidade<input type="number" min="0.001" step="0.001" value={itemForm.quantity} onChange={e=>setItemForm({...itemForm,quantity:Number(e.target.value)})}/>
-</label>
+{isPreBudget?<div className="pre-budget-item-basics span-2">
+<label className="field">Quantidade<input type="number" min="0.001" step="0.001" value={itemForm.quantity} onChange={e=>setItemForm({...itemForm,quantity:Number(e.target.value)})}/></label>
 <label className="field">Apresentação<select value={itemForm.presentation} onChange={e=>setItemForm({...itemForm,presentation:e.target.value as ItemForm['presentation']})}>
 <option value="principal">Item principal</option>
 <option value="option">Opção (não soma)</option>
-</select>
-</label>
-{isPreBudget?<label className="field span-2 pre-budget-value">Valor estimado<DecimalInput value={itemForm.sale_total} decimalScale={2} onValueChange={sale=>setItemForm(current=>({...current,sale_total:sale}))}/><small className="field-note">O custo e a composição real serão definidos ao converter em orçamento.</small></label>:<>
+</select></label>
+<label className="field pre-budget-value">Valor estimado<DecimalInput value={itemForm.sale_total} decimalScale={2} onValueChange={sale=>setItemForm(current=>({...current,sale_total:sale}))}/><small className="field-note">O custo e a composição real serão definidos ao converter em orçamento.</small></label>
+</div>:<>
+<label className="field">Quantidade<input type="number" min="0.001" step="0.001" value={itemForm.quantity} onChange={e=>setItemForm({...itemForm,quantity:Number(e.target.value)})}/></label>
+<label className="field">Apresentação<select value={itemForm.presentation} onChange={e=>setItemForm({...itemForm,presentation:e.target.value as ItemForm['presentation']})}>
+<option value="principal">Item principal</option>
+<option value="option">Opção (não soma)</option>
+</select></label>
 <label className="field">Custo do fabricante<DecimalInput value={itemForm.manufacturer_cost} decimalScale={2} onValueChange={value=>setItemForm(current=>withMargin({...current,manufacturer_cost:value}))}/>
 </label>
 <label className="field">Custos adicionais<DecimalInput value={itemForm.additional_cost} decimalScale={2} onValueChange={value=>setItemForm(current=>withMargin({...current,additional_cost:value}))}/>
