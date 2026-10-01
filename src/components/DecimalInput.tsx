@@ -8,6 +8,7 @@ type DecimalInputProps = {
   allowNegative?:boolean
   trimTrailingZeros?:boolean
   ariaLabel?:string
+  disabled?:boolean
 }
 
 const formatter=(value:number,decimalScale:number,trimTrailingZeros:boolean)=>new Intl.NumberFormat('pt-BR',{
@@ -26,7 +27,7 @@ function parse(value:string,allowNegative:boolean){
   return Number.isFinite(parsed)?parsed:null
 }
 
-export function DecimalInput({value,onValueChange,decimalScale,min=0,allowNegative=false,trimTrailingZeros=false,ariaLabel}:DecimalInputProps){
+export function DecimalInput({value,onValueChange,decimalScale,min=0,allowNegative=false,trimTrailingZeros=false,ariaLabel,disabled=false}:DecimalInputProps){
   const [draft,setDraft]=useState(()=>formatter(value,decimalScale,trimTrailingZeros))
   const [editing,setEditing]=useState(false)
   useEffect(()=>{if(!editing)setDraft(formatter(value,decimalScale,trimTrailingZeros))},[value,decimalScale,trimTrailingZeros,editing])
@@ -34,5 +35,5 @@ export function DecimalInput({value,onValueChange,decimalScale,min=0,allowNegati
     const parsed=parse(raw,allowNegative)
     if(parsed!==null)onValueChange(Math.max(min,parsed))
   }
-  return <input aria-label={ariaLabel} inputMode="decimal" value={draft} onFocus={()=>setEditing(true)} onChange={event=>{setDraft(event.target.value);apply(event.target.value)}} onBlur={()=>{const parsed=parse(draft,allowNegative);const normalized=Math.max(min,parsed??value);setEditing(false);onValueChange(normalized);setDraft(formatter(normalized,decimalScale,trimTrailingZeros))}}/>
+  return <input aria-label={ariaLabel} inputMode="decimal" disabled={disabled} value={draft} onFocus={()=>setEditing(true)} onChange={event=>{setDraft(event.target.value);apply(event.target.value)}} onBlur={()=>{const parsed=parse(draft,allowNegative);const normalized=Math.max(min,parsed??value);setEditing(false);onValueChange(normalized);setDraft(formatter(normalized,decimalScale,trimTrailingZeros))}}/>
 }

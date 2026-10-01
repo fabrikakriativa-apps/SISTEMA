@@ -6,7 +6,7 @@ import { money } from '../lib/format'
 import { supabase } from '../lib/supabase'
 
 type Supplier = { id: string; name: string }
-type Installment = { id?: string; due_date: string; amount: number }
+type Installment = { id?: string; due_date: string; amount: number; locked?: boolean }
 type OrderItem = { id: string; budget_item_id: string; snapshot: { description?: string; environment?: string | null } }
 type Order = { id: string; display_number: string; client: { name: string } | null; order_items: OrderItem[] }
 type Payable = {
@@ -33,6 +33,16 @@ const createInstallments = (total: number, count: number, firstDue: string): Ins
     due.setMonth(due.getMonth() + index)
     return { due_date: due.toISOString().slice(0, 10), amount: index === safeCount - 1 ? rounded(total - commonValue * (safeCount - 1)) : commonValue }
   })
+}
+
+const redistributeInstallments = (total: number, count: number, firstDue: string, preserved: Installment[]): Installment[] => {
+  const safeCount = Math.max(preserved.length, Math.trunc(count) || 1)
+  const remainingCount = safeCount - preserved.length
+  const preservedTotal = rounded(preserved.reduce((sum, installment) => sum + installment.amount, 0))
+  const remainingTotal = rounded(total - preservedTotal)
+  if (remainingCount === 0) return preserved
+  if (remainingTotal < 0) return preserved
+  return [...preserved, ...createInstallments(remainingTotal, remainingCount, firstDue)]
 }
 
 export function PayablesPanel({ organizationId, period }: { organizationId: string; period: string | null }) {
@@ -71,7 +81,9 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
 
   const installmentsTotal = rounded(installments.reduce((sum, item) => sum + item.amount, 0))
   const totalsMatch = installments.length > 0 && installmentsTotal === rounded(form.total)
-  const updateInstallment = (index: number, patch: Partial<Installment>) => setInstallments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item))
+  const lockedInstallments = installments.filter(installment => installment.locked)
+  const lockedTotal = rounded(lockedInstallments.reduce((sum, installment) => sum + installment.amount, 0))
+  const updateInstallment = (index: number, patch: Partial<Installment>) => setInstallments(current => current.map((item, itemIndex) => itemIndex === index && !item.locked ? { ...item, ...patch } : item))
 
   const beginCreate = () => {
     const fresh = { description: '', supplierId: '', orderId: '', budgetItemId: '', method: 'A combinar', total: 0, count: 1, firstDue: today() }
@@ -87,7 +99,10 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
     const first = group[0]
     if (!first) return
     setForm({ description: first.description, supplierId: first.supplier?.id ?? '', orderId: first.order_id ?? '', budgetItemId: first.budget_item_id ?? '', method: first.payment_method ?? 'A combinar', total: rounded(group.reduce((sum, item) => sum + Number(item.amount), 0)), count: group.length, firstDue: first.due_date ?? today() })
-    setInstallments(group.map(item => ({ id: item.id, due_date: item.due_date ?? today(), amount: Number(item.amount) })))
+    setInstallments(group.map(item => {
+      const locked = Number(item.paid_amount) > 0 || !['open', 'overdue'].includes(item.status)
+      return { id: locked ? item.id : undefined, due_date: item.due_date ?? today(), amount: Number(item.amount), locked }
+    }))
     setEditingGroupId(selected.group_id)
     setSelected(null)
     setOpen(true)
@@ -96,6 +111,7 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
   const save = async (event: FormEvent) => {
     event.preventDefault()
     if (!supabase || saving) return
+    if (installments.length !== form.count) { show('Clique em “Redistribuir parcelas” para aplicar a nova quantidade.', 'error'); return }
     if (!totalsMatch) { show('A soma das parcelas deve ser igual ao valor total.', 'error'); return }
     setSaving(true)
     const { error } = editingGroupId
@@ -148,14 +164,17 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
         {selectedOrder && <label className="field span-2">Item do pedido<select required value={form.budgetItemId} onChange={event => setForm({ ...form, budgetItemId: event.target.value })}><option value="">Selecione o item</option>{selectedOrder.order_items.map(item => <option key={item.id} value={item.budget_item_id}>{itemLabel(item.snapshot)}</option>)}</select></label>}
         <label className="field">Forma de pagamento<input required value={form.method} onChange={event => setForm({ ...form, method: event.target.value })} /></label>
         <label className="field">Valor total<DecimalInput value={form.total} decimalScale={2} onValueChange={value => setForm({ ...form, total: value })} /></label>
-        <label className="field">Parcelas<input type="number" min="1" step="1" value={form.count} onChange={event => setForm({ ...form, count: Math.max(1, Number(event.target.value) || 1) })} /></label>
+        <label className="field">Parcelas<input type="number" min={Math.max(1, lockedInstallments.length)} step="1" value={form.count} onChange={event => setForm({ ...form, count: Math.max(Math.max(1, lockedInstallments.length), Number(event.target.value) || 1) })} /></label>
         <label className="field">Primeiro vencimento<input type="date" value={form.firstDue} onChange={event => setForm({ ...form, firstDue: event.target.value })} /></label>
-        <button type="button" className="button secondary span-2" onClick={() => setInstallments(createInstallments(form.total, form.count, form.firstDue))}>Gerar parcelas</button>
+        <button type="button" className="button secondary span-2" onClick={() => {
+          if (form.total < lockedTotal) { show('O valor total não pode ser menor que as parcelas já pagas.', 'error'); return }
+          setInstallments(redistributeInstallments(form.total, form.count, form.firstDue, lockedInstallments))
+        }}>Redistribuir parcelas</button>
         <div className="manual-installments span-2">
           {installments.map((installment, index) => <div key={index}>
-            <b>{index + 1}/{installments.length}</b>
-            <input aria-label={`Vencimento parcela ${index + 1}`} type="date" value={installment.due_date} onChange={event => updateInstallment(index, { due_date: event.target.value })} />
-            <DecimalInput value={installment.amount} decimalScale={2} onValueChange={value => updateInstallment(index, { amount: value })} />
+            <b>{index + 1}/{installments.length}{installment.locked ? ' · pago' : ''}</b>
+            <input aria-label={`Vencimento parcela ${index + 1}`} type="date" disabled={installment.locked} value={installment.due_date} onChange={event => updateInstallment(index, { due_date: event.target.value })} />
+            <DecimalInput value={installment.amount} decimalScale={2} disabled={installment.locked} onValueChange={value => updateInstallment(index, { amount: value })} />
           </div>)}
           <div className="installments-total"><span>Total das parcelas</span><strong>{money.format(installmentsTotal)}</strong>{!totalsMatch && <small>Precisa somar {money.format(rounded(form.total))}.</small>}</div>
         </div>
@@ -163,6 +182,6 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
       <footer><button type="button" className="button secondary" onClick={() => { setOpen(false); setEditingGroupId(null) }}>Cancelar</button><button className="button primary" disabled={saving || form.total <= 0 || !totalsMatch}>{saving ? 'Salvando...' : editingGroupId ? 'Salvar alterações' : 'Salvar conta e parcelas'}</button></footer>
     </form></div>}
 
-    {selected && <div className="dialog-backdrop"><div className="dialog"><header><div><span className="eyebrow">Parcela {selected.installment}/{selected.installment_count}</span><h2>{selected.description}</h2><p>{selected.supplier?.name ?? selected.purchase?.supplier?.name ?? 'Fornecedor não informado'} · Vencimento: {formatDate(selected.due_date)} · {money.format(Number(selected.amount))}{selected.order ? ` · ${selected.order.display_number}${selected.budget_item ? ` · ${itemLabel(selected.budget_item)}` : ''}` : ''}</p></div><button className="icon-button" onClick={() => setSelected(null)}><X /></button></header><footer><button className="button primary" disabled={Number(selected.paid_amount) > 0 || ['settled','cancelled'].includes(selected.status)} onClick={beginEdit}>Editar conta e parcelas</button>{canCancel && <button className="button danger" onClick={() => void cancel()}><Trash2 /> Excluir lançamento</button>}<button className="button secondary" onClick={() => setSelected(null)}>Fechar</button></footer></div></div>}
+    {selected && <div className="dialog-backdrop"><div className="dialog"><header><div><span className="eyebrow">Parcela {selected.installment}/{selected.installment_count}</span><h2>{selected.description}</h2><p>{selected.supplier?.name ?? selected.purchase?.supplier?.name ?? 'Fornecedor não informado'} · Vencimento: {formatDate(selected.due_date)} · {money.format(Number(selected.amount))}{selected.order ? ` · ${selected.order.display_number}${selected.budget_item ? ` · ${itemLabel(selected.budget_item)}` : ''}` : ''}</p></div><button className="icon-button" onClick={() => setSelected(null)}><X /></button></header><footer><button className="button primary" disabled={selected.status === 'cancelled'} onClick={beginEdit}>Editar conta e parcelas</button>{canCancel && <button className="button danger" onClick={() => void cancel()}><Trash2 /> Excluir lançamento</button>}<button className="button secondary" onClick={() => setSelected(null)}>Fechar</button></footer></div></div>}
   </>
 }
