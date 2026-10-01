@@ -7,6 +7,8 @@ import { supabase } from '../lib/supabase'
 
 type Supplier = { id: string; name: string }
 type Installment = { due_date: string; amount: number }
+type OrderItem = { id: string; budget_item_id: string; snapshot: { description?: string; environment?: string | null } }
+type Order = { id: string; display_number: string; client: { name: string } | null; order_items: OrderItem[] }
 type Payable = {
   id: string; group_id: string; installment: number; installment_count: number
   description: string; due_date: string | null; amount: number; paid_amount: number
@@ -14,11 +16,15 @@ type Payable = {
   order_id: string | null; budget_item_id: string | null
   supplier: { name: string } | null
   purchase: { display_number: string; supplier: { name: string } | null } | null
+  order: { display_number: string; client: { name: string } | null } | null
+  budget_item: { description: string; environment: string | null } | null
 }
 
 const today = () => new Date().toISOString().slice(0, 10)
 const formatDate = (value: string | null) => value ? new Date(`${value}T12:00:00`).toLocaleDateString('pt-BR') : 'Sem vencimento'
 const rounded = (value: number) => Math.round((Number(value) || 0) * 100) / 100
+const statusLabel: Record<string, string> = { open: 'Em aberto', partial: 'Parcialmente pago', settled: 'Pago', overdue: 'Em atraso', cancelled: 'Cancelado', reversed: 'Estornado' }
+const itemLabel = (item: { description?: string; environment?: string | null }) => item.environment?.trim() || item.description || 'Item sem descrição'
 const createInstallments = (total: number, count: number, firstDue: string): Installment[] => {
   const safeCount = Math.max(1, Math.trunc(count) || 1)
   const commonValue = rounded(total / safeCount)
@@ -33,22 +39,25 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
   const { show } = useToast()
   const [items, setItems] = useState<Payable[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
+  const [orders, setOrders] = useState<Order[]>([])
   const [search, setSearch] = useState('')
   const [open, setOpen] = useState(false)
   const [selected, setSelected] = useState<Payable | null>(null)
   const [saving, setSaving] = useState(false)
-  const [form, setForm] = useState({ description: '', supplierId: '', method: 'A combinar', total: 0, count: 1, firstDue: today() })
+  const [form, setForm] = useState({ description: '', supplierId: '', orderId: '', budgetItemId: '', method: 'A combinar', total: 0, count: 1, firstDue: today() })
   const [installments, setInstallments] = useState<Installment[]>([])
 
   const load = useCallback(async () => {
     if (!supabase) return
-    const [payablesResult, suppliersResult] = await Promise.all([
-      supabase.from('payables').select('id,group_id,installment,installment_count,description,due_date,amount,paid_amount,status,payment_method,purchase_id,order_id,budget_item_id,supplier:suppliers!payables_supplier_id_fkey(name),purchase:purchases!payables_purchase_id_fkey(display_number,supplier:suppliers!purchases_supplier_id_fkey(name))').eq('organization_id', organizationId).order('due_date'),
+    const [payablesResult, suppliersResult, ordersResult] = await Promise.all([
+      supabase.from('payables').select('id,group_id,installment,installment_count,description,due_date,amount,paid_amount,status,payment_method,purchase_id,order_id,budget_item_id,supplier:suppliers!payables_supplier_id_fkey(name),purchase:purchases!payables_purchase_id_fkey(display_number,supplier:suppliers!purchases_supplier_id_fkey(name)),order:orders!payables_order_id_fkey(display_number,client:clients!orders_client_id_fkey(name)),budget_item:budget_items!payables_budget_item_id_fkey(description,environment)').eq('organization_id', organizationId).order('due_date'),
       supabase.from('suppliers').select('id,name').eq('organization_id', organizationId).eq('active', true).order('name'),
+      supabase.from('orders').select('id,display_number,client:clients!orders_client_id_fkey(name),order_items:order_items!order_items_order_id_fkey(id,budget_item_id,snapshot)').eq('organization_id', organizationId).neq('status', 'cancelled').order('number', { ascending: false }),
     ])
     if (payablesResult.error) show('Não foi possível carregar as contas a pagar.', 'error')
     setItems((payablesResult.data ?? []) as unknown as Payable[])
     setSuppliers((suppliersResult.data ?? []) as Supplier[])
+    setOrders((ordersResult.data ?? []) as unknown as Order[])
   }, [organizationId, show])
 
   useEffect(() => { void load() }, [load])
@@ -56,7 +65,7 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
   const visible = useMemo(() => items.filter(item => {
     const term = search.trim().toLowerCase()
     const dueMatchesPeriod = !period || (item.due_date?.startsWith(period) ?? false)
-    return dueMatchesPeriod && (!term || `${item.description} ${item.supplier?.name ?? ''} ${item.purchase?.supplier?.name ?? ''}`.toLowerCase().includes(term))
+    return dueMatchesPeriod && (!term || `${item.description} ${item.supplier?.name ?? ''} ${item.purchase?.supplier?.name ?? ''} ${item.order?.display_number ?? ''} ${item.budget_item?.description ?? ''}`.toLowerCase().includes(term))
   }), [items, period, search])
 
   const installmentsTotal = rounded(installments.reduce((sum, item) => sum + item.amount, 0))
@@ -64,7 +73,7 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
   const updateInstallment = (index: number, patch: Partial<Installment>) => setInstallments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item))
 
   const beginCreate = () => {
-    const fresh = { description: '', supplierId: '', method: 'A combinar', total: 0, count: 1, firstDue: today() }
+    const fresh = { description: '', supplierId: '', orderId: '', budgetItemId: '', method: 'A combinar', total: 0, count: 1, firstDue: today() }
     setForm(fresh)
     setInstallments(createInstallments(fresh.total, fresh.count, fresh.firstDue))
     setOpen(true)
@@ -75,9 +84,9 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
     if (!supabase || saving) return
     if (!totalsMatch) { show('A soma das parcelas deve ser igual ao valor total.', 'error'); return }
     setSaving(true)
-    const { error } = await supabase.rpc('create_manual_payable_group', {
+    const { error } = await supabase.rpc('create_manual_payable_group_with_link', {
       org_id: organizationId, payable_description: form.description, payable_supplier_id: form.supplierId,
-      payable_method: form.method, installments_json: installments,
+      payable_order_id: form.orderId || null, payable_budget_item_id: form.budgetItemId || null, payable_method: form.method, installments_json: installments,
     })
     setSaving(false)
     if (error) { show('Não foi possível salvar. Confira fornecedor, vencimentos e valores.', 'error'); return }
@@ -96,6 +105,7 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
   }
 
   const canCancel = Boolean(selected && !selected.purchase_id && !selected.order_id && !selected.budget_item_id && Number(selected.paid_amount) === 0 && ['open', 'overdue'].includes(selected.status))
+  const selectedOrder = orders.find(order => order.id === form.orderId)
 
   return <>
     <section className="panel">
@@ -103,13 +113,13 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
         <label className="search"><Search /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar fornecedor ou lançamento" /></label>
         <button className="button primary" onClick={beginCreate}><Plus /> Nova conta a pagar</button>
       </div>
-      <div className="table-wrap"><table><thead><tr><th>Parcela / grupo</th><th>Compra / fornecedor</th><th>Vencimento</th><th>Valor / pago</th><th>Status</th></tr></thead><tbody>
+      <div className="table-wrap"><table><thead><tr><th>Parcelas</th><th>Pedido / fornecedor</th><th>Vencimento</th><th>Valor / pago</th><th>Status</th></tr></thead><tbody>
         {visible.map(item => <tr className="clickable-row" key={item.id} onClick={() => setSelected(item)}>
-          <td><strong>Parcela {item.installment}/{item.installment_count}</strong><small>{item.group_id ? `Grupo ${item.group_id.slice(0, 8)}` : 'Sem grupo'}</small></td>
-          <td>{item.purchase?.display_number ? <><strong>{item.purchase.display_number}</strong><small>{item.purchase.supplier?.name ?? item.supplier?.name ?? 'Fornecedor não informado'}</small></> : <>{item.supplier?.name ?? 'Fornecedor não informado'}</>}</td>
+          <td><strong>Parcela {item.installment}/{item.installment_count}</strong><small>{item.installment_count > 1 ? `${item.installment_count} parcelas vinculadas` : 'Lançamento único'}</small></td>
+          <td>{item.purchase?.display_number ? <><strong>{item.purchase.display_number}</strong><small>{item.purchase.supplier?.name ?? item.supplier?.name ?? 'Fornecedor não informado'}</small></> : item.order?.display_number ? <><strong>{item.order.display_number}{item.budget_item ? ` · ${itemLabel(item.budget_item)}` : ''}</strong><small>{item.supplier?.name ?? 'Fornecedor não informado'}</small></> : <>{item.supplier?.name ?? 'Fornecedor não informado'}</>}</td>
           <td>{formatDate(item.due_date)}</td>
           <td><strong>{money.format(Number(item.amount))}</strong><small>Pago: {money.format(Number(item.paid_amount))}</small></td>
-          <td>{item.status}</td>
+          <td>{statusLabel[item.status] ?? item.status}</td>
         </tr>)}
         {!visible.length && <tr><td colSpan={5} className="empty">Nenhuma conta a pagar encontrada.</td></tr>}
       </tbody></table></div>
@@ -120,6 +130,8 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
       <div className="form-grid">
         <label className="field span-2">Descrição<input required value={form.description} onChange={event => setForm({ ...form, description: event.target.value })} placeholder="Ex.: Tecidos para cabeceira" /></label>
         <label className="field span-2">Fornecedor<select required value={form.supplierId} onChange={event => setForm({ ...form, supplierId: event.target.value })}><option value="">Selecione o fornecedor</option>{suppliers.map(supplier => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}</select></label>
+        <label className="field span-2">Vincular a pedido (opcional)<select value={form.orderId} onChange={event => setForm({ ...form, orderId: event.target.value, budgetItemId: '' })}><option value="">Sem vínculo com pedido</option>{orders.map(order => <option key={order.id} value={order.id}>{order.display_number} · {order.client?.name ?? 'Cliente não informado'}</option>)}</select><small>O vínculo permite acompanhar o custo real e o resultado da venda.</small></label>
+        {selectedOrder && <label className="field span-2">Item do pedido<select required value={form.budgetItemId} onChange={event => setForm({ ...form, budgetItemId: event.target.value })}><option value="">Selecione o item</option>{selectedOrder.order_items.map(item => <option key={item.id} value={item.budget_item_id}>{itemLabel(item.snapshot)}</option>)}</select></label>}
         <label className="field">Forma de pagamento<input required value={form.method} onChange={event => setForm({ ...form, method: event.target.value })} /></label>
         <label className="field">Valor total<DecimalInput value={form.total} decimalScale={2} onValueChange={value => setForm({ ...form, total: value })} /></label>
         <label className="field">Parcelas<input type="number" min="1" step="1" value={form.count} onChange={event => setForm({ ...form, count: Math.max(1, Number(event.target.value) || 1) })} /></label>
@@ -137,6 +149,6 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
       <footer><button type="button" className="button secondary" onClick={() => setOpen(false)}>Cancelar</button><button className="button primary" disabled={saving || form.total <= 0 || !totalsMatch}>{saving ? 'Salvando...' : 'Salvar conta e parcelas'}</button></footer>
     </form></div>}
 
-    {selected && <div className="dialog-backdrop"><div className="dialog"><header><div><span className="eyebrow">Parcela {selected.installment}/{selected.installment_count}</span><h2>{selected.description}</h2><p>{selected.supplier?.name ?? selected.purchase?.supplier?.name ?? 'Fornecedor não informado'} · Vencimento: {formatDate(selected.due_date)} · {money.format(Number(selected.amount))}</p></div><button className="icon-button" onClick={() => setSelected(null)}><X /></button></header><footer>{canCancel && <button className="button danger" onClick={() => void cancel()}><Trash2 /> Excluir lançamento</button>}<button className="button secondary" onClick={() => setSelected(null)}>Fechar</button></footer></div></div>}
+    {selected && <div className="dialog-backdrop"><div className="dialog"><header><div><span className="eyebrow">Parcela {selected.installment}/{selected.installment_count}</span><h2>{selected.description}</h2><p>{selected.supplier?.name ?? selected.purchase?.supplier?.name ?? 'Fornecedor não informado'} · Vencimento: {formatDate(selected.due_date)} · {money.format(Number(selected.amount))}{selected.order ? ` · ${selected.order.display_number}${selected.budget_item ? ` · ${itemLabel(selected.budget_item)}` : ''}` : ''}</p></div><button className="icon-button" onClick={() => setSelected(null)}><X /></button></header><footer>{canCancel && <button className="button danger" onClick={() => void cancel()}><Trash2 /> Excluir lançamento</button>}<button className="button secondary" onClick={() => setSelected(null)}>Fechar</button></footer></div></div>}
   </>
 }
