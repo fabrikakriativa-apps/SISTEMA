@@ -632,7 +632,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <td>
 <span className="badge">{item.affects_total?'Item principal':'Opção'}</span>
 </td>
-{canEditItems&&<td className="item-actions"><button type="button" className="button secondary compact-button" disabled={itemDuplicatingId!==null} onClick={event=>{event.stopPropagation();void duplicateItem(item)}}><Copy/>{itemDuplicatingId===item.id?'Duplicando…':'Duplicar'}</button><button type="button" className="button danger compact-button" disabled={itemDuplicatingId!==null} onClick={event=>{event.stopPropagation();setItemPendingDelete(item)}}><Trash2/>Excluir</button></td>}
+{canEditItems&&<td className="item-actions"><div className="item-action-list"><button type="button" className="button secondary compact-button" disabled={itemDuplicatingId!==null} onClick={event=>{event.stopPropagation();void duplicateItem(item)}}><Copy/>{itemDuplicatingId===item.id?'Duplicando…':'Duplicar'}</button><button type="button" className="button item-delete-button" aria-label={`Excluir ${item.description}`} title="Excluir item" disabled={itemDuplicatingId!==null} onClick={event=>{event.stopPropagation();setItemPendingDelete(item)}}><Trash2/></button></div></td>}
 </tr>)}</tbody>
 </table>
 </div>:<div className="empty-state compact">
