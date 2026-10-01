@@ -4,6 +4,7 @@ import { Page } from '../components/Page'
 import { useAccess } from '../components/AuthorizedAccess'
 import { useToast } from '../components/ToastProvider'
 import { money } from '../lib/format'
+import { DecimalInput } from '../components/DecimalInput'
 import { supabase } from '../lib/supabase'
 import { composedItemCost, marginFromSalePrice, salePriceFromCostAndMargin } from '../lib/budgetItems'
 import { extractPdfText } from '../lib/pdfText'
@@ -18,7 +19,6 @@ import { standardItemPaymentOptions, type ItemPaymentOption } from '../lib/payme
 import { SearchSelect } from '../components/SearchSelect'
 import { budgetDocumentPath } from '../lib/documents'
 import { confectionSubitems } from '../domain'
-import { DecimalInput } from '../components/DecimalInput'
 
 type Budget = {
   id:string; organization_id:string; number:number; display_number:string; current_revision:number; client_id:string|null
@@ -574,7 +574,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <div>
 <dt>Desconto</dt>
 <dd>
-<input type="number" min="0" step="0.01" value={form.discount} onChange={e=>setForm({...form,discount:Number(e.target.value)})}/>
+<DecimalInput value={form.discount} decimalScale={2} onValueChange={discount=>setForm({...form,discount})}/>
 </dd>
 </div>
 <div className="total">
