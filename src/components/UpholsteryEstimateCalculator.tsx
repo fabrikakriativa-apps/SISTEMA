@@ -2,6 +2,7 @@ import { Plus, X } from 'lucide-react'
 import { DecimalInput } from './DecimalInput'
 import { calculateUpholsteryEstimate, foamDensityLabels, type UpholsteryEstimate, type UpholsteryPiece } from '../lib/upholsteryEstimate'
 import { money } from '../lib/format'
+import './UpholsteryEstimateCalculator.css'
 
 type Props={estimate:UpholsteryEstimate;onChange:(estimate:UpholsteryEstimate)=>void;onApplyValue:(value:number)=>void;onInsertDescription:(description:string)=>void}
 
