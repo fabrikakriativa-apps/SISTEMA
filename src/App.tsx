@@ -19,9 +19,10 @@ const ProviderWorkload=lazy(()=>import('./pages/ProviderWorkload').then(module=>
 const Administration=lazy(()=>import('./pages/Administration').then(module=>({default:module.Administration})))
 
 export function App() {
-  const [active, setActive] = useState<ModuleKey>(()=>readRoute(window.location.hash).module)
-  useEffect(()=>{const sync=()=>setActive(readRoute(window.location.hash).module);window.addEventListener('hashchange',sync);return()=>window.removeEventListener('hashchange',sync)},[])
-  const navigate=(module:ModuleKey)=>navigateTo(module)
+  const [route,setRoute] = useState(()=>readRoute(window.location.hash))
+  const active=route.module
+  useEffect(()=>{const sync=()=>setRoute(readRoute(window.location.hash));window.addEventListener('hashchange',sync);return()=>window.removeEventListener('hashchange',sync)},[])
+  const navigate=(module:ModuleKey,recordId?:string|null)=>navigateTo(module,recordId)
   const content = active === 'inicio' ? <Dashboard navigate={navigate}/>
     : active === 'prospeccao' ? <Prospecting/>
     : active === 'clientes' ? <Clients/>
@@ -29,7 +30,7 @@ export function App() {
     : active === 'orcamentos' ? <Budgets/>
     : active === 'pedidos' ? <Orders/>
     : active === 'financeiro' ? <Finance mode="overview" navigate={navigate}/>
-    : active === 'financeiro-lancamentos' ? <Finance mode="entries" navigate={navigate}/>
+    : active === 'financeiro-lancamentos' ? <Finance mode="entries" filter={route.recordId} navigate={navigate}/>
     : active === 'compras' ? <PurchasesConnected/>
     : active === 'prestadores' ? <ProviderWorkload/>
     : active === 'fornecedores' ? <Suppliers/>
