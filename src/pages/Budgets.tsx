@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { ArrowLeft, CalendarPlus, Copy, FileText, ImagePlus, Plus, Search, X } from 'lucide-react'
+import { ArrowLeft, CalendarPlus, Copy, FileText, ImagePlus, Plus, Search, Trash2, X } from 'lucide-react'
 import { Page } from '../components/Page'
 import { useAccess } from '../components/AuthorizedAccess'
 import { useToast } from '../components/ToastProvider'
@@ -208,7 +208,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   const [pdfReading,setPdfReading]=useState(false),[pdfDragging,setPdfDragging]=useState(false),[pdfResult,setPdfResult]=useState<ParsedManufacturerDocument|null>(null),[pdfName,setPdfName]=useState(''),[pdfCandidate,setPdfCandidate]=useState(0)
   const [pdfFile,setPdfFile]=useState<File|null>(null),[attachments,setAttachments]=useState<Attachment[]>([]),[itemPhotos,setItemPhotos]=useState<ItemPhoto[]>([]),[photoUploading,setPhotoUploading]=useState(false)
   const [pdfRows,setPdfRows]=useState<PdfRow[]>([])
-  const [confirmDelete,setConfirmDelete]=useState(false)
+  const [itemPendingDelete,setItemPendingDelete]=useState<BudgetItem|null>(null)
   const [previewOpen,setPreviewOpen]=useState(false)
   const [workflowBusy,setWorkflowBusy]=useState(false),[confirmApproval,setConfirmApproval]=useState(false)
   const [pendingStatus,setPendingStatus]=useState<BudgetStatus|null>(null),[statusReason,setStatusReason]=useState('')
@@ -221,7 +221,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   const master=availableClients.find(item=>item.id===client?.master_client_id)
   const masterAddress=master?[master.address,master.city].filter(Boolean).join(' · '):''
   const selectedFormKey=families.find(family=>family.id===itemForm.family_id)?.form_key
-  const confectionSelected=selectedFormKey==='confection'
+  const confectionSelected=selectedFormKey==='confection'&&itemForm.confection_subitem!=='Cabeceira'
   const confectionFamily=families.find(family=>family.form_key==='confection')
   const selectItemFamily=(value:string)=>{if(value==='confection-headboard'&&confectionFamily){setItemForm(current=>({...current,family_id:confectionFamily.id,confection_subitem:'Cabeceira'}));return}setItemForm(current=>({...current,family_id:value,confection_subitem:''}))}
   const stateLabel=saveState==='saving'?'Salvando…':saveState==='waiting'?'Alterações pendentes':saveState==='error'?'Falha ao salvar':'Rascunho sincronizado'
@@ -261,7 +261,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     setNewClientSaving(false)
   }
   const openItem=async(item?:BudgetItem)=>{
-    setPdfResult(null);setPdfName('');setPdfCandidate(0);setPdfRows([]);setConfirmDelete(false)
+    setPdfResult(null);setPdfName('');setPdfCandidate(0);setPdfRows([])
     setSupplyLines([]);setLaborLines([]);setPaymentOptions([]);setItemPhotos([])
     if(!item){setItemForm(newBlankItem());setPaymentOptions(standardItemPaymentOptions());setItemOpen(true);return}
     const c=item.configuration??{}
@@ -373,12 +373,12 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     }
     setItemSaving(false)
   }
-  const deleteItem=async()=>{
-    if(!supabase||!itemForm.id||itemSaving)return
+  const deleteItem=async(item:BudgetItem)=>{
+    if(!supabase||itemSaving)return
     setItemSaving(true)
-    const {error}=await supabase.from('budget_items').delete().eq('id',itemForm.id).eq('organization_id',budgetOrganizationId)
+    const {error}=await supabase.from('budget_items').delete().eq('id',item.id).eq('organization_id',budgetOrganizationId)
     if(error)show('Não foi possível excluir o item.','error')
-    else {setItemOpen(false);await loadItems();const {data}=await supabase.from('budgets').select(columns).eq('id',budget.id).single();if(data)setBudget(data as unknown as Budget);show('Item excluído e total atualizado.','success')}
+    else {setItemPendingDelete(null);await loadItems();const {data}=await supabase.from('budgets').select(columns).eq('id',budget.id).single();if(data)setBudget(data as unknown as Budget);show('Item excluído e total atualizado.','success')}
     setItemSaving(false)
   }
   const duplicateItem=async(item:BudgetItem)=>{
@@ -633,7 +633,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <td>
 <span className="badge">{item.affects_total?'Item principal':'Opção'}</span>
 </td>
-{canEditItems&&<td className="item-actions"><button type="button" className="button secondary compact-button" disabled={itemDuplicatingId!==null} onClick={event=>{event.stopPropagation();void duplicateItem(item)}}><Copy/>{itemDuplicatingId===item.id?'Duplicando…':'Duplicar'}</button></td>}
+{canEditItems&&<td className="item-actions"><button type="button" className="button secondary compact-button" disabled={itemDuplicatingId!==null} onClick={event=>{event.stopPropagation();void duplicateItem(item)}}><Copy/>{itemDuplicatingId===item.id?'Duplicando…':'Duplicar'}</button><button type="button" className="button danger compact-button" disabled={itemDuplicatingId!==null} onClick={event=>{event.stopPropagation();setItemPendingDelete(item)}}><Trash2/>Excluir</button></td>}
 </tr>)}</tbody>
 </table>
 </div>:<div className="empty-state compact">
@@ -641,6 +641,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <strong>Nenhum item adicionado</strong>
 <span>Os dados gerais já são salvos automaticamente como rascunho.</span>
 </div>}</section>
+    {itemPendingDelete&&<div className="dialog-backdrop"><div className="dialog"><header><div><span className="eyebrow">Excluir item</span><h2>Excluir “{itemPendingDelete.description}”?</h2><p>Os valores do documento serão recalculados. Esta ação não pode ser desfeita.</p></div><button type="button" className="icon-button" aria-label="Fechar" onClick={()=>setItemPendingDelete(null)}><X/></button></header><footer><button type="button" className="button secondary" disabled={itemSaving} onClick={()=>setItemPendingDelete(null)}>Manter item</button><button type="button" className="button danger" disabled={itemSaving} onClick={()=>void deleteItem(itemPendingDelete)}><Trash2/>{itemSaving?'Excluindo…':'Excluir item'}</button></footer></div></div>}
     {itemOpen&&<div className="dialog-backdrop">
 <form className="dialog item-dialog" onSubmit={saveItem}>
 <header>
@@ -684,7 +685,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 </label>
 <label className="field">Ambiente<input value={itemForm.environment} onChange={e=>setItemForm({...itemForm,environment:e.target.value})} placeholder="Ex.: Sala"/>
 </label>{confectionSelected&&<label className="field span-2">Subitem de confecção<select required value={itemForm.confection_subitem} onChange={e=>setItemForm({...itemForm,confection_subitem:e.target.value})}>
-<option value="">Selecione</option>{confectionSubitems.map(subitem=><option key={subitem} value={subitem}>{subitem}</option>)}</select>
+<option value="">Selecione</option>{confectionSubitems.filter(subitem=>subitem!=='Cabeceira').map(subitem=><option key={subitem} value={subitem}>{subitem}</option>)}</select>
 <small>O detalhamento comercial continua na descrição do item.</small>
 </label>}<label className="field span-2">Descrição para o cliente<textarea required value={itemForm.description} onChange={e=>setItemForm({...itemForm,description:e.target.value})} placeholder="Descreva modelo, material, medidas e acabamento"/>
 </label>
@@ -714,14 +715,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <small className="field-note">Margem e preço são sincronizados automaticamente.</small>
 </label></div></>}
 <ItemPaymentOptions saleTotal={itemForm.sale_total} options={paymentOptions} onChange={setPaymentOptions}/>
-</div>{confirmDelete&&<div className="inline-confirm">
-<div>
-<strong>Excluir este item?</strong>
-<span>O total do orçamento será recalculado automaticamente.</span>
-</div>
-<button type="button" className="button secondary" onClick={()=>setConfirmDelete(false)}>Manter item</button>
-<button type="button" className="button danger" disabled={itemSaving} onClick={()=>void deleteItem()}>Confirmar exclusão</button>
-</div>}<footer>{itemForm.id&&!confirmDelete&&<button type="button" className="button danger footer-left" disabled={itemSaving} onClick={()=>setConfirmDelete(true)}>Excluir item</button>}<button type="button" className="button secondary" onClick={()=>setItemOpen(false)}>Cancelar</button>
+</div><footer><button type="button" className="button secondary" onClick={()=>setItemOpen(false)}>Cancelar</button>
 <button className="button primary" disabled={itemSaving||pdfReading}>{itemSaving?'Salvando…':'Salvar apenas este item'}</button>
 </footer>
 </form>
