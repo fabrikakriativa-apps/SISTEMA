@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calculateUpholsteryEstimate, type UpholsteryEstimate } from './upholsteryEstimate'
+import { calculateUpholsteryEstimate, upholsteryDescription, type UpholsteryEstimate } from './upholsteryEstimate'
 
 describe('calculateUpholsteryEstimate',()=>{
   it('calculates foam and combines only pieces with the same fabric reference',()=>{
@@ -14,5 +14,10 @@ describe('calculateUpholsteryEstimate',()=>{
     expect(result.fabric_groups).toEqual([{reference:'Linho',meters:3.5,piece_count:2},{reference:'Veludo',meters:1.5,piece_count:1}])
     expect(result.base_total).toBe(1296)
     expect(result.sale_total).toBe(1944)
+    expect(upholsteryDescription(estimate,result)).toContain('Item: Cabeceira')
+    expect(upholsteryDescription(estimate,result)).toContain('Medidas aproximadas: 2 m x 1 m x 0,03 m')
+    expect(upholsteryDescription(estimate,result)).toContain('Espuma: D28')
+    expect(upholsteryDescription(estimate,result)).toContain('Tecido: Linho')
+    expect(upholsteryDescription(estimate,result)).not.toContain('metragem estimada')
   })
 })

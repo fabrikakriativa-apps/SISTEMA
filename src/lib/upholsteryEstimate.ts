@@ -63,7 +63,11 @@ export function calculateUpholsteryEstimate(estimate:UpholsteryEstimate):Upholst
 }
 
 export function upholsteryDescription(estimate:UpholsteryEstimate,result=calculateUpholsteryEstimate(estimate)){
-  const pieces=result.pieces.map(piece=>`${piece.name || 'Peça'}: ${piece.width.toLocaleString('pt-BR')} m × ${piece.height.toLocaleString('pt-BR')} m · espuma ${foamDensityLabels[piece.density]}, ${piece.thickness.toLocaleString('pt-BR')} cm`).join('\n')
-  const fabrics=result.fabric_groups.map(group=>`Tecido: ${group.reference} — metragem estimada ${group.meters.toLocaleString('pt-BR')} m`).join('\n')
-  return [pieces,fabrics].filter(Boolean).join('\n')
+  const meter=(value:number)=>value.toLocaleString('pt-BR',{maximumFractionDigits:3})
+  return result.pieces.map(piece=>[
+    `Item: ${piece.name.trim()||'Peça'}`,
+    `Medidas aproximadas: ${meter(piece.width)} m x ${meter(piece.height)} m x ${meter(piece.thickness/100)} m`,
+    `Espuma: ${foamDensityLabels[piece.density]}`,
+    piece.fabric_reference.trim()?`Tecido: ${piece.fabric_reference.trim()}`:''
+  ].filter(Boolean).join('\n')).join('\n\n')
 }

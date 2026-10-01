@@ -1,6 +1,6 @@
 import { Plus, X } from 'lucide-react'
 import { DecimalInput } from './DecimalInput'
-import { calculateUpholsteryEstimate, foamDensityLabels, type UpholsteryEstimate, type UpholsteryPiece } from '../lib/upholsteryEstimate'
+import { calculateUpholsteryEstimate, foamDensityLabels, upholsteryDescription, type UpholsteryEstimate, type UpholsteryPiece } from '../lib/upholsteryEstimate'
 import { money } from '../lib/format'
 import './UpholsteryEstimateCalculator.css'
 
@@ -11,7 +11,7 @@ const emptyPiece=():UpholsteryPiece=>({id:crypto.randomUUID(),name:'Nova peça',
 export function UpholsteryEstimateCalculator({estimate,onChange,onApplyValue,onInsertDescription}:Props){
   const result=calculateUpholsteryEstimate(estimate)
   const updatePiece=(id:string,change:Partial<UpholsteryPiece>)=>onChange({...estimate,pieces:estimate.pieces.map(piece=>piece.id===id?{...piece,...change}:piece)})
-  const description=result.pieces.length?result.pieces.map(piece=>`${piece.name || 'Peça'}: ${piece.width.toLocaleString('pt-BR')} m × ${piece.height.toLocaleString('pt-BR')} m · espuma ${foamDensityLabels[piece.density]}, ${piece.thickness.toLocaleString('pt-BR')} cm`).join('\n')+(result.fabric_groups.length?`\n${result.fabric_groups.map(group=>`Tecido: ${group.reference} — metragem estimada ${group.meters.toLocaleString('pt-BR')} m`).join('\n')}`:''):''
+  const description=upholsteryDescription(estimate,result)
   return <section className="upholstery-calculator span-2">
     <header><div><h3>Calculador rápido de estofado</h3><p>Calcula o custo por m², a quantidade de espuma e a metragem de tecido. O tecido é incluído como valor separado, sem gerar lista de compras.</p></div><button type="button" className="button secondary compact-button" onClick={()=>onChange({...estimate,pieces:[...estimate.pieces,emptyPiece()]})}><Plus/>Adicionar peça</button></header>
     <div className="upholstery-piece-list">
