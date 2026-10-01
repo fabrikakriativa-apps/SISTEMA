@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { ArrowLeft, CalendarPlus, FileText, ImagePlus, Plus, Search, X } from 'lucide-react'
+import { ArrowLeft, CalendarPlus, Copy, FileText, ImagePlus, Plus, Search, X } from 'lucide-react'
 import { Page } from '../components/Page'
 import { useAccess } from '../components/AuthorizedAccess'
 import { useToast } from '../components/ToastProvider'
@@ -201,7 +201,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   const budgetOrganizationId=budget.organization_id
   const {show}=useToast()
   const canEditItems=budget.status==='draft'&&(access.role==='admin'||access.role==='comercial')
-  const [families,setFamilies]=useState<Family[]>([]),[items,setItems]=useState<BudgetItem[]>([]),[itemOpen,setItemOpen]=useState(false),[itemForm,setItemForm]=useState<ItemForm>(newBlankItem),[itemSaving,setItemSaving]=useState(false),[itemsLoading,setItemsLoading]=useState(true)
+  const [families,setFamilies]=useState<Family[]>([]),[items,setItems]=useState<BudgetItem[]>([]),[itemOpen,setItemOpen]=useState(false),[itemForm,setItemForm]=useState<ItemForm>(newBlankItem),[itemSaving,setItemSaving]=useState(false),[itemDuplicatingId,setItemDuplicatingId]=useState<string|null>(null),[itemsLoading,setItemsLoading]=useState(true)
   const [supplies,setSupplies]=useState<SupplyOption[]>([]),[supplyLines,setSupplyLines]=useState<SupplyLine[]>([])
   const [providers,setProviders]=useState<ProviderOption[]>([]),[laborLines,setLaborLines]=useState<LaborLine[]>([])
   const [paymentOptions,setPaymentOptions]=useState<ItemPaymentOption[]>([]),[itemPaymentOptions,setItemPaymentOptions]=useState<Record<string,ItemPaymentOption[]>>({})
@@ -380,6 +380,20 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     if(error)show('Não foi possível excluir o item.','error')
     else {setItemOpen(false);await loadItems();const {data}=await supabase.from('budgets').select(columns).eq('id',budget.id).single();if(data)setBudget(data as unknown as Budget);show('Item excluído e total atualizado.','success')}
     setItemSaving(false)
+  }
+  const duplicateItem=async(item:BudgetItem)=>{
+    if(!supabase||itemDuplicatingId)return
+    if(!canEditItems){show(budget.status!=="draft"?'Itens só podem ser alterados em orçamento rascunho.':'Seu perfil precisa ser Comercial ou Administrador para alterar itens.','error');return}
+    setItemDuplicatingId(item.id)
+    const {error}=await supabase.rpc('duplicate_budget_item',{org_id:budgetOrganizationId,source_budget_item_id:item.id})
+    if(error)show(errorMessage(error,'Não foi possível duplicar o item. Tente novamente.'),'error')
+    else {
+      await loadItems()
+      const {data}=await supabase.from('budgets').select(columns).eq('id',budget.id).single()
+      if(data)setBudget(data as unknown as Budget)
+      show('Item duplicado. Revise a cópia e informe a composição real quando necessário.','success')
+    }
+    setItemDuplicatingId(null)
   }
   const markSent=async()=>{
     if(!supabase||workflowBusy)return
@@ -601,6 +615,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <th>Custo</th>
 <th>Venda</th>
 <th>Apresentação</th>
+{canEditItems&&<th className="actions-column">Ações</th>}
 </tr>
 </thead>
 <tbody>{items.map(item=>
@@ -618,6 +633,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <td>
 <span className="badge">{item.affects_total?'Item principal':'Opção'}</span>
 </td>
+{canEditItems&&<td className="item-actions"><button type="button" className="button secondary compact-button" disabled={itemDuplicatingId!==null} onClick={event=>{event.stopPropagation();void duplicateItem(item)}}><Copy/>{itemDuplicatingId===item.id?'Duplicando…':'Duplicar'}</button></td>}
 </tr>)}</tbody>
 </table>
 </div>:<div className="empty-state compact">
