@@ -19,13 +19,14 @@ export function Dashboard({ navigate }: { navigate: (key: ModuleKey) => void }) 
     if (!supabase || !access) { setLoading(false); return }
     setLoading(true); setError('')
     const org = access.organizationId
+    const { error: overdueError } = await supabase.rpc('refresh_financial_overdues', { org_id: org })
     const [budgets, orders, receivables, events] = await Promise.all([
       supabase.from('budgets').select('status,total,document_type').eq('organization_id', org).limit(1000),
       supabase.from('orders').select('status').eq('organization_id', org).not('status', 'in', '(completed,cancelled)').limit(1000),
       supabase.from('receivables').select('status,amount,paid_amount,due_date').eq('organization_id', org).in('status', ['open', 'partial', 'overdue']).limit(1000),
       supabase.from('calendar_events').select('starts_at,cancelled_at,sync_status').eq('organization_id', org).gte('starts_at', new Date(new Date().setHours(0, 0, 0, 0)).toISOString()).limit(1000),
     ])
-    if ([budgets.error, orders.error, receivables.error, events.error].some(Boolean)) setError('Não foi possível atualizar todos os indicadores. Tente novamente.')
+    if (overdueError || [budgets.error, orders.error, receivables.error, events.error].some(Boolean)) setError('Não foi possível atualizar todos os indicadores. Tente novamente.')
     else setData({ budgets: (budgets.data ?? []) as DashboardBudget[], orders: (orders.data ?? []) as DashboardOrder[], receivables: (receivables.data ?? []) as DashboardReceivable[], events: (events.data ?? []) as DashboardEvent[] })
     setLoading(false)
   }, [access])

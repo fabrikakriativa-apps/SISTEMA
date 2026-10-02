@@ -41,10 +41,10 @@ const outstanding=(items:ForecastLine[])=>items.filter(item=>openStatuses.includ
 
 function FinancialOverview({navigate}:{navigate:(key:ModuleKey,recordId?:string|null)=>void}){
   const access=useAccess(),[data,setData]=useState<Forecast>(emptyForecast),[loading,setLoading]=useState(Boolean(supabase)),[error,setError]=useState('')
-  const load=useCallback(async()=>{if(!supabase||!access){setLoading(false);return}setLoading(true);setError('');const [receivable,payable]=await Promise.all([
+  const load=useCallback(async()=>{if(!supabase||!access){setLoading(false);return}setLoading(true);setError('');const {error:overdueError}=await supabase.rpc('refresh_financial_overdues',{org_id:access.organizationId});const [receivable,payable]=await Promise.all([
     supabase.from('receivables').select('due_date,amount,paid_amount,status').eq('organization_id',access.organizationId).in('status',openStatuses),
     supabase.from('payables').select('due_date,amount,paid_amount,status').eq('organization_id',access.organizationId).in('status',openStatuses),
-  ]);if(receivable.error||payable.error)setError('Não foi possível carregar a previsão financeira.');else setData({receivable:(receivable.data??[]) as ForecastLine[],payable:(payable.data??[]) as ForecastLine[]});setLoading(false)},[access])
+  ]);if(overdueError||receivable.error||payable.error)setError('Não foi possível carregar a previsão financeira.');else setData({receivable:(receivable.data??[]) as ForecastLine[],payable:(payable.data??[]) as ForecastLine[]});setLoading(false)},[access])
   useEffect(()=>{void load()},[load])
   const periods=useMemo(()=>{const now=new Date(),today=localDate(now),week=new Date(now);week.setDate(week.getDate()+6);const month=new Date(now.getFullYear(),now.getMonth()+1,0);const totalUntil=(items:ForecastLine[],end:string)=>outstanding(items.filter(item=>Boolean(item.due_date&&item.due_date>=today&&item.due_date<=end)))
     return [{key:'today',label:'Hoje',detail:now.toLocaleDateString('pt-BR',{day:'2-digit',month:'short'}),receivable:totalUntil(data.receivable,today),payable:totalUntil(data.payable,today)},{key:'week',label:'Próximos 7 dias',detail:`até ${localDate(week).split('-').reverse().slice(0,2).join('/')}`,receivable:totalUntil(data.receivable,localDate(week)),payable:totalUntil(data.payable,localDate(week))},{key:'month',label:'Mês atual',detail:now.toLocaleDateString('pt-BR',{month:'long',year:'numeric'}),receivable:totalUntil(data.receivable,localDate(month)),payable:totalUntil(data.payable,localDate(month))}]},[data])
