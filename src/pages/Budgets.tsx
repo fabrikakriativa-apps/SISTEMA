@@ -384,7 +384,8 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
       ]
       const composition=await supabase.rpc('replace_budget_item_cost_lines',{org_id:budgetOrganizationId,target_budget_item_id:result.data.id,new_lines:lines})
       const optionsResult=composition.error?null:await supabase.rpc('replace_budget_item_payment_options',{org_id:budgetOrganizationId,target_budget_item_id:result.data.id,new_options:paymentOptions.map((option,index)=>({...option,position:index+1}))})
-      if(composition.error||optionsResult?.error)show('O item foi salvo, mas não foi possível registrar todos os detalhes comerciais.','error')
+      if(composition.error)show(`O item foi salvo, mas a composição não foi atualizada: ${composition.error.message}`,'error')
+      else if(optionsResult?.error)show(`O item foi salvo, mas as opções comerciais não foram atualizadas: ${optionsResult.error.message}`,'error')
       else {setItemOpen(false);await loadItems();const {data}=await supabase.from('budgets').select(columns).eq('id',budget.id).single();if(data)setBudget(data as unknown as Budget);show(itemForm.id?'Item e composição atualizados.':'Item adicionado ao orçamento.','success')}
     }
     setItemSaving(false)
