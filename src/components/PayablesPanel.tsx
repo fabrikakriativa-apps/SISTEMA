@@ -24,6 +24,17 @@ const today = () => new Date().toISOString().slice(0, 10)
 const formatDate = (value: string | null) => value ? new Date(`${value}T12:00:00`).toLocaleDateString('pt-BR') : 'Sem vencimento'
 const rounded = (value: number) => Math.round((Number(value) || 0) * 100) / 100
 const statusLabel: Record<string, string> = { open: 'Em aberto', partial: 'Parcialmente pago', settled: 'Pago', overdue: 'Em atraso', cancelled: 'Cancelado', reversed: 'Estornado' }
+const dateKey = (value: Date) => `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`
+const matchesPeriod = (dueDate: string | null, period: string | null) => {
+  if (!period || period === 'all') return true
+  if (!dueDate) return false
+  const now = new Date(), current = dateKey(now)
+  if (period === 'overdue') return dueDate < current
+  if (period === 'today') return dueDate === current
+  if (period === 'week') { const end = new Date(now); end.setDate(end.getDate() + 6); return dueDate >= current && dueDate <= dateKey(end) }
+  if (period === 'month') { const end = new Date(now.getFullYear(), now.getMonth() + 1, 0); return dueDate >= current && dueDate <= dateKey(end) }
+  return true
+}
 const itemLabel = (item: { description?: string; environment?: string | null }) => item.environment?.trim() || item.description || 'Item sem descrição'
 const createInstallments = (total: number, count: number, firstDue: string): Installment[] => {
   const safeCount = Math.max(1, Math.trunc(count) || 1)
@@ -76,7 +87,7 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
 
   const visible = useMemo(() => items.filter(item => {
     const term = search.trim().toLowerCase()
-    const dueMatchesPeriod = !period || (item.due_date?.startsWith(period) ?? false)
+    const dueMatchesPeriod = matchesPeriod(item.due_date, period)
     return dueMatchesPeriod && (!term || `${item.description} ${item.supplier?.name ?? ''} ${item.purchase?.supplier?.name ?? ''} ${item.order?.display_number ?? ''} ${item.budget_item?.description ?? ''}`.toLowerCase().includes(term))
   }), [items, period, search])
 
