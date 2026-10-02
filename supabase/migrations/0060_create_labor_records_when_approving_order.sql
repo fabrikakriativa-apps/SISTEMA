@@ -100,7 +100,7 @@ begin
   )
   select
     org_id, created.id, oi.budget_item_id, cl.supplier_id, gen_random_uuid(),
-    1, 1, 'Mão de obra · ' || cl.description, null, cl.total_cost, 0,
+    1, 1, 'Mão de obra · ' || cl.description, cl.labor_start_date, cl.total_cost, 0,
     'open', null, cl.labor_days
   from public.order_items oi
   join public.item_cost_lines cl
