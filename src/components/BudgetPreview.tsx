@@ -21,7 +21,7 @@ export function BudgetPreview({budget,items,paymentOptions,clientName,clientAddr
         </section>
         {optionalItems.length > 0 && <section className="budget-optional-items"><strong>OPÇÕES ADICIONAIS</strong>{optionalItems.map((item,index) => <BudgetItem key={item.id} item={item} index={index} paymentOptions={paymentOptions[item.id] ?? []}/>)}</section>}
         <section className="document-total"><div><span>Subtotal</span><strong>{money.format(Number(budget.subtotal))}</strong></div>{Number(budget.discount) > 0 && <div><span>Desconto</span><strong>- {money.format(Number(budget.discount))}</strong></div>}<div className="grand-total"><span>Total do orçamento</span><strong>{money.format(Number(budget.total))}</strong></div></section>
-        <footer><p><strong>Condição geral:</strong> {budget.payment_terms || 'Conforme a opção escolhida em cada item.'}</p>{budget.notes && <p><strong>Observações:</strong> {budget.notes}</p>}{isPreBudget && <p><strong>Importante:</strong> Como se trata de um orçamento prévio, as medidas e especificações serão confirmadas antes da produção, conforme as condições finais do local e as definições do projeto.</p>}</footer>
+        {(budget.notes || isPreBudget) && <footer>{budget.notes && <p><strong>Observações:</strong> {budget.notes}</p>}{isPreBudget && <p><strong>Importante:</strong> Como se trata de um orçamento prévio, as medidas e especificações serão confirmadas antes da produção, conforme as condições finais do local e as definições do projeto.</p>}</footer>}
       </article>
     </div>
   </div>
