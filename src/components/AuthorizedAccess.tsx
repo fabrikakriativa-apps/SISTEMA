@@ -4,6 +4,7 @@ import { LogIn, ShieldCheck } from 'lucide-react'
 import { supabase, supabaseConfigured } from '../lib/supabase'
 import { verifyAccess, withTimeout, type Access } from '../lib/access'
 import { applicationRedirectUrl, cleanAuthenticationFragment } from '../lib/authUrl'
+import { brandMarkSrc } from '../lib/brand'
 
 const AccessContext = createContext<Access | null>(null)
 export const useAccess = () => useContext(AccessContext)
@@ -71,7 +72,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   if (preview && !supabaseConfigured) return <AccessContext.Provider value={null}>{children}</AccessContext.Provider>
   if (access && access.userId === userId) return <AccessContext.Provider value={access}><div key={access.userId + access.organizationId}>{children}</div></AccessContext.Provider>
   return <main className="auth-page"><section className="auth-card">
-    <div className="brand-mark"><img src="/favicon.png" alt="Monograma Fábrika Kriativa"/></div><ShieldCheck className="auth-shield"/><span className="eyebrow">Novo sistema · acesso protegido</span>
+    <div className="brand-mark"><img src={brandMarkSrc} alt="Monograma Fábrika Kriativa"/></div><ShieldCheck className="auth-shield"/><span className="eyebrow">Novo sistema · acesso protegido</span>
     <h1>Gestão Fábrika Kriativa</h1>
     {error ? <><p role="alert">{error}</p><button className="button secondary wide" onClick={() => { setError(''); setAttempt(n => n + 1) }}>Tentar novamente</button>{session && <button className="button secondary wide" disabled={busy} onClick={signOut}>Sair desta conta</button>}</>
       : !supabaseConfigured ? <><p>Prévia da estrutura, sem acesso a dados reais e sem gravação. O novo banco ainda precisa ser configurado e validado.</p><button className="button primary wide" onClick={() => setPreview(true)}>Visualizar estrutura</button></>
