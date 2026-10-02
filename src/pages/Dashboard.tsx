@@ -20,7 +20,7 @@ export function Dashboard({ navigate }: { navigate: (key: ModuleKey) => void }) 
     setLoading(true); setError('')
     const org = access.organizationId
     const [budgets, orders, receivables, events] = await Promise.all([
-      supabase.from('budgets').select('status,total').eq('organization_id', org).limit(1000),
+      supabase.from('budgets').select('status,total,document_type').eq('organization_id', org).limit(1000),
       supabase.from('orders').select('status').eq('organization_id', org).not('status', 'in', '(completed,cancelled)').limit(1000),
       supabase.from('receivables').select('status,amount,paid_amount,due_date').eq('organization_id', org).in('status', ['open', 'partial', 'overdue']).limit(1000),
       supabase.from('calendar_events').select('starts_at,cancelled_at,sync_status').eq('organization_id', org).gte('starts_at', new Date(new Date().setHours(0, 0, 0, 0)).toISOString()).limit(1000),
@@ -32,16 +32,18 @@ export function Dashboard({ navigate }: { navigate: (key: ModuleKey) => void }) 
   useEffect(() => { void load() }, [load])
   const summary = useMemo(() => summarizeDashboard(data.budgets, data.orders, data.receivables, data.events), [data])
   const metrics = [
-    { label:'Em negociação', value:money.format(summary.negotiatingTotal), helper:'Orçamentos em rascunho ou enviados', icon:FileText, module:'orcamentos' as ModuleKey },
-    { label:'Conversão de orçamentos', value:`${summary.budgetConversionRate.toLocaleString('pt-BR',{maximumFractionDigits:1})}%`, helper:`${summary.approvedBudgetCount} aprovados de ${summary.totalBudgetCount} gerados`, icon:FileText, module:'orcamentos' as ModuleKey },
+    { label:'Pré-orçamentos em rascunho', value:String(summary.preBudgetDraftCount), helper:'Estimativas rápidas ainda em evolução', icon:FileText, module:'orcamentos' as ModuleKey },
+    { label:'Orçamentos em negociação', value:money.format(summary.negotiatingTotal), helper:`${summary.formalBudgetDraftCount} em rascunho · ${summary.formalBudgetSentCount} enviados`, icon:FileText, module:'orcamentos' as ModuleKey },
+    { label:'Conversão de orçamentos', value:`${summary.budgetConversionRate.toLocaleString('pt-BR',{maximumFractionDigits:1})}%`, helper:`${summary.approvedBudgetCount} aprovados de ${summary.totalBudgetCount} formais`, icon:FileText, module:'orcamentos' as ModuleKey },
     { label:'Pedidos ativos', value:String(summary.activeOrderCount), helper:'Ainda não concluídos', icon:PackageCheck, module:'pedidos' as ModuleKey },
     { label:'A receber', value:money.format(summary.receivableBalance), helper:'Saldo das parcelas em aberto', icon:CircleDollarSign, module:'financeiro' as ModuleKey },
     { label:'Próximos compromissos', value:String(summary.upcomingEventCount), helper:'Agenda dos próximos 7 dias', icon:CalendarClock, module:'agenda' as ModuleKey },
   ]
   const priorities = [
-    { label:'Orçamentos em rascunho', value:summary.priorities.drafts, module:'orcamentos' as ModuleKey },
+    { label:'Pré-orçamentos em rascunho', value:summary.priorities.preBudgetDrafts, module:'orcamentos' as ModuleKey },
+    { label:'Orçamentos em rascunho', value:summary.priorities.budgetDrafts, module:'orcamentos' as ModuleKey },
     { label:'Pedidos aguardando financeiro', value:summary.priorities.awaitingFinance, module:'pedidos' as ModuleKey },
-    { label:'Parcelas vencidas', value:summary.priorities.overdueReceivables, module:'financeiro' as ModuleKey },
+    { label:'Parcelas a receber vencidas', value:summary.priorities.overdueReceivables, module:'financeiro' as ModuleKey },
     { label:'Compromissos para sincronizar', value:summary.priorities.calendarSync, module:'agenda' as ModuleKey },
   ].filter(item => item.value > 0)
   return <Page title="Visão geral" description="Sua operação hoje" action={<button className="button secondary" disabled={loading} onClick={() => void load()}><RefreshCw/>{loading ? 'Atualizando…' : 'Atualizar'}</button>}>
