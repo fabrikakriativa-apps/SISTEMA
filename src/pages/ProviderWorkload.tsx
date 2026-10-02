@@ -14,7 +14,7 @@ const weekStart=()=>{const date=new Date();const offset=(date.getDay()+6)%7;retu
 
 export function ProviderWorkload(){
  const access=useAccess(),{show}=useToast(),[items,setItems]=useState<Assignment[]>([]),[loading,setLoading]=useState(true),[provider,setProvider]=useState(''),[editing,setEditing]=useState<Assignment|null>(null),[plannedStart,setPlannedStart]=useState(''),[laborDays,setLaborDays]=useState(1),[saving,setSaving]=useState(false)
- const initialStart=useMemo(weekStart,[]),[dateFrom,setDateFrom]=useState(()=>dateKey(initialStart)),[dateTo,setDateTo]=useState(()=>dateKey(addDays(initialStart,20)))
+ const initialStart=useMemo(weekStart,[]),[dateFrom,setDateFrom]=useState(()=>dateKey(initialStart)),[dateTo,setDateTo]=useState(()=>dateKey(addDays(initialStart,29)))
  const days=useMemo(()=>{const from=new Date(`${dateFrom}T12:00:00`),to=new Date(`${dateTo}T12:00:00`);const count=Math.max(1,Math.min(62,Math.floor((to.getTime()-from.getTime())/86400000)+1));return Array.from({length:count},(_,index)=>addDays(from,index))},[dateFrom,dateTo])
  const load=useCallback(async()=>{if(!supabase||!access)return;setLoading(true);const {data,error}=await supabase.from('provider_assignments').select('id,description,planned_start,planned_end,labor_days,amount,status,supplier:suppliers!provider_assignments_supplier_id_fkey(name),order:orders!provider_assignments_order_id_fkey(display_number)').eq('organization_id',access.organizationId).neq('status','cancelled').order('planned_start',{ascending:true});if(error)show('A visão de prestadores será liberada após aplicar a migração de mão de obra.','info');else setItems((data??[]) as unknown as Assignment[]);setLoading(false)},[access,show])
  useEffect(()=>{void load()},[load])
