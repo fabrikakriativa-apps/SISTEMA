@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { ArrowLeft, CalendarPlus, Copy, FileText, ImagePlus, Plus, Search, Trash2, X } from 'lucide-react'
+import { ArrowLeft, CalendarPlus, Copy, FileText, GitBranch, ImagePlus, Plus, Search, Trash2, X } from 'lucide-react'
 import { Page } from '../components/Page'
 import { useAccess } from '../components/AuthorizedAccess'
 import { useToast } from '../components/ToastProvider'
@@ -214,10 +214,20 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   const [itemPendingDelete,setItemPendingDelete]=useState<BudgetItem|null>(null)
   const [upholsteryEstimate,setUpholsteryEstimate]=useState<UpholsteryEstimate>(newUpholsteryEstimate)
   const [previewOpen,setPreviewOpen]=useState(false)
-  const [workflowBusy,setWorkflowBusy]=useState(false),[confirmApproval,setConfirmApproval]=useState(false)
+  const [workflowBusy,setWorkflowBusy]=useState(false),[confirmApproval,setConfirmApproval]=useState(false),[confirmReplacementRevision,setConfirmReplacementRevision]=useState(false)
+  const [hasCancelledOrder,setHasCancelledOrder]=useState(false)
   const [pendingStatus,setPendingStatus]=useState<BudgetStatus|null>(null),[statusReason,setStatusReason]=useState('')
   const [availableClients,setAvailableClients]=useState(clients),[clientSearch,setClientSearch]=useState(clients.find(item=>item.id===form.client_id)?.name??'')
   const [newClientOpen,setNewClientOpen]=useState(false),[newClientSaving,setNewClientSaving]=useState(false)
+
+  useEffect(()=>{
+    let cancelled=false
+    if(!supabase||budget.status!=='approved'){setHasCancelledOrder(false);return}
+    void supabase.from('orders').select('id').eq('organization_id',budgetOrganizationId).eq('budget_id',budget.id).eq('status','cancelled').limit(1).then(({data})=>{
+      if(!cancelled)setHasCancelledOrder(Boolean(data?.length))
+    })
+    return()=>{cancelled=true}
+  },[budget.id,budget.status,budgetOrganizationId])
   const [visitOpen,setVisitOpen]=useState(false),[visitSaving,setVisitSaving]=useState(false),[visit,setVisit]=useState({date:new Date().toISOString().slice(0,10),time:'10:00',duration:60,address:form.client_address??'',notes:''})
   const [newClient,setNewClient]=useState({name:'',phone:'',address:'',city:'',origin:'',notes:'',master_client_id:''})
   const isPreBudget=budget.document_type==='pre_budget'
@@ -438,6 +448,19 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     else {setBudget({...budget,status:'approved'});setConfirmApproval(false);show(`Orçamento aprovado. Pedido ${(data as {display_number?:string})?.display_number??''} criado com sucesso.`,'success')}
     setWorkflowBusy(false)
   }
+  const startReplacementRevision=async()=>{
+    if(!supabase||workflowBusy)return
+    setWorkflowBusy(true)
+    const {data,error}=await supabase.rpc('start_budget_revision_after_order_cancellation',{org_id:budgetOrganizationId,target_budget_id:budget.id})
+    if(error)show('Não foi possível iniciar a nova revisão. Verifique se o pedido anterior está cancelado.','error')
+    else {
+      setBudget({...budget,...(data as Omit<Budget,'client'>)})
+      setHasCancelledOrder(false)
+      setConfirmReplacementRevision(false)
+      show('Nova revisão criada. Revise os dados, envie o orçamento e aprove para gerar um novo pedido.','success')
+    }
+    setWorkflowBusy(false)
+  }
   const requestStatus=(next:BudgetStatus)=>{
     if(next===budget.status)return
     if(next==='approved'){setConfirmApproval(true);return}
@@ -476,6 +499,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   }
   return <Page title={isPreBudget?'Construção do pré-orçamento':'Construção do orçamento'} description={isPreBudget?'Registre a estimativa e as referências. Valor, medidas e materiais serão confirmados depois.':'Monte os dados comerciais e os itens que o cliente receberá.'} action={<div className="page-actions">
 <button className="button secondary" onClick={()=>setPreviewOpen(true)}>Prévia do cliente</button>
+{hasCancelledOrder&&(access.role==='admin'||access.role==='comercial')&&<button className="button secondary" disabled={workflowBusy} onClick={()=>setConfirmReplacementRevision(true)}><GitBranch/>Criar nova revisão</button>}
 {isPreBudget&&budget.status==='draft'&&<button className="button secondary" onClick={()=>{setVisit({...visit,address:form.client_address??''});setVisitOpen(true)}}><CalendarPlus/>Agendar visita</button>}
 {isPreBudget&&budget.status==='draft'&&<button className="button primary" disabled={workflowBusy} onClick={()=>void convertToBudget()}>Converter em orçamento</button>}
 <button className="button secondary" onClick={close}>
@@ -533,6 +557,14 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <button className="button secondary" onClick={()=>setConfirmApproval(false)}>Voltar</button>
 <button className="button primary" disabled={workflowBusy} onClick={()=>void approve()}>{workflowBusy?'Gerando pedido…':'Confirmar aprovação'}</button>
 </div>}
+    {confirmReplacementRevision&&<div className="workflow-confirm">
+<div>
+<strong>Criar nova revisão para gerar outro pedido?</strong>
+<span>O pedido cancelado permanecerá no histórico. Este orçamento voltará para rascunho como uma nova revisão.</span>
+</div>
+<button className="button secondary" disabled={workflowBusy} onClick={()=>setConfirmReplacementRevision(false)}>Voltar</button>
+<button className="button primary" disabled={workflowBusy} onClick={()=>void startReplacementRevision()}>{workflowBusy?'Criando revisão…':'Criar nova revisão'}</button>
+    </div>}
     {pendingStatus&&<div className="workflow-confirm">
 <div>
 <strong>Alterar status para {labels[pendingStatus]}?</strong>
