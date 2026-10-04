@@ -671,7 +671,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 </tr>
 </thead>
 <tbody>{items.map(item=>
-<tr className={canEditItems?'clickable-row':''} key={item.id} onClick={()=>{if(canEditItems)void openItem(item)}}>
+<tr className="clickable-row" key={item.id} onClick={()=>void openItem(item)}>
 <td>
 <strong>{item.family?.name??'Item'}</strong>
 <small>{item.environment||'Ambiente a definir'}</small>
@@ -695,18 +695,18 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 </div>}</section>
     {itemPendingDelete&&<div className="dialog-backdrop"><div className="dialog"><header><div><span className="eyebrow">Excluir item</span><h2>Excluir “{itemPendingDelete.description}”?</h2><p>Os valores do documento serão recalculados. Esta ação não pode ser desfeita.</p></div><button type="button" className="icon-button" aria-label="Fechar" onClick={()=>setItemPendingDelete(null)}><X/></button></header><footer><button type="button" className="button secondary" disabled={itemSaving} onClick={()=>setItemPendingDelete(null)}>Manter item</button><button type="button" className="button danger" disabled={itemSaving} onClick={()=>void deleteItem(itemPendingDelete)}><Trash2/>{itemSaving?'Excluindo…':'Excluir item'}</button></footer></div></div>}
     {itemOpen&&<div className="dialog-backdrop">
-<form className="dialog item-dialog" onSubmit={saveItem}>
+<form className={`dialog item-dialog ${canEditItems?'':'read-only'}`} onSubmit={saveItem}>
 <header>
 <div>
 <span className="eyebrow">{isPreBudget?'Item do pré-orçamento':'Item do orçamento'}</span>
-<h2>{itemForm.id?'Editar item':'Adicionar item'}</h2>
-<p>{isPreBudget?'Registre a referência, as medidas aproximadas e o valor estimado.':'Cortina e Persiana podem ser preenchidas pela leitura do PDF e sempre passam por conferência.'}</p>
+<h2>{itemForm.id?(canEditItems?'Editar item':'Visualizar item'):'Adicionar item'}</h2>
+<p>{canEditItems?(isPreBudget?'Registre a referência, as medidas aproximadas e o valor estimado.':'Cortina e Persiana podem ser preenchidas pela leitura do PDF e sempre passam por conferência.'):'Esta versão está preservada e disponível somente para consulta. Crie uma revisão para alterá-la.'}</p>
 </div>
 <button type="button" className="icon-button" onClick={()=>setItemOpen(false)}>
 <X/>
 </button>
 </header>
-<div className="pdf-import">
+{canEditItems&&<div className="pdf-import">
 <label className={`pdf-drop ${pdfReading?'reading':''} ${pdfDragging?'dragging':''}`} onDragEnter={event=>{event.preventDefault();if(!pdfReading)setPdfDragging(true)}} onDragOver={event=>event.preventDefault()} onDragLeave={event=>{if(event.currentTarget===event.target)setPdfDragging(false)}} onDrop={event=>{event.preventDefault();setPdfDragging(false);void readPdf(event.dataTransfer.files?.[0])}}>
 <input type="file" accept="application/pdf,.pdf" onChange={e=>void readPdf(e.target.files?.[0])}/>
 <strong>{pdfReading?'Lendo o documento…':'Arraste o PDF aqui ou clique para anexar'}</strong>
@@ -729,7 +729,8 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 </div>)}</div>
 <small>Marque os itens, informe os ambientes e confira valores antes da importação conjunta.</small>
 <button type="button" className="button primary" disabled={itemSaving} onClick={()=>void importSelected()}>{itemSaving?'Importando…':`Importar ${pdfRows.filter(row=>row.selected).length} selecionado(s)`}</button>
-</div>}</div>
+</div>}</div>}
+<fieldset className="item-fields" disabled={!canEditItems}>
 <div className="form-grid">
 <label className="field">Tipo<select required value={itemForm.family_id} onChange={e=>selectItemFamily(e.target.value)}>
 <option value="">Selecione</option>{families.map(x=>
@@ -781,8 +782,9 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <small className="field-note">Margem e preço são sincronizados automaticamente.</small>
 </label></div></>}
 <ItemPaymentOptions saleTotal={itemForm.sale_total} options={paymentOptions} onChange={setPaymentOptions}/>
-</div><footer><button type="button" className="button secondary" onClick={()=>setItemOpen(false)}>Cancelar</button>
-<button className="button primary" disabled={itemSaving||pdfReading}>{itemSaving?'Salvando…':'Salvar apenas este item'}</button>
+</div>
+</fieldset><footer><button type="button" className="button secondary" onClick={()=>setItemOpen(false)}>{canEditItems?'Cancelar':'Fechar'}</button>
+{canEditItems&&<button className="button primary" disabled={itemSaving||pdfReading}>{itemSaving?'Salvando…':'Salvar apenas este item'}</button>}
 </footer>
 </form>
 </div>}
