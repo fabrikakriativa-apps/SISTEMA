@@ -204,6 +204,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   const budgetOrganizationId=budget.organization_id
   const {show}=useToast()
   const canEditItems=budget.status==='draft'&&(access.role==='admin'||access.role==='comercial')
+  const canStartRevision=budget.document_type==='budget'&&['sent','rejected'].includes(budget.status)&&(access.role==='admin'||access.role==='comercial')
   const [families,setFamilies]=useState<Family[]>([]),[items,setItems]=useState<BudgetItem[]>([]),[itemOpen,setItemOpen]=useState(false),[itemForm,setItemForm]=useState<ItemForm>(newBlankItem),[itemSaving,setItemSaving]=useState(false),[itemDuplicatingId,setItemDuplicatingId]=useState<string|null>(null),[itemsLoading,setItemsLoading]=useState(true)
   const [supplies,setSupplies]=useState<SupplyOption[]>([]),[supplyLines,setSupplyLines]=useState<SupplyLine[]>([])
   const [providers,setProviders]=useState<ProviderOption[]>([]),[laborLines,setLaborLines]=useState<LaborLine[]>([])
@@ -462,6 +463,17 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     }
     setWorkflowBusy(false)
   }
+  const startRevision=async()=>{
+    if(!supabase||workflowBusy||!canStartRevision)return
+    setWorkflowBusy(true)
+    const {data,error}=await supabase.rpc('start_budget_revision',{org_id:budgetOrganizationId,target_budget_id:budget.id})
+    if(error)show('Não foi possível criar a revisão deste orçamento.','error')
+    else {
+      setBudget({...budget,...(data as Omit<Budget,'client'>)})
+      show('Nova revisão criada. Os itens estão liberados para atualização e novo envio.','success')
+    }
+    setWorkflowBusy(false)
+  }
   const requestStatus=(next:BudgetStatus)=>{
     if(next===budget.status)return
     if(next==='approved'){setConfirmApproval(true);return}
@@ -500,6 +512,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   }
   return <Page title={isPreBudget?'Construção do pré-orçamento':'Construção do orçamento'} description={isPreBudget?'Registre a estimativa e as referências. Valor, medidas e materiais serão confirmados depois.':'Monte os dados comerciais e os itens que o cliente receberá.'} action={<div className="page-actions">
 <button className="button secondary" onClick={()=>setPreviewOpen(true)}>Prévia do cliente</button>
+{canStartRevision&&<button className="button secondary" disabled={workflowBusy} onClick={()=>void startRevision()}><GitBranch/>{workflowBusy?'Criando revisão…':'Criar revisão'}</button>}
 {hasCancelledOrder&&(access.role==='admin'||access.role==='comercial')&&<button className="button secondary" disabled={workflowBusy} onClick={()=>setConfirmReplacementRevision(true)}><GitBranch/>Criar nova revisão</button>}
 {isPreBudget&&budget.status==='draft'&&<button className="button secondary" onClick={()=>{setVisit({...visit,address:form.client_address??''});setVisitOpen(true)}}><CalendarPlus/>Agendar visita</button>}
 {isPreBudget&&budget.status==='draft'&&<button className="button primary" disabled={workflowBusy} onClick={()=>void convertToBudget()}>Converter em orçamento</button>}
@@ -643,7 +656,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <h2>{isPreBudget?'Itens da estimativa':'Itens do orçamento'}</h2>
 <p>{isPreBudget?'Comece pelo item, medidas aproximadas e valor de referência.':'Cada item mantém seu ambiente, custo, margem e forma de apresentação.'}</p>
 </div>
-{canEditItems?<button className="button primary" onClick={()=>openItem()}><Plus/>Adicionar item</button>:<span className="field-note">{budget.status!=='draft'?'Itens bloqueados neste status.':'Seu perfil atual não pode alterar itens.'}</span>}
+{canEditItems?<button className="button primary" onClick={()=>openItem()}><Plus/>Adicionar item</button>:<span className="field-note">{canStartRevision?'Crie uma revisão para atualizar os itens e enviar novamente.':budget.status!=='draft'?'Itens bloqueados neste status.':'Seu perfil atual não pode alterar itens.'}</span>}
 </header>{itemsLoading?<p className="panel-message">Carregando itens…</p>:items.length?<div className="table-wrap">
 <table>
 <thead>
