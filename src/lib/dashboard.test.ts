@@ -12,6 +12,6 @@ describe('summarizeDashboard', () => {
     )
     expect(result).toMatchObject({ negotiatingTotal: 250, preBudgetDraftCount: 1, formalBudgetDraftCount: 0, formalBudgetSentCount: 1, activeOrderCount: 2, receivableBalance: 150, upcomingEventCount: 1, approvedBudgetCount: 1, totalBudgetCount: 2 })
     expect(result.budgetConversionRate).toBeCloseTo(50)
-    expect(result.priorities).toEqual({ preBudgetDrafts: 1, budgetDrafts: 0, awaitingFinance: 1, overdueReceivables: 1, calendarSync: 2 })
+    expect(result.priorities).toEqual({ preBudgetDrafts: 1, budgetDrafts: 0, awaitingFinance: 1, overdueReceivables: 1, calendarSync: 1 })
   })
 })

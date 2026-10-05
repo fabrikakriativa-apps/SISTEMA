@@ -16,4 +16,6 @@
 .budget-status-card{padding:18px 20px;border:1px solid var(--line);border-top:4px solid var(--gold);border-radius:18px;background:var(--paper);box-shadow:0 8px 28px #40331c0a;color:var(--ink);text-align:left;transition:border-color .16s,background .16s,transform .16s}
 .budget-status-card:hover{border-color:#d3aa2c;background:#fffaf0;transform:translateY(-1px)}
 .budget-status-card.active{border-color:var(--gold-dark);background:#fff5d3;box-shadow:0 0 0 2px #eab91e33}
+.budget-status-grid{grid-template-columns:repeat(5,minmax(0,1fr))}
 .budget-status-card span,.budget-status-card strong{display:block}.budget-status-card span{font-size:12px;color:var(--muted)}.budget-status-card strong{font-size:26px;margin-top:7px}
+@media(max-width:1100px){.budget-status-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:760px){.budget-status-grid{grid-template-columns:1fr}}

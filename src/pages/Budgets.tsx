@@ -129,7 +129,7 @@ export function Budgets() {
 
   const matching=useMemo(()=>items.filter(item=>item.document_type===documentFilter&&inDateRange(item.created_at,dateRange)&&`${item.display_number} ${item.client?.name??''} ${labels[item.status]}`.toLowerCase().includes(search.toLowerCase())),[items,search,documentFilter,dateRange])
   const filtered=useMemo(()=>{const selected=statusFilter?matching.filter(item=>item.status===statusFilter):matching;const value=(item:Budget)=>sort.key==='number'?`${item.display_number} ${item.client?.name??''}`:sort.key==='type'?item.document_type:sort.key==='revision'?item.current_revision:sort.key==='created'?item.created_at:sort.key==='value'?Number(item.total):labels[item.status];return [...selected].sort((a,b)=>compareValues(value(a),value(b))*(sort.direction==='asc'?1:-1))},[matching,statusFilter,sort])
-  const counts=useMemo(()=>({draft:matching.filter(x=>x.status==='draft').length,sent:matching.filter(x=>x.status==='sent').length,approved:matching.filter(x=>x.status==='approved').length,rejected:matching.filter(x=>x.status==='rejected').length}),[matching])
+  const counts=useMemo(()=>({draft:matching.filter(x=>x.status==='draft').length,sent:matching.filter(x=>x.status==='sent').length,approved:matching.filter(x=>x.status==='approved').length,rejected:matching.filter(x=>x.status==='rejected').length,cancelled:matching.filter(x=>x.status==='cancelled').length}),[matching])
   const toggleStatusFilter=(status:BudgetStatus)=>setStatusFilter(current=>current===status?null:status)
   if(selected) return <BudgetEditor access={access!} budget={selected} setBudget={budget=>{selectedRef.current=budget;setSelected(budget);setItems(current=>current.map(item=>item.id===budget.id?budget:item))}} form={form} setForm={setForm} clients={clients} saveState={saveState} close={()=>{initialized.current=false;selectedRef.current=null;setSelected(null);navigateTo('orcamentos')}}/>
 
@@ -139,7 +139,7 @@ export function Budgets() {
     {loading&&<p role="status">Carregando orçamentos…</p>}{error&&<p role="alert">{error} <button className="button secondary" onClick={load}>Tentar novamente</button>
 </p>}
     <div className="segmented-control" role="tablist" aria-label="Tipo de documento"><button className={documentFilter==='pre_budget'?'active':''} onClick={()=>{setDocumentFilter('pre_budget');setStatusFilter(null)}}>Pré-orçamentos</button><button className={documentFilter==='budget'?'active':''} onClick={()=>{setDocumentFilter('budget');setStatusFilter(null)}}>Orçamentos</button></div>
-    <section className="status-grid">
+    <section className="status-grid budget-status-grid">
 <button type="button" className={`budget-status-card ${statusFilter==='draft'?'active':''}`} aria-pressed={statusFilter==='draft'} onClick={()=>toggleStatusFilter('draft')}>
 <span>Rascunhos</span>
 <strong>{counts.draft}</strong>
@@ -155,6 +155,10 @@ export function Budgets() {
 <button type="button" className={`budget-status-card ${statusFilter==='rejected'?'active':''}`} aria-pressed={statusFilter==='rejected'} onClick={()=>toggleStatusFilter('rejected')}>
 <span>Reprovados</span>
 <strong>{counts.rejected}</strong>
+</button>
+<button type="button" className={`budget-status-card ${statusFilter==='cancelled'?'active':''}`} aria-pressed={statusFilter==='cancelled'} onClick={()=>toggleStatusFilter('cancelled')}>
+<span>Cancelados</span>
+<strong>{counts.cancelled}</strong>
 </button>
 </section>
     <section className="panel">

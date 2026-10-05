@@ -38,11 +38,11 @@ const matchesPeriod = (dueDate: string | null, filter: string | null) => { if (!
     const end = new Date(now);
     end.setDate(end.getDate() + 6);
     return dueDate >= today && dueDate <= localDate(end);
-} const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0); return dueDate >= today && dueDate <= localDate(monthEnd); };
+} const monthStart = localDate(new Date(now.getFullYear(), now.getMonth(), 1)), monthEnd = localDate(new Date(now.getFullYear(), now.getMonth() + 1, 0)); return dueDate >= monthStart && dueDate <= monthEnd; };
 function ReceivablesPanel({ period }: {
     period: string | null;
 }) {
-    const access = useAccess(), { show } = useToast(), [items, setItems] = useState<Receivable[]>([]), [loading, setLoading] = useState(true), [error, setError] = useState(''), [search, setSearch] = useState(''), [dateRange, setDateRange] = useState<DateRange>({ from: '', to: '' }), [sort, setSort] = useState<SortState<'installment' | 'order' | 'due' | 'amount' | 'method' | 'status'>>({ key: 'due', direction: 'asc' }), [summaryFilter, setSummaryFilter] = useState<'all' | 'received' | 'open' | 'groups'>('all'), [selected, setSelected] = useState<Receivable | null>(null), [scope, setScope] = useState<'single' | 'group'>('single'), [dueDate, setDueDate] = useState(''), [amount, setAmount] = useState(0), [method, setMethod] = useState(''), [saving, setSaving] = useState(false), [payment, setPayment] = useState<Receivable | null>(null), [paymentScope, setPaymentScope] = useState<'single' | 'group'>('single'), [paymentAmount, setPaymentAmount] = useState(0), [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10)), [reversal, setReversal] = useState<Receivable | null>(null), [reversalScope, setReversalScope] = useState<'single' | 'group'>('single'), [reversalReason, setReversalReason] = useState('');
+    const access = useAccess(), { show } = useToast(), [items, setItems] = useState<Receivable[]>([]), [loading, setLoading] = useState(true), [error, setError] = useState(''), [search, setSearch] = useState(''), [dateRange, setDateRange] = useState<DateRange>({ from: '', to: '' }), [sort, setSort] = useState<SortState<'installment' | 'order' | 'due' | 'amount' | 'method' | 'status'>>({ key: 'due', direction: 'asc' }), [summaryFilter, setSummaryFilter] = useState<'all' | 'received' | 'open' | 'groups' | 'history'>('all'), [selected, setSelected] = useState<Receivable | null>(null), [scope, setScope] = useState<'single' | 'group'>('single'), [dueDate, setDueDate] = useState(''), [amount, setAmount] = useState(0), [method, setMethod] = useState(''), [saving, setSaving] = useState(false), [payment, setPayment] = useState<Receivable | null>(null), [paymentScope, setPaymentScope] = useState<'single' | 'group'>('single'), [paymentAmount, setPaymentAmount] = useState(0), [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10)), [reversal, setReversal] = useState<Receivable | null>(null), [reversalScope, setReversalScope] = useState<'single' | 'group'>('single'), [reversalReason, setReversalReason] = useState('');
     const load = useCallback(async () => { if (!supabase || !access)
         return; setLoading(true); setError(''); await supabase.rpc('refresh_financial_overdues', { org_id: access.organizationId }); const { data, error } = await supabase.from('receivables').select('id,group_id,installment,installment_count,description,due_date,amount,paid_amount,status,payment_method,order:orders!receivables_order_id_fkey(display_number,client:clients!orders_client_id_fkey(name))').eq('organization_id', access.organizationId).order('due_date', { ascending: true }).order('installment', { ascending: true }).abortSignal(AbortSignal.timeout(15000)); if (error)
         setError('Não foi possível carregar as contas a receber.');
@@ -52,7 +52,8 @@ function ReceivablesPanel({ period }: {
     const periodItems = useMemo(() => items.filter(x => matchesPeriod(x.due_date, period) && inDateRange(x.due_date, dateRange)), [items, period, dateRange]);
     const matching = useMemo(() => { const term = search.trim().toLocaleLowerCase('pt-BR'); return term ? periodItems.filter(x => `${x.description} ${x.order?.display_number ?? ''} ${x.order?.client?.name ?? ''} ${x.payment_method ?? ''}`.toLocaleLowerCase('pt-BR').includes(term)) : periodItems; }, [periodItems, search]);
     const filtered = useMemo(() => {
-        const selected = summaryFilter === 'received' ? matching.filter(x => Number(x.paid_amount) > 0) : summaryFilter === 'open' ? matching.filter(x => ['open', 'partial', 'overdue'].includes(x.status) && Number(x.amount) > Number(x.paid_amount)) : summaryFilter === 'groups' ? matching.filter((item, index, list) => list.findIndex(candidate => candidate.group_id === item.group_id) === index) : matching;
+        const valid = matching.filter(x => !['cancelled', 'reversed'].includes(x.status));
+        const selected = summaryFilter === 'received' ? valid.filter(x => Number(x.paid_amount) > 0) : summaryFilter === 'open' ? valid.filter(x => ['open', 'partial', 'overdue'].includes(x.status) && Number(x.amount) > Number(x.paid_amount)) : summaryFilter === 'groups' ? valid.filter((item, index, list) => list.findIndex(candidate => candidate.group_id === item.group_id) === index) : summaryFilter === 'history' ? matching.filter(x => ['cancelled', 'reversed'].includes(x.status)) : valid;
         return [...selected].sort((a, b) => {
             const values = { installment: [a.installment, b.installment], order: [a.order?.display_number ?? '', b.order?.display_number ?? ''], due: [a.due_date ?? '', b.due_date ?? ''], amount: [Number(a.amount), Number(b.amount)], method: [a.payment_method ?? '', b.payment_method ?? ''], status: [labels[a.status], labels[b.status]] }[sort.key];
             return compareValues(values[0], values[1]) * (sort.direction === 'asc' ? 1 : -1);
@@ -85,10 +86,11 @@ function ReceivablesPanel({ period }: {
         setReversalReason('');
         show(reversalScope === 'group' ? 'Recebimentos do grupo estornados.' : 'Recebimento estornado.', 'success');
     } setSaving(false); };
-    const expected = periodItems.reduce((sum, x) => sum + Number(x.amount), 0), received = periodItems.reduce((sum, x) => sum + Number(x.paid_amount), 0), open = periodItems.filter(x => ['open', 'partial', 'overdue'].includes(x.status)).reduce((sum, x) => sum + Number(x.amount) - Number(x.paid_amount), 0), groups = new Set(periodItems.map(x => x.group_id)).size;
+    const summaryItems = matching.filter(x => !['cancelled', 'reversed'].includes(x.status));
+    const expected = summaryItems.reduce((sum, x) => sum + Number(x.amount), 0), received = summaryItems.reduce((sum, x) => sum + Number(x.paid_amount), 0), open = summaryItems.filter(x => ['open', 'partial', 'overdue'].includes(x.status)).reduce((sum, x) => sum + Math.max(0, Number(x.amount) - Number(x.paid_amount)), 0), groups = new Set(summaryItems.map(x => x.group_id)).size, historyCount = matching.filter(x => ['cancelled', 'reversed'].includes(x.status)).length;
     const chooseSummary = (filter: typeof summaryFilter) => setSummaryFilter(current => current === filter && filter !== 'all' ? 'all' : filter);
     return <>
-<section className="status-grid">
+<section className="status-grid finance-status-grid">
 <button type="button" className={`status-filter-card ${summaryFilter === 'all' ? 'active' : ''}`} aria-pressed={summaryFilter === 'all'} onClick={() => chooseSummary('all')}>
 <span>Total previsto</span>
 <strong>{money.format(expected)}</strong>
@@ -104,6 +106,10 @@ function ReceivablesPanel({ period }: {
 <button type="button" className={`status-filter-card ${summaryFilter === 'groups' ? 'active' : ''}`} aria-pressed={summaryFilter === 'groups'} onClick={() => chooseSummary('groups')}>
 <span>Grupos de parcelas</span>
 <strong>{groups}</strong>
+</button>
+<button type="button" className={`status-filter-card ${summaryFilter === 'history' ? 'active' : ''}`} aria-pressed={summaryFilter === 'history'} onClick={() => chooseSummary('history')}>
+<span>Canceladas / estornadas</span>
+<strong>{historyCount}</strong>
 </button>
 </section>
 <section className="panel">
@@ -290,9 +296,9 @@ function FinancialOverview({ navigate }: {
     const periods = useMemo(() => {
         const now = new Date(), today = localDate(now), week = new Date(now);
         week.setDate(week.getDate() + 6);
-        const month = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-        const totalUntil = (items: ForecastLine[], end: string) => outstanding(items.filter(item => Boolean(item.due_date && item.due_date >= today && item.due_date <= end)));
-        return [{ key: 'today', label: 'Hoje', detail: now.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }), receivable: totalUntil(data.receivable, today), payable: totalUntil(data.payable, today) }, { key: 'week', label: 'Próximos 7 dias', detail: `até ${localDate(week).split('-').reverse().slice(0, 2).join('/')}`, receivable: totalUntil(data.receivable, localDate(week)), payable: totalUntil(data.payable, localDate(week)) }, { key: 'month', label: 'Mês atual', detail: now.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }), receivable: totalUntil(data.receivable, localDate(month)), payable: totalUntil(data.payable, localDate(month)) }];
+        const monthStart = localDate(new Date(now.getFullYear(), now.getMonth(), 1)), monthEnd = localDate(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+        const totalBetween = (items: ForecastLine[], start: string, end: string) => outstanding(items.filter(item => Boolean(item.due_date && item.due_date >= start && item.due_date <= end)));
+        return [{ key: 'today', label: 'Hoje', detail: now.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }), receivable: totalBetween(data.receivable, today, today), payable: totalBetween(data.payable, today, today) }, { key: 'week', label: 'Próximos 7 dias', detail: `até ${localDate(week).split('-').reverse().slice(0, 2).join('/')}`, receivable: totalBetween(data.receivable, today, localDate(week)), payable: totalBetween(data.payable, today, localDate(week)) }, { key: 'month', label: 'Mês atual', detail: now.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }), receivable: totalBetween(data.receivable, monthStart, monthEnd), payable: totalBetween(data.payable, monthStart, monthEnd) }];
     }, [data]);
     const overdueReceivable = outstanding(data.receivable.filter(item => Boolean(item.due_date && item.due_date < localDate(new Date())))), overduePayable = outstanding(data.payable.filter(item => Boolean(item.due_date && item.due_date < localDate(new Date()))));
     return <Page title="Painel financeiro" description="Entradas e saídas previstas para orientar o caixa." action={<button className="button primary" onClick={() => navigate('financeiro-lancamentos')}>

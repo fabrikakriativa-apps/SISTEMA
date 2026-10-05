@@ -34,7 +34,7 @@ const matchesPeriod = (dueDate: string | null, period: string | null) => {
   if (period === 'overdue') return dueDate < current
   if (period === 'today') return dueDate === current
   if (period === 'week') { const end = new Date(now); end.setDate(end.getDate() + 6); return dueDate >= current && dueDate <= dateKey(end) }
-  if (period === 'month') { const end = new Date(now.getFullYear(), now.getMonth() + 1, 0); return dueDate >= current && dueDate <= dateKey(end) }
+  if (period === 'month') { const start = dateKey(new Date(now.getFullYear(), now.getMonth(), 1)), end = dateKey(new Date(now.getFullYear(), now.getMonth() + 1, 0)); return dueDate >= start && dueDate <= end }
   return true
 }
 const itemLabel = (item: { description?: string; environment?: string | null }) => item.environment?.trim() || item.description || 'Item sem descrição'

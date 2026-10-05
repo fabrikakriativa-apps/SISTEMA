@@ -31,7 +31,7 @@ export function summarizeDashboard(budgets: DashboardBudget[], orders: Dashboard
       budgetDrafts: formalBudgets.filter(item => item.status === 'draft').length,
       awaitingFinance: activeOrders.filter(item => item.status === 'awaiting_finance').length,
       overdueReceivables: openReceivables.filter(item => item.status === 'overdue' || Boolean(item.due_date && item.due_date < today.toISOString().slice(0, 10))).length,
-      calendarSync: events.filter(item => needsCalendarSync(item.sync_status)).length,
+      calendarSync: events.filter(item => !item.cancelled_at && needsCalendarSync(item.sync_status)).length,
     },
   }
 }

@@ -9,6 +9,11 @@ import { useAccess } from '../components/AuthorizedAccess'
 
 type DashboardData = { budgets: DashboardBudget[]; orders: DashboardOrder[]; receivables: DashboardReceivable[]; events: DashboardEvent[] }
 const empty: DashboardData = { budgets: [], orders: [], receivables: [], events: [] }
+type PageResult<T> = { data: T[] | null; error: unknown }
+async function loadAll<T>(page:(from:number,to:number)=>PromiseLike<PageResult<T>>) {
+  const result:T[] = [], size=1000
+  for(let from=0;;from+=size){const current=await page(from,from+size-1);if(current.error)return {data:result,error:current.error};const rows=current.data??[];result.push(...rows);if(rows.length<size)return {data:result,error:null}}
+}
 
 export function Dashboard({ navigate }: { navigate: (key: ModuleKey) => void }) {
   const access = useAccess()
@@ -18,13 +23,14 @@ export function Dashboard({ navigate }: { navigate: (key: ModuleKey) => void }) 
   const load = useCallback(async () => {
     if (!supabase || !access) { setLoading(false); return }
     setLoading(true); setError('')
-    const org = access.organizationId
-    const { error: overdueError } = await supabase.rpc('refresh_financial_overdues', { org_id: org })
+    const org = access.organizationId, client=supabase
+    const { error: overdueError } = await client.rpc('refresh_financial_overdues', { org_id: org })
+    const startOfToday=new Date(new Date().setHours(0,0,0,0)).toISOString()
     const [budgets, orders, receivables, events] = await Promise.all([
-      supabase.from('budgets').select('status,total,document_type').eq('organization_id', org).limit(1000),
-      supabase.from('orders').select('status').eq('organization_id', org).not('status', 'in', '(completed,cancelled)').limit(1000),
-      supabase.from('receivables').select('status,amount,paid_amount,due_date').eq('organization_id', org).in('status', ['open', 'partial', 'overdue']).limit(1000),
-      supabase.from('calendar_events').select('starts_at,cancelled_at,sync_status').eq('organization_id', org).gte('starts_at', new Date(new Date().setHours(0, 0, 0, 0)).toISOString()).limit(1000),
+      loadAll<DashboardBudget>((from,to)=>client.from('budgets').select('status,total,document_type').eq('organization_id', org).order('id').range(from,to)),
+      loadAll<DashboardOrder>((from,to)=>client.from('orders').select('status').eq('organization_id', org).not('status', 'in', '(completed,cancelled)').order('id').range(from,to)),
+      loadAll<DashboardReceivable>((from,to)=>client.from('receivables').select('status,amount,paid_amount,due_date').eq('organization_id', org).in('status', ['open', 'partial', 'overdue']).order('id').range(from,to)),
+      loadAll<DashboardEvent>((from,to)=>client.from('calendar_events').select('starts_at,cancelled_at,sync_status').eq('organization_id', org).gte('starts_at', startOfToday).order('id').range(from,to)),
     ])
     if (overdueError || [budgets.error, orders.error, receivables.error, events.error].some(Boolean)) setError('Não foi possível atualizar todos os indicadores. Tente novamente.')
     else setData({ budgets: (budgets.data ?? []) as DashboardBudget[], orders: (orders.data ?? []) as DashboardOrder[], receivables: (receivables.data ?? []) as DashboardReceivable[], events: (events.data ?? []) as DashboardEvent[] })
