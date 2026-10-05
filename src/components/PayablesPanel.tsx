@@ -4,6 +4,8 @@ import { DecimalInput } from './DecimalInput'
 import { useToast } from './ToastProvider'
 import { money } from '../lib/format'
 import { supabase } from '../lib/supabase'
+import { DateRangeFilter, inDateRange, type DateRange } from './DateRangeFilter'
+import { SortableHeader, compareValues, type SortState } from './SortableHeader'
 
 type Supplier = { id: string; name: string }
 type Installment = { id?: string; due_date: string; amount: number; locked?: boolean }
@@ -62,6 +64,8 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [orders, setOrders] = useState<Order[]>([])
   const [search, setSearch] = useState('')
+  const [dateRange, setDateRange] = useState<DateRange>({ from: '', to: '' })
+  const [sort, setSort] = useState<SortState<'installment' | 'order' | 'due' | 'amount' | 'status'>>({ key: 'due', direction: 'asc' })
   const [open, setOpen] = useState(false)
   const [selected, setSelected] = useState<Payable | null>(null)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
@@ -88,8 +92,11 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
   const visible = useMemo(() => items.filter(item => {
     const term = search.trim().toLowerCase()
     const dueMatchesPeriod = matchesPeriod(item.due_date, period)
-    return dueMatchesPeriod && (!term || `${item.description} ${item.supplier?.name ?? ''} ${item.purchase?.supplier?.name ?? ''} ${item.order?.display_number ?? ''} ${item.budget_item?.description ?? ''}`.toLowerCase().includes(term))
-  }), [items, period, search])
+    return dueMatchesPeriod && inDateRange(item.due_date, dateRange) && (!term || `${item.description} ${item.supplier?.name ?? ''} ${item.purchase?.supplier?.name ?? ''} ${item.order?.display_number ?? ''} ${item.budget_item?.description ?? ''}`.toLowerCase().includes(term))
+  }).sort((a, b) => {
+    const values = { installment: [a.installment, b.installment], order: [a.purchase?.display_number ?? a.order?.display_number ?? a.supplier?.name ?? '', b.purchase?.display_number ?? b.order?.display_number ?? b.supplier?.name ?? ''], due: [a.due_date ?? '', b.due_date ?? ''], amount: [Number(a.amount), Number(b.amount)], status: [statusLabel[a.status] ?? a.status, statusLabel[b.status] ?? b.status] }[sort.key]
+    return compareValues(values[0], values[1]) * (sort.direction === 'asc' ? 1 : -1)
+  }), [items, period, search, dateRange, sort])
 
   const installmentsTotal = rounded(installments.reduce((sum, item) => sum + item.amount, 0))
   const totalsMatch = installments.length > 0 && installmentsTotal === rounded(form.total)
@@ -154,9 +161,10 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
     <section className="panel">
       <div className="toolbar">
         <label className="search"><Search /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar fornecedor ou lançamento" /></label>
+        <DateRangeFilter label="Vencimento" value={dateRange} onChange={setDateRange} />
         <button className="button primary" onClick={beginCreate}><Plus /> Nova conta a pagar</button>
       </div>
-      <div className="table-wrap"><table><thead><tr><th>Parcelas</th><th>Pedido / fornecedor</th><th>Vencimento</th><th>Valor / saldo</th><th>Status</th></tr></thead><tbody>
+      <div className="table-wrap"><table><thead><tr><SortableHeader label="Parcelas" column="installment" sort={sort} onChange={setSort} /><SortableHeader label="Pedido / fornecedor" column="order" sort={sort} onChange={setSort} /><SortableHeader label="Vencimento" column="due" sort={sort} onChange={setSort} /><SortableHeader label="Valor / saldo" column="amount" sort={sort} onChange={setSort} /><SortableHeader label="Status" column="status" sort={sort} onChange={setSort} /></tr></thead><tbody>
         {visible.map(item => <tr className="clickable-row" key={item.id} onClick={() => setSelected(item)}>
           <td><strong>Parcela {item.installment}/{item.installment_count}</strong><small>{item.installment_count > 1 ? `${item.installment_count} parcelas vinculadas` : 'Lançamento único'}</small></td>
           <td>{item.purchase?.display_number ? <><strong>{item.purchase.display_number}</strong><small>{item.purchase.supplier?.name ?? item.supplier?.name ?? 'Fornecedor não informado'}</small></> : item.order?.display_number ? <><strong>{item.order.display_number}{item.budget_item ? ` · ${itemLabel(item.budget_item)}` : ''}</strong><small>{item.supplier?.name ?? 'Fornecedor não informado'}</small></> : <>{item.supplier?.name ?? 'Fornecedor não informado'}</>}</td>

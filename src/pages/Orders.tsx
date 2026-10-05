@@ -1,26 +1,112 @@
-import {useCallback,useEffect,useMemo,useState} from 'react'
-import {PackageCheck,Search} from 'lucide-react'
-import {Page} from '../components/Page'
-import {OrderDetails,type DetailOrder} from '../components/OrderDetails'
-import {OrderCancellation} from '../components/OrderCancellation'
-import {OrderOperation} from '../components/OrderOperation'
-import {useAccess} from '../components/AuthorizedAccess'
-import {money} from '../lib/format'
-import {operationalStatuses,orderStatusLabels as labels,orderStatusOptions,type OrderStatus} from '../lib/orderStatus'
-import {supabase} from '../lib/supabase'
-import {navigateTo,readRoute} from '../lib/navigation'
-import './Orders.css'
-type Order=DetailOrder&{status:OrderStatus}
-export function Orders(){
- const access=useAccess(),[orders,setOrders]=useState<Order[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState(''),[search,setSearch]=useState(''),[cardFilter,setCardFilter]=useState<'active'|'awaiting_purchase'|'ready_to_schedule'|'pending_issue'|null>(null),[cancelOrder,setCancelOrder]=useState<Order|null>(null),[operationOrder,setOperationOrder]=useState<Order|null>(null),[requestedStage,setRequestedStage]=useState<(typeof operationalStatuses)[number]>('preparing')
- const load=useCallback(async()=>{if(!supabase||!access)return;setLoading(true);setError('');const{data,error}=await supabase.from('orders').select('id,display_number,status,payment_terms,promised_date,client_address,notes,total,created_at,client:clients!orders_client_id_fkey(name,address,city),budget:budgets!orders_budget_id_fkey(id,display_number),order_items:order_items!order_items_order_id_fkey(id,status,snapshot),receivables:receivables!receivables_order_id_fkey(id,installment,installment_count,due_date,amount,payment_method,status)').eq('organization_id',access.organizationId).order('number',{ascending:false}).abortSignal(AbortSignal.timeout(15000));if(error)setError('Não foi possível carregar os pedidos. Tente novamente.');else setOrders((data??[])as unknown as Order[]);setLoading(false)},[access])
- useEffect(()=>{void load()},[load])
- const detailId=readRoute(window.location.hash).recordId,detailOrder=detailId?orders.find(order=>order.id===detailId)??null:null
- const matching=useMemo(()=>{const term=search.trim().toLocaleLowerCase('pt-BR');return term?orders.filter(x=>`${x.display_number} ${x.client?.name??''} ${x.budget?.display_number??''} ${labels[x.status]}`.toLocaleLowerCase('pt-BR').includes(term)):orders},[orders,search])
- const filtered=useMemo(()=>cardFilter==='active'?matching.filter(x=>!['completed','cancelled'].includes(x.status)):cardFilter?matching.filter(x=>x.status===cardFilter):matching,[matching,cardFilter])
- const requestStatus=(order:Order,next:OrderStatus)=>{if(next===order.status)return;if(next==='cancelled'){setCancelOrder(order);return}if((operationalStatuses as readonly string[]).includes(next)){setRequestedStage(next as (typeof operationalStatuses)[number]);setOperationOrder(order)}}
- const active=matching.filter(x=>!['completed','cancelled'].includes(x.status)).length,awaitingPurchase=matching.filter(x=>x.status==='awaiting_purchase').length,scheduling=matching.filter(x=>x.status==='ready_to_schedule').length,issues=matching.filter(x=>x.status==='pending_issue').length
- const toggleCard=(filter:NonNullable<typeof cardFilter>)=>setCardFilter(current=>current===filter?null:filter)
- if(detailId){return <Page title="Pedido" description="Itens, valores, entrega e recebimento do pedido em uma única tela.">{loading?<p className="panel-message">Carregando pedido…</p>:detailOrder&&access?<OrderDetails organizationId={access.organizationId} order={detailOrder} onBack={()=>navigateTo('pedidos')} onReviewBudget={()=>detailOrder.budget?.id&&navigateTo('orcamentos',detailOrder.budget.id)} onSaved={load}/>:<div className="empty-state"><PackageCheck/><strong>Pedido não encontrado</strong><button className="button secondary" onClick={()=>navigateTo('pedidos')}>Voltar aos pedidos</button></div>}</Page>}
- return <Page title="Pedidos" description="Toda a operação acompanha o pedido e seus itens — sem módulos separados de produção e entrega.">{cancelOrder&&access&&<OrderCancellation organizationId={access.organizationId} order={cancelOrder} onClose={()=>setCancelOrder(null)} onSaved={load}/>} {operationOrder&&access&&<OrderOperation organizationId={access.organizationId} order={operationOrder} initialStage={requestedStage} onClose={()=>setOperationOrder(null)} onSaved={load}/>}<section className="status-grid"><button type="button" className={`status-filter-card ${cardFilter==='active'?'active':''}`} aria-pressed={cardFilter==='active'} onClick={()=>toggleCard('active')}><span>Ativos</span><strong>{active}</strong></button><button type="button" className={`status-filter-card ${cardFilter==='awaiting_purchase'?'active':''}`} aria-pressed={cardFilter==='awaiting_purchase'} onClick={()=>toggleCard('awaiting_purchase')}><span>Aguardando compra</span><strong>{awaitingPurchase}</strong></button><button type="button" className={`status-filter-card ${cardFilter==='ready_to_schedule'?'active':''}`} aria-pressed={cardFilter==='ready_to_schedule'} onClick={()=>toggleCard('ready_to_schedule')}><span>Para agendar</span><strong>{scheduling}</strong></button><button type="button" className={`status-filter-card ${cardFilter==='pending_issue'?'active':''}`} aria-pressed={cardFilter==='pending_issue'} onClick={()=>toggleCard('pending_issue')}><span>Com pendência</span><strong>{issues}</strong></button></section><section className="panel"><div className="toolbar"><label className="search"><Search/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Pedido, orçamento, cliente ou status"/></label><span>{filtered.length} pedido(s)</span></div>{error?<div className="empty-state"><PackageCheck/><strong>{error}</strong><button className="button secondary" onClick={()=>void load()}>Tentar novamente</button></div>:loading?<p className="panel-message">Carregando pedidos…</p>:filtered.length?<div className="table-wrap"><table><thead><tr><th>Pedido / cliente</th><th>Origem</th><th>Criação</th><th>Entrega ao cliente</th><th>Itens</th><th>Valor</th><th>Status</th></tr></thead><tbody>{filtered.map(order=><tr className="clickable-row" key={order.id} onClick={()=>navigateTo('pedidos',order.id)}><td><strong>{order.display_number}</strong><small>{order.client?.name??'Cliente não informado'}</small></td><td>{order.budget?.display_number??'—'}</td><td>{new Date(order.created_at).toLocaleDateString('pt-BR')}</td><td>{order.promised_date?new Date(`${order.promised_date}T12:00:00`).toLocaleDateString('pt-BR'):'A confirmar'}</td><td>{order.order_items.length}</td><td><strong>{money.format(Number(order.total))}</strong></td><td><select className="status-select" aria-label={`Status de ${order.display_number}`} value={order.status} onClick={e=>e.stopPropagation()} onChange={e=>{e.stopPropagation();requestStatus(order,e.target.value as OrderStatus)}}>{orderStatusOptions(order.status).map(status=><option value={status} key={status}>{labels[status]}</option>)}</select></td></tr>)}</tbody></table></div>:<div className="empty-state"><PackageCheck/><strong>Nenhum pedido encontrado para este filtro</strong><span>Clique novamente no card selecionado para exibir todos os pedidos.</span></div>}</section></Page>
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { PackageCheck, Search } from 'lucide-react';
+import { Page } from '../components/Page';
+import { OrderDetails, type DetailOrder } from '../components/OrderDetails';
+import { OrderCancellation } from '../components/OrderCancellation';
+import { OrderOperation } from '../components/OrderOperation';
+import { useAccess } from '../components/AuthorizedAccess';
+import { money } from '../lib/format';
+import { operationalStatuses, orderStatusLabels as labels, orderStatusOptions, type OrderStatus } from '../lib/orderStatus';
+import { supabase } from '../lib/supabase';
+import { navigateTo, readRoute } from '../lib/navigation';
+import { DateRangeFilter, inDateRange, type DateRange } from '../components/DateRangeFilter';
+import { SortableHeader, compareValues, type SortState } from '../components/SortableHeader';
+import './Orders.css';
+type Order = DetailOrder & {
+    status: OrderStatus;
+};
+export function Orders() {
+    const access = useAccess(), [orders, setOrders] = useState<Order[]>([]), [loading, setLoading] = useState(true), [error, setError] = useState(''), [search, setSearch] = useState(''), [dateRange, setDateRange] = useState<DateRange>({ from: '', to: '' }), [sort, setSort] = useState<SortState<'order' | 'origin' | 'created' | 'delivery' | 'items' | 'value' | 'status'>>({ key: 'order', direction: 'desc' }), [cardFilter, setCardFilter] = useState<'active' | 'awaiting_purchase' | 'ready_to_schedule' | 'pending_issue' | null>(null), [cancelOrder, setCancelOrder] = useState<Order | null>(null), [operationOrder, setOperationOrder] = useState<Order | null>(null), [requestedStage, setRequestedStage] = useState<(typeof operationalStatuses)[number]>('preparing');
+    const load = useCallback(async () => { if (!supabase || !access)
+        return; setLoading(true); setError(''); const { data, error } = await supabase.from('orders').select('id,display_number,status,payment_terms,promised_date,client_address,notes,total,created_at,client:clients!orders_client_id_fkey(name,address,city),budget:budgets!orders_budget_id_fkey(id,display_number),order_items:order_items!order_items_order_id_fkey(id,status,snapshot),receivables:receivables!receivables_order_id_fkey(id,installment,installment_count,due_date,amount,payment_method,status)').eq('organization_id', access.organizationId).order('number', { ascending: false }).abortSignal(AbortSignal.timeout(15000)); if (error)
+        setError('Não foi possível carregar os pedidos. Tente novamente.');
+    else
+        setOrders((data ?? []) as unknown as Order[]); setLoading(false); }, [access]);
+    useEffect(() => { void load(); }, [load]);
+    const detailId = readRoute(window.location.hash).recordId, detailOrder = detailId ? orders.find(order => order.id === detailId) ?? null : null;
+    const matching = useMemo(() => { const term = search.trim().toLocaleLowerCase('pt-BR'); return orders.filter(x => (!term || `${x.display_number} ${x.client?.name ?? ''} ${x.budget?.display_number ?? ''} ${labels[x.status]}`.toLocaleLowerCase('pt-BR').includes(term)) && inDateRange(x.promised_date, dateRange)); }, [orders, search, dateRange]);
+    const filtered = useMemo(() => { const selected = cardFilter === 'active' ? matching.filter(x => !['completed', 'cancelled'].includes(x.status)) : cardFilter ? matching.filter(x => x.status === cardFilter) : matching; return [...selected].sort((a, b) => { const values = { order: [a.display_number, b.display_number], origin: [a.budget?.display_number ?? '', b.budget?.display_number ?? ''], created: [a.created_at, b.created_at], delivery: [a.promised_date ?? '', b.promised_date ?? ''], items: [a.order_items.length, b.order_items.length], value: [Number(a.total), Number(b.total)], status: [labels[a.status], labels[b.status]] }[sort.key]; return compareValues(values[0], values[1]) * (sort.direction === 'asc' ? 1 : -1); }); }, [matching, cardFilter, sort]);
+    const requestStatus = (order: Order, next: OrderStatus) => { if (next === order.status)
+        return; if (next === 'cancelled') {
+        setCancelOrder(order);
+        return;
+    } if ((operationalStatuses as readonly string[]).includes(next)) {
+        setRequestedStage(next as (typeof operationalStatuses)[number]);
+        setOperationOrder(order);
+    } };
+    const active = matching.filter(x => !['completed', 'cancelled'].includes(x.status)).length, awaitingPurchase = matching.filter(x => x.status === 'awaiting_purchase').length, scheduling = matching.filter(x => x.status === 'ready_to_schedule').length, issues = matching.filter(x => x.status === 'pending_issue').length;
+    const toggleCard = (filter: NonNullable<typeof cardFilter>) => setCardFilter(current => current === filter ? null : filter);
+    if (detailId) {
+        return <Page title="Pedido" description="Itens, valores, entrega e recebimento do pedido em uma única tela.">{loading ? <p className="panel-message">Carregando pedido…</p> : detailOrder && access ? <OrderDetails organizationId={access.organizationId} order={detailOrder} onBack={() => navigateTo('pedidos')} onReviewBudget={() => detailOrder.budget?.id && navigateTo('orcamentos', detailOrder.budget.id)} onSaved={load}/> : <div className="empty-state">
+<PackageCheck />
+<strong>Pedido não encontrado</strong>
+<button className="button secondary" onClick={() => navigateTo('pedidos')}>Voltar aos pedidos</button>
+</div>}</Page>;
+    }
+    return <Page title="Pedidos" description="Toda a operação acompanha o pedido e seus itens — sem módulos separados de produção e entrega.">{cancelOrder && access && <OrderCancellation organizationId={access.organizationId} order={cancelOrder} onClose={() => setCancelOrder(null)} onSaved={load}/>} {operationOrder && access && <OrderOperation organizationId={access.organizationId} order={operationOrder} initialStage={requestedStage} onClose={() => setOperationOrder(null)} onSaved={load}/>}<section className="status-grid">
+<button type="button" className={`status-filter-card ${cardFilter === 'active' ? 'active' : ''}`} aria-pressed={cardFilter === 'active'} onClick={() => toggleCard('active')}>
+<span>Ativos</span>
+<strong>{active}</strong>
+</button>
+<button type="button" className={`status-filter-card ${cardFilter === 'awaiting_purchase' ? 'active' : ''}`} aria-pressed={cardFilter === 'awaiting_purchase'} onClick={() => toggleCard('awaiting_purchase')}>
+<span>Aguardando compra</span>
+<strong>{awaitingPurchase}</strong>
+</button>
+<button type="button" className={`status-filter-card ${cardFilter === 'ready_to_schedule' ? 'active' : ''}`} aria-pressed={cardFilter === 'ready_to_schedule'} onClick={() => toggleCard('ready_to_schedule')}>
+<span>Para agendar</span>
+<strong>{scheduling}</strong>
+</button>
+<button type="button" className={`status-filter-card ${cardFilter === 'pending_issue' ? 'active' : ''}`} aria-pressed={cardFilter === 'pending_issue'} onClick={() => toggleCard('pending_issue')}>
+<span>Com pendência</span>
+<strong>{issues}</strong>
+</button>
+</section>
+<section className="panel">
+<div className="toolbar">
+<label className="search">
+<Search />
+<input value={search} onChange={e => setSearch(e.target.value)} placeholder="Pedido, orçamento, cliente ou status"/>
+</label>
+<DateRangeFilter label="Entrega combinada" value={dateRange} onChange={setDateRange}/>
+<span>{filtered.length} pedido(s)</span>
+</div>{error ? <div className="empty-state">
+<PackageCheck />
+<strong>{error}</strong>
+<button className="button secondary" onClick={() => void load()}>Tentar novamente</button>
+</div> : loading ? <p className="panel-message">Carregando pedidos…</p> : filtered.length ? <div className="table-wrap">
+<table>
+<thead>
+<tr>
+<SortableHeader label="Pedido / cliente" column="order" sort={sort} onChange={setSort}/>
+<SortableHeader label="Origem" column="origin" sort={sort} onChange={setSort}/>
+<SortableHeader label="Criação" column="created" sort={sort} onChange={setSort}/>
+<SortableHeader label="Entrega ao cliente" column="delivery" sort={sort} onChange={setSort}/>
+<SortableHeader label="Itens" column="items" sort={sort} onChange={setSort}/>
+<SortableHeader label="Valor" column="value" sort={sort} onChange={setSort}/>
+<SortableHeader label="Status" column="status" sort={sort} onChange={setSort}/>
+</tr>
+</thead>
+<tbody>{filtered.map(order => <tr className="clickable-row" key={order.id} onClick={() => navigateTo('pedidos', order.id)}>
+<td>
+<strong>{order.display_number}</strong>
+<small>{order.client?.name ?? 'Cliente não informado'}</small>
+</td>
+<td>{order.budget?.display_number ?? '—'}</td>
+<td>{new Date(order.created_at).toLocaleDateString('pt-BR')}</td>
+<td>{order.promised_date ? new Date(`${order.promised_date}T12:00:00`).toLocaleDateString('pt-BR') : 'A confirmar'}</td>
+<td>{order.order_items.length}</td>
+<td>
+<strong>{money.format(Number(order.total))}</strong>
+</td>
+<td>
+<select className="status-select" aria-label={`Status de ${order.display_number}`} value={order.status} onClick={e => e.stopPropagation()} onChange={e => { e.stopPropagation(); requestStatus(order, e.target.value as OrderStatus); }}>{orderStatusOptions(order.status).map(status => <option value={status} key={status}>{labels[status]}</option>)}</select>
+</td>
+</tr>)}</tbody>
+</table>
+</div> : <div className="empty-state">
+<PackageCheck />
+<strong>Nenhum pedido encontrado para este filtro</strong>
+<span>Clique novamente no card selecionado para exibir todos os pedidos.</span>
+</div>}</section>
+</Page>;
 }

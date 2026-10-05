@@ -1,68 +1,396 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
-import { ArrowRight, CalendarDays, CircleDollarSign, Landmark, Search, WalletCards, X } from 'lucide-react'
-import type { ModuleKey } from '../domain'
-import { Page } from '../components/Page'
-import { useAccess } from '../components/AuthorizedAccess'
-import { useToast } from '../components/ToastProvider'
-import { money } from '../lib/format'
-import { supabase } from '../lib/supabase'
-import { PayablesPanel } from '../components/PayablesPanel'
-
-type FinancialStatus='open'|'partial'|'settled'|'overdue'|'cancelled'|'reversed'
-type Receivable={id:string;group_id:string;installment:number;installment_count:number;description:string;due_date:string|null;amount:number;paid_amount:number;status:FinancialStatus;payment_method:string|null;order:{display_number:string;client:{name:string}|null}|null}
-const labels:Record<FinancialStatus,string>={open:'Em aberto',partial:'Parcial',settled:'Recebido',overdue:'Vencido',cancelled:'Cancelado',reversed:'Estornado'}
-const groupLabel=(item:Pick<Receivable,'installment_count'>)=>`${item.installment_count} parcela${item.installment_count===1?' vinculada':'s vinculadas'}`
-
-const matchesPeriod=(dueDate:string|null,filter:string|null)=>{if(!filter||filter==='all')return true;if(!dueDate)return false;const now=new Date(),today=localDate(now);if(filter==='overdue')return dueDate<today;if(filter==='today')return dueDate===today;if(filter==='week'){const end=new Date(now);end.setDate(end.getDate()+6);return dueDate>=today&&dueDate<=localDate(end)}const monthEnd=new Date(now.getFullYear(),now.getMonth()+1,0);return dueDate>=today&&dueDate<=localDate(monthEnd)}
-function ReceivablesPanel({period}:{period:string|null}){
-  const access=useAccess(),{show}=useToast(),[items,setItems]=useState<Receivable[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState(''),[search,setSearch]=useState(''),[summaryFilter,setSummaryFilter]=useState<'all'|'received'|'open'|'groups'>('all'),[selected,setSelected]=useState<Receivable|null>(null),[scope,setScope]=useState<'single'|'group'>('single'),[dueDate,setDueDate]=useState(''),[amount,setAmount]=useState(0),[method,setMethod]=useState(''),[saving,setSaving]=useState(false),[payment,setPayment]=useState<Receivable|null>(null),[paymentScope,setPaymentScope]=useState<'single'|'group'>('single'),[paymentAmount,setPaymentAmount]=useState(0),[paymentDate,setPaymentDate]=useState(new Date().toISOString().slice(0,10)),[reversal,setReversal]=useState<Receivable|null>(null),[reversalScope,setReversalScope]=useState<'single'|'group'>('single'),[reversalReason,setReversalReason]=useState('')
-  const load=useCallback(async()=>{if(!supabase||!access)return;setLoading(true);setError('');await supabase.rpc('refresh_financial_overdues',{org_id:access.organizationId});const {data,error}=await supabase.from('receivables').select('id,group_id,installment,installment_count,description,due_date,amount,paid_amount,status,payment_method,order:orders!receivables_order_id_fkey(display_number,client:clients!orders_client_id_fkey(name))').eq('organization_id',access.organizationId).order('due_date',{ascending:true}).order('installment',{ascending:true}).abortSignal(AbortSignal.timeout(15000));if(error)setError('Não foi possível carregar as contas a receber.');else setItems((data??[]) as unknown as Receivable[]);setLoading(false)},[access])
-  useEffect(()=>{void load()},[load])
-  const periodItems=useMemo(()=>items.filter(x=>matchesPeriod(x.due_date,period)),[items,period])
-  const matching=useMemo(()=>{const term=search.trim().toLocaleLowerCase('pt-BR');return term?periodItems.filter(x=>`${x.description} ${x.order?.display_number??''} ${x.order?.client?.name??''} ${x.payment_method??''}`.toLocaleLowerCase('pt-BR').includes(term)):periodItems},[periodItems,search])
-  const filtered=useMemo(()=>summaryFilter==='received'?matching.filter(x=>Number(x.paid_amount)>0):summaryFilter==='open'?matching.filter(x=>['open','partial','overdue'].includes(x.status)&&Number(x.amount)>Number(x.paid_amount)):summaryFilter==='groups'?matching.filter((item,index,list)=>list.findIndex(candidate=>candidate.group_id===item.group_id)===index):matching,[matching,summaryFilter])
-  const openEditor=(item:Receivable)=>{setSelected(item);setScope('single');setDueDate(item.due_date??'');setAmount(Number(item.amount));setMethod(item.payment_method??'A combinar')}
-  const save=async(e:FormEvent)=>{e.preventDefault();if(!supabase||!access||!selected||saving)return;setSaving(true);const {error}=await supabase.rpc('update_receivable',{org_id:access.organizationId,target_receivable_id:selected.id,edit_scope:scope,new_due_date:dueDate,new_amount:amount,new_payment_method:method});if(error)show(error.code==='42501'?'Somente usuários do Financeiro ou administradores podem editar parcelas.':'Não foi possível atualizar a parcela.','error');else{await load();setSelected(null);show(scope==='group'?'Grupo de parcelas atualizado.':'Parcela atualizada.','success')}setSaving(false)}
-  const openPayment=(item:Receivable)=>{setPayment(item);setPaymentScope('single');setPaymentAmount(Number((Number(item.amount)-Number(item.paid_amount)).toFixed(2)));setPaymentDate(new Date().toISOString().slice(0,10))}
-  const registerPayment=async(e:FormEvent)=>{e.preventDefault();if(!supabase||!access||!payment||saving)return;setSaving(true);const {error}=await supabase.rpc('register_receivable_payment',{org_id:access.organizationId,target_receivable_id:payment.id,payment_scope:paymentScope,payment_amount:paymentAmount,payment_date:paymentDate});if(error)show(error.code==='42501'?'Somente usuários do Financeiro ou administradores podem registrar recebimentos.':'Não foi possível registrar o recebimento. Confira o valor informado.','error');else{await load();setPayment(null);show(paymentScope==='group'?'Grupo recebido integralmente.':'Recebimento registrado.','success')}setSaving(false)}
-  const reverse=async(e:FormEvent)=>{e.preventDefault();if(!supabase||!access||!reversal||saving||reversalReason.trim().length<5)return;setSaving(true);const {error}=await supabase.rpc('reverse_receivable_payment',{org_id:access.organizationId,target_receivable_id:reversal.id,reversal_scope:reversalScope,reversal_reason:reversalReason});if(error)show('Não foi possível estornar o recebimento.','error');else{await load();setReversal(null);setReversalReason('');show(reversalScope==='group'?'Recebimentos do grupo estornados.':'Recebimento estornado.','success')}setSaving(false)}
-  const expected=periodItems.reduce((sum,x)=>sum+Number(x.amount),0),received=periodItems.reduce((sum,x)=>sum+Number(x.paid_amount),0),open=periodItems.filter(x=>['open','partial','overdue'].includes(x.status)).reduce((sum,x)=>sum+Number(x.amount)-Number(x.paid_amount),0),groups=new Set(periodItems.map(x=>x.group_id)).size
-  const chooseSummary=(filter:typeof summaryFilter)=>setSummaryFilter(current=>current===filter&&filter!=='all'?'all':filter)
-  return <><section className="status-grid"><button type="button" className={`status-filter-card ${summaryFilter==='all'?'active':''}`} aria-pressed={summaryFilter==='all'} onClick={()=>chooseSummary('all')}><span>Total previsto</span><strong>{money.format(expected)}</strong></button><button type="button" className={`status-filter-card ${summaryFilter==='received'?'active':''}`} aria-pressed={summaryFilter==='received'} onClick={()=>chooseSummary('received')}><span>Recebido</span><strong>{money.format(received)}</strong></button><button type="button" className={`status-filter-card ${summaryFilter==='open'?'active':''}`} aria-pressed={summaryFilter==='open'} onClick={()=>chooseSummary('open')}><span>Em aberto</span><strong>{money.format(open)}</strong></button><button type="button" className={`status-filter-card ${summaryFilter==='groups'?'active':''}`} aria-pressed={summaryFilter==='groups'} onClick={()=>chooseSummary('groups')}><span>Grupos de parcelas</span><strong>{groups}</strong></button></section><section className="panel"><div className="toolbar"><label className="search"><Search/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Pedido, cliente, grupo ou pagamento"/></label><span>{filtered.length} parcela(s)</span></div>{error?<div className="empty-state"><CircleDollarSign/><strong>{error}</strong><button className="button secondary" onClick={()=>void load()}>Tentar novamente</button></div>:loading?<p className="panel-message">Carregando contas a receber…</p>:filtered.length?<div className="table-wrap"><table><thead><tr><th>Parcela / grupo</th><th>Pedido / cliente</th><th>Vencimento</th><th>Valor / recebido</th><th>Forma</th>
-<th>Status</th>
-</tr></thead><tbody>{filtered.map(item=><tr className="clickable-row" key={item.id} onClick={()=>openEditor(item)}><td><strong>Parcela {item.installment}/{item.installment_count}</strong><small className="table-subline">{groupLabel(item)}</small></td><td><strong>{item.order?.display_number??'—'}</strong><small className="table-subline">{item.order?.client?.name??'Cliente não informado'}</small></td><td>{item.due_date?new Date(`${item.due_date}T12:00:00`).toLocaleDateString('pt-BR'):'Sem vencimento'}</td><td><strong>{money.format(Number(item.amount))}</strong><small className="table-subline">Recebido: {money.format(Number(item.paid_amount))}</small></td><td>{item.payment_method??'A combinar'}</td>
-<td><select className="status-select" aria-label={`Status da parcela ${item.installment}`} value={item.status} onClick={e=>e.stopPropagation()} onChange={e=>{e.stopPropagation();const value=e.target.value;if(value==='settled')openPayment(item);else if(value==='reverse'){setReversal(item);setReversalScope('single');setReversalReason('')}}}><option value={item.status}>{labels[item.status]}</option>{['open','partial','overdue'].includes(item.status)&&<option value="settled">Recebido</option>}{Number(item.paid_amount)>0&&<option value="reverse">Estornar recebimento…</option>}</select></td>
-</tr>)}</tbody></table></div>:<div className="empty-state"><CircleDollarSign/><strong>Nenhuma conta a receber</strong><span>As parcelas serão criadas a partir da configuração financeira dos pedidos.</span></div>}</section>{selected&&<div className="dialog-backdrop"><form className="dialog" onSubmit={save}><header><div><span className="eyebrow">Contas a receber</span><h2>Editar parcela</h2><p>{selected.order?.display_number} · parcela {selected.installment}/{selected.installment_count} · grupo {selected.group_id.slice(0,8)}</p></div><button type="button" className="icon-button" onClick={()=>setSelected(null)}><X/></button></header><div className="form-grid"><label className="field span-2">Aplicar alteração<select value={scope} onChange={e=>setScope(e.target.value as typeof scope)}><option value="single">Somente nesta parcela</option><option value="group">Todas as parcelas abertas do grupo</option></select></label><label className="field">{scope==='group'?'Primeiro vencimento do grupo':'Vencimento'}<input required type="date" value={dueDate} onChange={e=>setDueDate(e.target.value)}/></label><label className="field">Forma de pagamento<input required value={method} onChange={e=>setMethod(e.target.value)}/></label><label className="field span-2">Valor da parcela<input type="number" min="0.01" step="0.01" disabled={scope==='group'} value={amount} onChange={e=>setAmount(Number(e.target.value))}/><small>{scope==='group'?'Na edição em grupo, os valores atuais são preservados.':'A alteração afeta somente esta parcela.'}</small></label></div><footer><button type="button" className="button secondary" onClick={()=>setSelected(null)}>Cancelar</button><button className="button primary" disabled={saving}>{saving?'Salvando…':'Salvar alteração'}</button></footer></form></div>}{payment&&<div className="dialog-backdrop"><form className="dialog" onSubmit={registerPayment}><header><div><span className="eyebrow">Baixa financeira</span><h2>Registrar recebimento</h2><p>{payment.order?.display_number} · parcela {payment.installment}/{payment.installment_count}</p></div><button type="button" className="icon-button" onClick={()=>setPayment(null)}><X/></button></header><div className="form-grid"><label className="field span-2">Aplicar baixa<select value={paymentScope} onChange={e=>setPaymentScope(e.target.value as typeof paymentScope)}><option value="single">Somente nesta parcela</option><option value="group">Quitar todas as parcelas abertas do grupo</option></select></label><label className="field">Data do recebimento<input required type="date" value={paymentDate} onChange={e=>setPaymentDate(e.target.value)}/></label><label className="field">Valor recebido<input type="number" min="0.01" step="0.01" disabled={paymentScope==='group'} value={paymentAmount} onChange={e=>setPaymentAmount(Number(e.target.value))}/></label><p className="span-2 finance-note">{paymentScope==='group'?'Todas as parcelas abertas e parciais deste grupo serão quitadas pelo saldo integral.':'É possível registrar recebimento parcial, sem ultrapassar o saldo da parcela.'}</p></div><footer><button type="button" className="button secondary" onClick={()=>setPayment(null)}>Cancelar</button><button className="button primary" disabled={saving}>{saving?'Registrando…':'Confirmar recebimento'}</button></footer></form></div>}{reversal&&<div className="dialog-backdrop"><form className="dialog" onSubmit={reverse}><header><div><span className="eyebrow">Correção financeira</span><h2>Estornar recebimento</h2><p>{reversal.order?.display_number} · parcela {reversal.installment}/{reversal.installment_count}</p></div><button type="button" className="icon-button" onClick={()=>setReversal(null)}><X/></button></header><div className="form-grid"><label className="field span-2">Aplicar estorno<select value={reversalScope} onChange={e=>setReversalScope(e.target.value as typeof reversalScope)}><option value="single">Somente nesta parcela</option><option value="group">Todos os recebimentos do grupo</option></select></label><label className="field span-2">Motivo do estorno<input required minLength={5} value={reversalReason} onChange={e=>setReversalReason(e.target.value)} placeholder="Informe o motivo"/></label><p className="span-2 finance-note">O saldo voltará a ficar em aberto e o histórico será preservado na auditoria.</p></div><footer><button type="button" className="button secondary" onClick={()=>setReversal(null)}>Cancelar</button><button className="button danger" disabled={saving||reversalReason.trim().length<5}>Confirmar estorno</button></footer></form></div>}</>
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { ArrowRight, CalendarDays, CircleDollarSign, Landmark, Search, WalletCards, X } from 'lucide-react';
+import type { ModuleKey } from '../domain';
+import { Page } from '../components/Page';
+import { useAccess } from '../components/AuthorizedAccess';
+import { useToast } from '../components/ToastProvider';
+import { money } from '../lib/format';
+import { supabase } from '../lib/supabase';
+import { PayablesPanel } from '../components/PayablesPanel';
+import { DateRangeFilter, inDateRange, type DateRange } from '../components/DateRangeFilter';
+import { SortableHeader, compareValues, type SortState } from '../components/SortableHeader';
+type FinancialStatus = 'open' | 'partial' | 'settled' | 'overdue' | 'cancelled' | 'reversed';
+type Receivable = {
+    id: string;
+    group_id: string;
+    installment: number;
+    installment_count: number;
+    description: string;
+    due_date: string | null;
+    amount: number;
+    paid_amount: number;
+    status: FinancialStatus;
+    payment_method: string | null;
+    order: {
+        display_number: string;
+        client: {
+            name: string;
+        } | null;
+    } | null;
+};
+const labels: Record<FinancialStatus, string> = { open: 'Em aberto', partial: 'Parcial', settled: 'Recebido', overdue: 'Vencido', cancelled: 'Cancelado', reversed: 'Estornado' };
+const groupLabel = (item: Pick<Receivable, 'installment_count'>) => `${item.installment_count} parcela${item.installment_count === 1 ? ' vinculada' : 's vinculadas'}`;
+const matchesPeriod = (dueDate: string | null, filter: string | null) => { if (!filter || filter === 'all')
+    return true; if (!dueDate)
+    return false; const now = new Date(), today = localDate(now); if (filter === 'overdue')
+    return dueDate < today; if (filter === 'today')
+    return dueDate === today; if (filter === 'week') {
+    const end = new Date(now);
+    end.setDate(end.getDate() + 6);
+    return dueDate >= today && dueDate <= localDate(end);
+} const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0); return dueDate >= today && dueDate <= localDate(monthEnd); };
+function ReceivablesPanel({ period }: {
+    period: string | null;
+}) {
+    const access = useAccess(), { show } = useToast(), [items, setItems] = useState<Receivable[]>([]), [loading, setLoading] = useState(true), [error, setError] = useState(''), [search, setSearch] = useState(''), [dateRange, setDateRange] = useState<DateRange>({ from: '', to: '' }), [sort, setSort] = useState<SortState<'installment' | 'order' | 'due' | 'amount' | 'method' | 'status'>>({ key: 'due', direction: 'asc' }), [summaryFilter, setSummaryFilter] = useState<'all' | 'received' | 'open' | 'groups'>('all'), [selected, setSelected] = useState<Receivable | null>(null), [scope, setScope] = useState<'single' | 'group'>('single'), [dueDate, setDueDate] = useState(''), [amount, setAmount] = useState(0), [method, setMethod] = useState(''), [saving, setSaving] = useState(false), [payment, setPayment] = useState<Receivable | null>(null), [paymentScope, setPaymentScope] = useState<'single' | 'group'>('single'), [paymentAmount, setPaymentAmount] = useState(0), [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10)), [reversal, setReversal] = useState<Receivable | null>(null), [reversalScope, setReversalScope] = useState<'single' | 'group'>('single'), [reversalReason, setReversalReason] = useState('');
+    const load = useCallback(async () => { if (!supabase || !access)
+        return; setLoading(true); setError(''); await supabase.rpc('refresh_financial_overdues', { org_id: access.organizationId }); const { data, error } = await supabase.from('receivables').select('id,group_id,installment,installment_count,description,due_date,amount,paid_amount,status,payment_method,order:orders!receivables_order_id_fkey(display_number,client:clients!orders_client_id_fkey(name))').eq('organization_id', access.organizationId).order('due_date', { ascending: true }).order('installment', { ascending: true }).abortSignal(AbortSignal.timeout(15000)); if (error)
+        setError('Não foi possível carregar as contas a receber.');
+    else
+        setItems((data ?? []) as unknown as Receivable[]); setLoading(false); }, [access]);
+    useEffect(() => { void load(); }, [load]);
+    const periodItems = useMemo(() => items.filter(x => matchesPeriod(x.due_date, period) && inDateRange(x.due_date, dateRange)), [items, period, dateRange]);
+    const matching = useMemo(() => { const term = search.trim().toLocaleLowerCase('pt-BR'); return term ? periodItems.filter(x => `${x.description} ${x.order?.display_number ?? ''} ${x.order?.client?.name ?? ''} ${x.payment_method ?? ''}`.toLocaleLowerCase('pt-BR').includes(term)) : periodItems; }, [periodItems, search]);
+    const filtered = useMemo(() => {
+        const selected = summaryFilter === 'received' ? matching.filter(x => Number(x.paid_amount) > 0) : summaryFilter === 'open' ? matching.filter(x => ['open', 'partial', 'overdue'].includes(x.status) && Number(x.amount) > Number(x.paid_amount)) : summaryFilter === 'groups' ? matching.filter((item, index, list) => list.findIndex(candidate => candidate.group_id === item.group_id) === index) : matching;
+        return [...selected].sort((a, b) => {
+            const values = { installment: [a.installment, b.installment], order: [a.order?.display_number ?? '', b.order?.display_number ?? ''], due: [a.due_date ?? '', b.due_date ?? ''], amount: [Number(a.amount), Number(b.amount)], method: [a.payment_method ?? '', b.payment_method ?? ''], status: [labels[a.status], labels[b.status]] }[sort.key];
+            return compareValues(values[0], values[1]) * (sort.direction === 'asc' ? 1 : -1);
+        });
+    }, [matching, summaryFilter, sort]);
+    const openEditor = (item: Receivable) => { setSelected(item); setScope('single'); setDueDate(item.due_date ?? ''); setAmount(Number(item.amount)); setMethod(item.payment_method ?? 'A combinar'); };
+    const save = async (e: FormEvent) => { e.preventDefault(); if (!supabase || !access || !selected || saving)
+        return; setSaving(true); const { error } = await supabase.rpc('update_receivable', { org_id: access.organizationId, target_receivable_id: selected.id, edit_scope: scope, new_due_date: dueDate, new_amount: amount, new_payment_method: method }); if (error)
+        show(error.code === '42501' ? 'Somente usuários do Financeiro ou administradores podem editar parcelas.' : 'Não foi possível atualizar a parcela.', 'error');
+    else {
+        await load();
+        setSelected(null);
+        show(scope === 'group' ? 'Grupo de parcelas atualizado.' : 'Parcela atualizada.', 'success');
+    } setSaving(false); };
+    const openPayment = (item: Receivable) => { setPayment(item); setPaymentScope('single'); setPaymentAmount(Number((Number(item.amount) - Number(item.paid_amount)).toFixed(2))); setPaymentDate(new Date().toISOString().slice(0, 10)); };
+    const registerPayment = async (e: FormEvent) => { e.preventDefault(); if (!supabase || !access || !payment || saving)
+        return; setSaving(true); const { error } = await supabase.rpc('register_receivable_payment', { org_id: access.organizationId, target_receivable_id: payment.id, payment_scope: paymentScope, payment_amount: paymentAmount, payment_date: paymentDate }); if (error)
+        show(error.code === '42501' ? 'Somente usuários do Financeiro ou administradores podem registrar recebimentos.' : 'Não foi possível registrar o recebimento. Confira o valor informado.', 'error');
+    else {
+        await load();
+        setPayment(null);
+        show(paymentScope === 'group' ? 'Grupo recebido integralmente.' : 'Recebimento registrado.', 'success');
+    } setSaving(false); };
+    const reverse = async (e: FormEvent) => { e.preventDefault(); if (!supabase || !access || !reversal || saving || reversalReason.trim().length < 5)
+        return; setSaving(true); const { error } = await supabase.rpc('reverse_receivable_payment', { org_id: access.organizationId, target_receivable_id: reversal.id, reversal_scope: reversalScope, reversal_reason: reversalReason }); if (error)
+        show('Não foi possível estornar o recebimento.', 'error');
+    else {
+        await load();
+        setReversal(null);
+        setReversalReason('');
+        show(reversalScope === 'group' ? 'Recebimentos do grupo estornados.' : 'Recebimento estornado.', 'success');
+    } setSaving(false); };
+    const expected = periodItems.reduce((sum, x) => sum + Number(x.amount), 0), received = periodItems.reduce((sum, x) => sum + Number(x.paid_amount), 0), open = periodItems.filter(x => ['open', 'partial', 'overdue'].includes(x.status)).reduce((sum, x) => sum + Number(x.amount) - Number(x.paid_amount), 0), groups = new Set(periodItems.map(x => x.group_id)).size;
+    const chooseSummary = (filter: typeof summaryFilter) => setSummaryFilter(current => current === filter && filter !== 'all' ? 'all' : filter);
+    return <>
+<section className="status-grid">
+<button type="button" className={`status-filter-card ${summaryFilter === 'all' ? 'active' : ''}`} aria-pressed={summaryFilter === 'all'} onClick={() => chooseSummary('all')}>
+<span>Total previsto</span>
+<strong>{money.format(expected)}</strong>
+</button>
+<button type="button" className={`status-filter-card ${summaryFilter === 'received' ? 'active' : ''}`} aria-pressed={summaryFilter === 'received'} onClick={() => chooseSummary('received')}>
+<span>Recebido</span>
+<strong>{money.format(received)}</strong>
+</button>
+<button type="button" className={`status-filter-card ${summaryFilter === 'open' ? 'active' : ''}`} aria-pressed={summaryFilter === 'open'} onClick={() => chooseSummary('open')}>
+<span>Em aberto</span>
+<strong>{money.format(open)}</strong>
+</button>
+<button type="button" className={`status-filter-card ${summaryFilter === 'groups' ? 'active' : ''}`} aria-pressed={summaryFilter === 'groups'} onClick={() => chooseSummary('groups')}>
+<span>Grupos de parcelas</span>
+<strong>{groups}</strong>
+</button>
+</section>
+<section className="panel">
+<div className="toolbar">
+<label className="search">
+<Search />
+<input value={search} onChange={e => setSearch(e.target.value)} placeholder="Pedido, cliente, grupo ou pagamento"/>
+</label>
+<DateRangeFilter label="Vencimento" value={dateRange} onChange={setDateRange} />
+<span>{filtered.length} parcela(s)</span>
+</div>{error ? <div className="empty-state">
+<CircleDollarSign />
+<strong>{error}</strong>
+<button className="button secondary" onClick={() => void load()}>Tentar novamente</button>
+</div> : loading ? <p className="panel-message">Carregando contas a receber…</p> : filtered.length ? <div className="table-wrap">
+<table>
+<thead>
+<tr>
+<SortableHeader label="Parcela / grupo" column="installment" sort={sort} onChange={setSort} />
+<SortableHeader label="Pedido / cliente" column="order" sort={sort} onChange={setSort} />
+<SortableHeader label="Vencimento" column="due" sort={sort} onChange={setSort} />
+<SortableHeader label="Valor / recebido" column="amount" sort={sort} onChange={setSort} />
+<SortableHeader label="Forma" column="method" sort={sort} onChange={setSort} />
+<SortableHeader label="Status" column="status" sort={sort} onChange={setSort} />
+        </tr>
+</thead>
+<tbody>{filtered.map(item => <tr className="clickable-row" key={item.id} onClick={() => openEditor(item)}>
+<td>
+<strong>Parcela {item.installment}/{item.installment_count}</strong>
+<small className="table-subline">{groupLabel(item)}</small>
+</td>
+<td>
+<strong>{item.order?.display_number ?? '—'}</strong>
+<small className="table-subline">{item.order?.client?.name ?? 'Cliente não informado'}</small>
+</td>
+<td>{item.due_date ? new Date(`${item.due_date}T12:00:00`).toLocaleDateString('pt-BR') : 'Sem vencimento'}</td>
+<td>
+<strong>{money.format(Number(item.amount))}</strong>
+<small className="table-subline">Recebido: {money.format(Number(item.paid_amount))}</small>
+</td>
+<td>{item.payment_method ?? 'A combinar'}</td>
+            <td>
+<select className="status-select" aria-label={`Status da parcela ${item.installment}`} value={item.status} onClick={e => e.stopPropagation()} onChange={e => { e.stopPropagation(); const value = e.target.value; if (value === 'settled')
+                openPayment(item);
+            else if (value === 'reverse') {
+                setReversal(item);
+                setReversalScope('single');
+                setReversalReason('');
+            } }}>
+<option value={item.status}>{labels[item.status]}</option>{['open', 'partial', 'overdue'].includes(item.status) && <option value="settled">Recebido</option>}{Number(item.paid_amount) > 0 && <option value="reverse">Estornar recebimento…</option>}</select>
+</td>
+            </tr>)}</tbody>
+</table>
+</div> : <div className="empty-state">
+<CircleDollarSign />
+<strong>Nenhuma conta a receber</strong>
+<span>As parcelas serão criadas a partir da configuração financeira dos pedidos.</span>
+</div>}</section>{selected && <div className="dialog-backdrop">
+<form className="dialog" onSubmit={save}>
+<header>
+<div>
+<span className="eyebrow">Contas a receber</span>
+<h2>Editar parcela</h2>
+<p>{selected.order?.display_number} · parcela {selected.installment}/{selected.installment_count} · grupo {selected.group_id.slice(0, 8)}</p>
+</div>
+<button type="button" className="icon-button" onClick={() => setSelected(null)}>
+<X />
+</button>
+</header>
+<div className="form-grid">
+<label className="field span-2">Aplicar alteração<select value={scope} onChange={e => setScope(e.target.value as typeof scope)}>
+<option value="single">Somente nesta parcela</option>
+<option value="group">Todas as parcelas abertas do grupo</option>
+</select>
+</label>
+<label className="field">{scope === 'group' ? 'Primeiro vencimento do grupo' : 'Vencimento'}<input required type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}/>
+</label>
+<label className="field">Forma de pagamento<input required value={method} onChange={e => setMethod(e.target.value)}/>
+</label>
+<label className="field span-2">Valor da parcela<input type="number" min="0.01" step="0.01" disabled={scope === 'group'} value={amount} onChange={e => setAmount(Number(e.target.value))}/>
+<small>{scope === 'group' ? 'Na edição em grupo, os valores atuais são preservados.' : 'A alteração afeta somente esta parcela.'}</small>
+</label>
+</div>
+<footer>
+<button type="button" className="button secondary" onClick={() => setSelected(null)}>Cancelar</button>
+<button className="button primary" disabled={saving}>{saving ? 'Salvando…' : 'Salvar alteração'}</button>
+</footer>
+</form>
+</div>}{payment && <div className="dialog-backdrop">
+<form className="dialog" onSubmit={registerPayment}>
+<header>
+<div>
+<span className="eyebrow">Baixa financeira</span>
+<h2>Registrar recebimento</h2>
+<p>{payment.order?.display_number} · parcela {payment.installment}/{payment.installment_count}</p>
+</div>
+<button type="button" className="icon-button" onClick={() => setPayment(null)}>
+<X />
+</button>
+</header>
+<div className="form-grid">
+<label className="field span-2">Aplicar baixa<select value={paymentScope} onChange={e => setPaymentScope(e.target.value as typeof paymentScope)}>
+<option value="single">Somente nesta parcela</option>
+<option value="group">Quitar todas as parcelas abertas do grupo</option>
+</select>
+</label>
+<label className="field">Data do recebimento<input required type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)}/>
+</label>
+<label className="field">Valor recebido<input type="number" min="0.01" step="0.01" disabled={paymentScope === 'group'} value={paymentAmount} onChange={e => setPaymentAmount(Number(e.target.value))}/>
+</label>
+<p className="span-2 finance-note">{paymentScope === 'group' ? 'Todas as parcelas abertas e parciais deste grupo serão quitadas pelo saldo integral.' : 'É possível registrar recebimento parcial, sem ultrapassar o saldo da parcela.'}</p>
+</div>
+<footer>
+<button type="button" className="button secondary" onClick={() => setPayment(null)}>Cancelar</button>
+<button className="button primary" disabled={saving}>{saving ? 'Registrando…' : 'Confirmar recebimento'}</button>
+</footer>
+</form>
+</div>}{reversal && <div className="dialog-backdrop">
+<form className="dialog" onSubmit={reverse}>
+<header>
+<div>
+<span className="eyebrow">Correção financeira</span>
+<h2>Estornar recebimento</h2>
+<p>{reversal.order?.display_number} · parcela {reversal.installment}/{reversal.installment_count}</p>
+</div>
+<button type="button" className="icon-button" onClick={() => setReversal(null)}>
+<X />
+</button>
+</header>
+<div className="form-grid">
+<label className="field span-2">Aplicar estorno<select value={reversalScope} onChange={e => setReversalScope(e.target.value as typeof reversalScope)}>
+<option value="single">Somente nesta parcela</option>
+<option value="group">Todos os recebimentos do grupo</option>
+</select>
+</label>
+<label className="field span-2">Motivo do estorno<input required minLength={5} value={reversalReason} onChange={e => setReversalReason(e.target.value)} placeholder="Informe o motivo"/>
+</label>
+<p className="span-2 finance-note">O saldo voltará a ficar em aberto e o histórico será preservado na auditoria.</p>
+</div>
+<footer>
+<button type="button" className="button secondary" onClick={() => setReversal(null)}>Cancelar</button>
+<button className="button danger" disabled={saving || reversalReason.trim().length < 5}>Confirmar estorno</button>
+</footer>
+</form>
+</div>}</>;
 }
-
-type ForecastLine={due_date:string|null;amount:number;paid_amount:number;status:FinancialStatus}
-type Forecast={receivable:ForecastLine[];payable:ForecastLine[]}
-const emptyForecast:Forecast={receivable:[],payable:[]}
-const openStatuses:FinancialStatus[]=['open','partial','overdue']
-const localDate=(date:Date)=>`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`
-const outstanding=(items:ForecastLine[])=>items.filter(item=>openStatuses.includes(item.status)).reduce((sum,item)=>sum+Math.max(0,Number(item.amount)-Number(item.paid_amount)),0)
-
-function FinancialOverview({navigate}:{navigate:(key:ModuleKey,recordId?:string|null)=>void}){
-  const access=useAccess(),[data,setData]=useState<Forecast>(emptyForecast),[loading,setLoading]=useState(Boolean(supabase)),[error,setError]=useState('')
-  const load=useCallback(async()=>{if(!supabase||!access){setLoading(false);return}setLoading(true);setError('');const {error:overdueError}=await supabase.rpc('refresh_financial_overdues',{org_id:access.organizationId});const [receivable,payable]=await Promise.all([
-    supabase.from('receivables').select('due_date,amount,paid_amount,status').eq('organization_id',access.organizationId).in('status',openStatuses),
-    supabase.from('payables').select('due_date,amount,paid_amount,status').eq('organization_id',access.organizationId).in('status',openStatuses),
-  ]);if(overdueError||receivable.error||payable.error)setError('Não foi possível carregar a previsão financeira.');else setData({receivable:(receivable.data??[]) as ForecastLine[],payable:(payable.data??[]) as ForecastLine[]});setLoading(false)},[access])
-  useEffect(()=>{void load()},[load])
-  const periods=useMemo(()=>{const now=new Date(),today=localDate(now),week=new Date(now);week.setDate(week.getDate()+6);const month=new Date(now.getFullYear(),now.getMonth()+1,0);const totalUntil=(items:ForecastLine[],end:string)=>outstanding(items.filter(item=>Boolean(item.due_date&&item.due_date>=today&&item.due_date<=end)))
-    return [{key:'today',label:'Hoje',detail:now.toLocaleDateString('pt-BR',{day:'2-digit',month:'short'}),receivable:totalUntil(data.receivable,today),payable:totalUntil(data.payable,today)},{key:'week',label:'Próximos 7 dias',detail:`até ${localDate(week).split('-').reverse().slice(0,2).join('/')}`,receivable:totalUntil(data.receivable,localDate(week)),payable:totalUntil(data.payable,localDate(week))},{key:'month',label:'Mês atual',detail:now.toLocaleDateString('pt-BR',{month:'long',year:'numeric'}),receivable:totalUntil(data.receivable,localDate(month)),payable:totalUntil(data.payable,localDate(month))}]},[data])
-  const overdueReceivable=outstanding(data.receivable.filter(item=>Boolean(item.due_date&&item.due_date<localDate(new Date())))),overduePayable=outstanding(data.payable.filter(item=>Boolean(item.due_date&&item.due_date<localDate(new Date()))))
-  return <Page title="Painel financeiro" description="Entradas e saídas previstas para orientar o caixa." action={<button className="button primary" onClick={()=>navigate('financeiro-lancamentos')}><WalletCards/>Ver lançamentos</button>}>
-    {error&&<div className="inline-warning"><CircleDollarSign/><span>{error}</span><button className="button secondary" onClick={()=>void load()}>Tentar novamente</button></div>}
-    <section className="financial-forecast">{periods.map(period=><article key={period.label}><header><div><CalendarDays/><div><strong>{period.label}</strong><small>{period.detail}</small></div></div><span className="forecast-balance">{loading?'—':money.format(period.receivable-period.payable)}</span></header><div><button className="forecast-link receivable" onClick={()=>navigate('financeiro-lancamentos',`receivable-${period.key}`)}><span>A receber</span><strong>{loading?'—':money.format(period.receivable)}</strong></button><button className="forecast-link payable" onClick={()=>navigate('financeiro-lancamentos',`payable-${period.key}`)}><span>A pagar</span><strong>{loading?'—':money.format(period.payable)}</strong></button></div><footer><button className="forecast-total-link" onClick={()=>navigate('financeiro-lancamentos',`all-${period.key}`)}><span>Saldo previsto</span><strong className={period.receivable-period.payable<0?'negative':''}>{loading?'—':money.format(period.receivable-period.payable)}</strong></button></footer></article>)}</section>
-    <section className="financial-summary-grid"><article className="panel"><header><div><h2>Visão rápida</h2><p>Valores ainda em aberto, considerando as previsões registradas.</p></div></header><div className="financial-summary-list"><button className="receivable" onClick={()=>navigate('financeiro-lancamentos','receivable-all')}><span><Landmark/>Receber em aberto</span><strong>{loading?'—':money.format(outstanding(data.receivable))}</strong></button><button className="payable" onClick={()=>navigate('financeiro-lancamentos','payable-all')}><span><CircleDollarSign/>Pagar em aberto</span><strong>{loading?'—':money.format(outstanding(data.payable))}</strong></button><button className="total" onClick={()=>navigate('financeiro-lancamentos','all-all')}><span>Saldo futuro</span><strong>{loading?'—':money.format(outstanding(data.receivable)-outstanding(data.payable))}</strong></button></div></article><article className="panel financial-alerts"><header><div><h2>Atenção</h2><p>Valores já vencidos.</p></div></header><div><button className="financial-alert-link receivable" onClick={()=>navigate('financeiro-lancamentos','receivable-overdue')}><span>A receber vencido</span><strong>{loading?'—':money.format(overdueReceivable)}</strong></button><button className="financial-alert-link payable" onClick={()=>navigate('financeiro-lancamentos','payable-overdue')}><span>A pagar vencido</span><strong>{loading?'—':money.format(overduePayable)}</strong></button><button onClick={()=>navigate('financeiro-lancamentos')}>Abrir lançamentos <ArrowRight/></button></div></article></section>
-  </Page>
+type ForecastLine = {
+    due_date: string | null;
+    amount: number;
+    paid_amount: number;
+    status: FinancialStatus;
+};
+type Forecast = {
+    receivable: ForecastLine[];
+    payable: ForecastLine[];
+};
+const emptyForecast: Forecast = { receivable: [], payable: [] };
+const openStatuses: FinancialStatus[] = ['open', 'partial', 'overdue'];
+const localDate = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+const outstanding = (items: ForecastLine[]) => items.filter(item => openStatuses.includes(item.status)).reduce((sum, item) => sum + Math.max(0, Number(item.amount) - Number(item.paid_amount)), 0);
+function FinancialOverview({ navigate }: {
+    navigate: (key: ModuleKey, recordId?: string | null) => void;
+}) {
+    const access = useAccess(), [data, setData] = useState<Forecast>(emptyForecast), [loading, setLoading] = useState(Boolean(supabase)), [error, setError] = useState('');
+    const load = useCallback(async () => {
+        if (!supabase || !access) {
+            setLoading(false);
+            return;
+        }
+        setLoading(true);
+        setError('');
+        const { error: overdueError } = await supabase.rpc('refresh_financial_overdues', { org_id: access.organizationId });
+        const [receivable, payable] = await Promise.all([
+            supabase.from('receivables').select('due_date,amount,paid_amount,status').eq('organization_id', access.organizationId).in('status', openStatuses),
+            supabase.from('payables').select('due_date,amount,paid_amount,status').eq('organization_id', access.organizationId).in('status', openStatuses),
+        ]);
+        if (overdueError || receivable.error || payable.error)
+            setError('Não foi possível carregar a previsão financeira.');
+        else
+            setData({ receivable: (receivable.data ?? []) as ForecastLine[], payable: (payable.data ?? []) as ForecastLine[] });
+        setLoading(false);
+    }, [access]);
+    useEffect(() => { void load(); }, [load]);
+    const periods = useMemo(() => {
+        const now = new Date(), today = localDate(now), week = new Date(now);
+        week.setDate(week.getDate() + 6);
+        const month = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        const totalUntil = (items: ForecastLine[], end: string) => outstanding(items.filter(item => Boolean(item.due_date && item.due_date >= today && item.due_date <= end)));
+        return [{ key: 'today', label: 'Hoje', detail: now.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }), receivable: totalUntil(data.receivable, today), payable: totalUntil(data.payable, today) }, { key: 'week', label: 'Próximos 7 dias', detail: `até ${localDate(week).split('-').reverse().slice(0, 2).join('/')}`, receivable: totalUntil(data.receivable, localDate(week)), payable: totalUntil(data.payable, localDate(week)) }, { key: 'month', label: 'Mês atual', detail: now.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }), receivable: totalUntil(data.receivable, localDate(month)), payable: totalUntil(data.payable, localDate(month)) }];
+    }, [data]);
+    const overdueReceivable = outstanding(data.receivable.filter(item => Boolean(item.due_date && item.due_date < localDate(new Date())))), overduePayable = outstanding(data.payable.filter(item => Boolean(item.due_date && item.due_date < localDate(new Date()))));
+    return <Page title="Painel financeiro" description="Entradas e saídas previstas para orientar o caixa." action={<button className="button primary" onClick={() => navigate('financeiro-lancamentos')}>
+<WalletCards />Ver lançamentos</button>}>
+    {error && <div className="inline-warning">
+<CircleDollarSign />
+<span>{error}</span>
+<button className="button secondary" onClick={() => void load()}>Tentar novamente</button>
+</div>}
+    <section className="financial-forecast">{periods.map(period => <article key={period.label}>
+<header>
+<div>
+<CalendarDays />
+<div>
+<strong>{period.label}</strong>
+<small>{period.detail}</small>
+</div>
+</div>
+<span className="forecast-balance">{loading ? '—' : money.format(period.receivable - period.payable)}</span>
+</header>
+<div>
+<button className="forecast-link receivable" onClick={() => navigate('financeiro-lancamentos', `receivable-${period.key}`)}>
+<span>A receber</span>
+<strong>{loading ? '—' : money.format(period.receivable)}</strong>
+</button>
+<button className="forecast-link payable" onClick={() => navigate('financeiro-lancamentos', `payable-${period.key}`)}>
+<span>A pagar</span>
+<strong>{loading ? '—' : money.format(period.payable)}</strong>
+</button>
+</div>
+<footer>
+<button className="forecast-total-link" onClick={() => navigate('financeiro-lancamentos', `all-${period.key}`)}>
+<span>Saldo previsto</span>
+<strong className={period.receivable - period.payable < 0 ? 'negative' : ''}>{loading ? '—' : money.format(period.receivable - period.payable)}</strong>
+</button>
+</footer>
+</article>)}</section>
+    <section className="financial-summary-grid">
+<article className="panel">
+<header>
+<div>
+<h2>Visão rápida</h2>
+<p>Valores ainda em aberto, considerando as previsões registradas.</p>
+</div>
+</header>
+<div className="financial-summary-list">
+<button className="receivable" onClick={() => navigate('financeiro-lancamentos', 'receivable-all')}>
+<span>
+<Landmark />Receber em aberto</span>
+<strong>{loading ? '—' : money.format(outstanding(data.receivable))}</strong>
+</button>
+<button className="payable" onClick={() => navigate('financeiro-lancamentos', 'payable-all')}>
+<span>
+<CircleDollarSign />Pagar em aberto</span>
+<strong>{loading ? '—' : money.format(outstanding(data.payable))}</strong>
+</button>
+<button className="total" onClick={() => navigate('financeiro-lancamentos', 'all-all')}>
+<span>Saldo futuro</span>
+<strong>{loading ? '—' : money.format(outstanding(data.receivable) - outstanding(data.payable))}</strong>
+</button>
+</div>
+</article>
+<article className="panel financial-alerts">
+<header>
+<div>
+<h2>Atenção</h2>
+<p>Valores já vencidos.</p>
+</div>
+</header>
+<div>
+<button className="financial-alert-link receivable" onClick={() => navigate('financeiro-lancamentos', 'receivable-overdue')}>
+<span>A receber vencido</span>
+<strong>{loading ? '—' : money.format(overdueReceivable)}</strong>
+</button>
+<button className="financial-alert-link payable" onClick={() => navigate('financeiro-lancamentos', 'payable-overdue')}>
+<span>A pagar vencido</span>
+<strong>{loading ? '—' : money.format(overduePayable)}</strong>
+</button>
+<button onClick={() => navigate('financeiro-lancamentos')}>Abrir lançamentos <ArrowRight />
+</button>
+</div>
+</article>
+</section>
+  </Page>;
 }
-
-export function Finance({mode,filter,navigate}:{mode:'overview'|'entries';filter?:string|null;navigate:(key:ModuleKey,recordId?:string|null)=>void}){
-  const access=useAccess(),[view,setView]=useState<'receivable'|'payable'>(()=>filter?.startsWith('payable')?'payable':'receivable'),[period,setPeriod]=useState<string|null>(()=>filter?.split('-').slice(1).join('-')||null)
-  useEffect(()=>{setView(filter?.startsWith('payable')?'payable':'receivable');setPeriod(filter?.split('-').slice(1).join('-')||null)},[filter])
-  if(mode==='overview')return <FinancialOverview navigate={navigate}/>
-  const filterLabel=period&&period!=='all'?period==='today'?'hoje':period==='week'?'próximos 7 dias':period==='month'?'mês atual':'vencidos':null
-  return <Page title="Lançamentos financeiros" description={filterLabel?`Exibindo lançamentos de ${filterLabel}.`:'Consulte, edite e registre pagamentos e recebimentos.'} action={<button className="button secondary" onClick={()=>navigate('financeiro')}><ArrowRight className="back-arrow"/>Painel financeiro</button>}><div className="finance-tabs"><button className={view==='receivable'?'active':''} onClick={()=>setView('receivable')}>Contas a receber</button><button className={view==='payable'?'active':''} onClick={()=>setView('payable')}>Contas a pagar</button>{period&&<button onClick={()=>navigate('financeiro-lancamentos')}>Limpar filtro</button>}</div>{view==='receivable'?<ReceivablesPanel period={period}/>:access?<PayablesPanel organizationId={access.organizationId} period={period}/>:null}</Page>
+export function Finance({ mode, filter, navigate }: {
+    mode: 'overview' | 'entries';
+    filter?: string | null;
+    navigate: (key: ModuleKey, recordId?: string | null) => void;
+}) {
+    const access = useAccess(), [view, setView] = useState<'receivable' | 'payable'>(() => filter?.startsWith('payable') ? 'payable' : 'receivable'), [period, setPeriod] = useState<string | null>(() => filter?.split('-').slice(1).join('-') || null);
+    useEffect(() => { setView(filter?.startsWith('payable') ? 'payable' : 'receivable'); setPeriod(filter?.split('-').slice(1).join('-') || null); }, [filter]);
+    if (mode === 'overview')
+        return <FinancialOverview navigate={navigate}/>;
+    const filterLabel = period && period !== 'all' ? period === 'today' ? 'hoje' : period === 'week' ? 'próximos 7 dias' : period === 'month' ? 'mês atual' : 'vencidos' : null;
+    return <Page title="Lançamentos financeiros" description={filterLabel ? `Exibindo lançamentos de ${filterLabel}.` : 'Consulte, edite e registre pagamentos e recebimentos.'} action={<button className="button secondary" onClick={() => navigate('financeiro')}>
+<ArrowRight className="back-arrow"/>Painel financeiro</button>}>
+<div className="finance-tabs">
+<button className={view === 'receivable' ? 'active' : ''} onClick={() => setView('receivable')}>Contas a receber</button>
+<button className={view === 'payable' ? 'active' : ''} onClick={() => setView('payable')}>Contas a pagar</button>{period && <button onClick={() => navigate('financeiro-lancamentos')}>Limpar filtro</button>}</div>{view === 'receivable' ? <ReceivablesPanel period={period}/> : access ? <PayablesPanel organizationId={access.organizationId} period={period}/> : null}</Page>;
 }

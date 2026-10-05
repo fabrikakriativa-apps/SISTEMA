@@ -20,6 +20,8 @@ import { SearchSelect } from '../components/SearchSelect'
 import { budgetDocumentPath } from '../lib/documents'
 import { confectionSubitems } from '../domain'
 import { UpholsteryEstimateCalculator } from '../components/UpholsteryEstimateCalculator'
+import { DateRangeFilter, inDateRange, type DateRange } from '../components/DateRangeFilter'
+import { SortableHeader, compareValues, type SortState } from '../components/SortableHeader'
 import { newUpholsteryEstimate, type UpholsteryEstimate } from '../lib/upholsteryEstimate'
 import './Budgets.css'
 
@@ -56,7 +58,7 @@ export function Budgets() {
   const { show } = useToast()
   const [items,setItems] = useState<Budget[]>([]), [clients,setClients] = useState<Client[]>([])
   const [loading,setLoading] = useState(true), [creating,setCreating] = useState(false)
-  const [error,setError] = useState(''), [search,setSearch] = useState(''),[documentFilter,setDocumentFilter]=useState<DocumentType>('budget'),[statusFilter,setStatusFilter]=useState<BudgetStatus|null>(null)
+  const [error,setError] = useState(''), [search,setSearch] = useState(''),[documentFilter,setDocumentFilter]=useState<DocumentType>('budget'),[statusFilter,setStatusFilter]=useState<BudgetStatus|null>(null),[dateRange,setDateRange]=useState<DateRange>({from:'',to:''}),[sort,setSort]=useState<SortState<'number'|'type'|'revision'|'created'|'value'|'status'>>({key:'created',direction:'desc'})
   const [selected,setSelected] = useState<Budget|null>(null), [form,setForm] = useState<Editable>(blankEditable)
   const [saveState,setSaveState] = useState<'idle'|'waiting'|'saving'|'saved'|'error'>('idle')
   const saveTimer = useRef<number>(), initialized = useRef(false), saving = useRef(false), pending = useRef<Editable|null>(null), selectedRef = useRef<Budget|null>(null)
@@ -125,8 +127,8 @@ export function Budgets() {
     finally{setCreating(false)}
   }
 
-  const matching=useMemo(()=>items.filter(item=>item.document_type===documentFilter&&`${item.display_number} ${item.client?.name??''} ${labels[item.status]}`.toLowerCase().includes(search.toLowerCase())),[items,search,documentFilter])
-  const filtered=useMemo(()=>statusFilter?matching.filter(item=>item.status===statusFilter):matching,[matching,statusFilter])
+  const matching=useMemo(()=>items.filter(item=>item.document_type===documentFilter&&inDateRange(item.created_at,dateRange)&&`${item.display_number} ${item.client?.name??''} ${labels[item.status]}`.toLowerCase().includes(search.toLowerCase())),[items,search,documentFilter,dateRange])
+  const filtered=useMemo(()=>{const selected=statusFilter?matching.filter(item=>item.status===statusFilter):matching;const value=(item:Budget)=>sort.key==='number'?`${item.display_number} ${item.client?.name??''}`:sort.key==='type'?item.document_type:sort.key==='revision'?item.current_revision:sort.key==='created'?item.created_at:sort.key==='value'?Number(item.total):labels[item.status];return [...selected].sort((a,b)=>compareValues(value(a),value(b))*(sort.direction==='asc'?1:-1))},[matching,statusFilter,sort])
   const counts=useMemo(()=>({draft:matching.filter(x=>x.status==='draft').length,sent:matching.filter(x=>x.status==='sent').length,approved:matching.filter(x=>x.status==='approved').length,rejected:matching.filter(x=>x.status==='rejected').length}),[matching])
   const toggleStatusFilter=(status:BudgetStatus)=>setStatusFilter(current=>current===status?null:status)
   if(selected) return <BudgetEditor access={access!} budget={selected} setBudget={budget=>{selectedRef.current=budget;setSelected(budget);setItems(current=>current.map(item=>item.id===budget.id?budget:item))}} form={form} setForm={setForm} clients={clients} saveState={saveState} close={()=>{initialized.current=false;selectedRef.current=null;setSelected(null);navigateTo('orcamentos')}}/>
@@ -161,18 +163,19 @@ export function Budgets() {
 <Search/>
 <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Cliente, número ou status"/>
 </label>
+<DateRangeFilter label="Data de criação" value={dateRange} onChange={setDateRange}/>
 <span>{filtered.length} orçamento(s)</span>
 </div>
 <div className="table-wrap">
 <table>
 <thead>
 <tr>
-<th>Número / cliente</th>
-<th>Tipo</th>
-<th>Revisão</th>
-<th>Criação</th>
-<th>Valor</th>
-<th>Status</th>
+<SortableHeader label="Número / cliente" column="number" sort={sort} onChange={setSort}/>
+<SortableHeader label="Tipo" column="type" sort={sort} onChange={setSort}/>
+<SortableHeader label="Revisão" column="revision" sort={sort} onChange={setSort}/>
+<SortableHeader label="Criação" column="created" sort={sort} onChange={setSort}/>
+<SortableHeader label="Valor" column="value" sort={sort} onChange={setSort}/>
+<SortableHeader label="Status" column="status" sort={sort} onChange={setSort}/>
 </tr>
 </thead>
 <tbody>{filtered.map(item=>
@@ -207,7 +210,8 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   const {show}=useToast()
   const canEditItems=budget.status==='draft'&&(access.role==='admin'||access.role==='comercial')
   const canStartRevision=budget.document_type==='budget'&&['sent','rejected'].includes(budget.status)&&(access.role==='admin'||access.role==='comercial')
-  const [families,setFamilies]=useState<Family[]>([]),[items,setItems]=useState<BudgetItem[]>([]),[itemOpen,setItemOpen]=useState(false),[itemForm,setItemForm]=useState<ItemForm>(newBlankItem),[itemSaving,setItemSaving]=useState(false),[itemDuplicatingId,setItemDuplicatingId]=useState<string|null>(null),[itemsLoading,setItemsLoading]=useState(true)
+  const [families,setFamilies]=useState<Family[]>([]),[items,setItems]=useState<BudgetItem[]>([]),[itemSort,setItemSort]=useState<SortState<'type'|'description'|'quantity'|'cost'|'sale'|'presentation'>>({key:'type',direction:'asc'}),[itemOpen,setItemOpen]=useState(false),[itemForm,setItemForm]=useState<ItemForm>(newBlankItem),[itemSaving,setItemSaving]=useState(false),[itemDuplicatingId,setItemDuplicatingId]=useState<string|null>(null),[itemsLoading,setItemsLoading]=useState(true)
+  const sortedBudgetItems=useMemo(()=>[...items].sort((a,b)=>{const values={type:[`${a.family?.name??''} ${a.environment??''}`,`${b.family?.name??''} ${b.environment??''}`],description:[a.description,b.description],quantity:[Number(a.quantity),Number(b.quantity)],cost:[Number(a.cost_total),Number(b.cost_total)],sale:[Number(a.sale_total),Number(b.sale_total)],presentation:[a.affects_total?'Item principal':'Opção',b.affects_total?'Item principal':'Opção']}[itemSort.key];return compareValues(values[0],values[1])*(itemSort.direction==='asc'?1:-1)}),[items,itemSort])
   const [supplies,setSupplies]=useState<SupplyOption[]>([]),[supplyLines,setSupplyLines]=useState<SupplyLine[]>([])
   const [providers,setProviders]=useState<ProviderOption[]>([]),[laborLines,setLaborLines]=useState<LaborLine[]>([])
   const [paymentOptions,setPaymentOptions]=useState<ItemPaymentOption[]>([]),[itemPaymentOptions,setItemPaymentOptions]=useState<Record<string,ItemPaymentOption[]>>({})
@@ -663,16 +667,16 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <table>
 <thead>
 <tr>
-<th>Tipo / ambiente</th>
-<th>Descrição</th>
-<th>Qtd.</th>
-<th>Custo</th>
-<th>Venda</th>
-<th>Apresentação</th>
+<SortableHeader label="Tipo / ambiente" column="type" sort={itemSort} onChange={setItemSort}/>
+<SortableHeader label="Descrição" column="description" sort={itemSort} onChange={setItemSort}/>
+<SortableHeader label="Qtd." column="quantity" sort={itemSort} onChange={setItemSort}/>
+<SortableHeader label="Custo" column="cost" sort={itemSort} onChange={setItemSort}/>
+<SortableHeader label="Venda" column="sale" sort={itemSort} onChange={setItemSort}/>
+<SortableHeader label="Apresentação" column="presentation" sort={itemSort} onChange={setItemSort}/>
 {canEditItems&&<th className="actions-column">Ações</th>}
 </tr>
 </thead>
-<tbody>{items.map(item=>
+<tbody>{sortedBudgetItems.map(item=>
 <tr className="clickable-row" key={item.id} onClick={()=>void openItem(item)}>
 <td>
 <strong>{item.family?.name??'Item'}</strong>
