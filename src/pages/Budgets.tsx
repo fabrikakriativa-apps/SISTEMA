@@ -56,7 +56,7 @@ export function Budgets() {
   const { show } = useToast()
   const [items,setItems] = useState<Budget[]>([]), [clients,setClients] = useState<Client[]>([])
   const [loading,setLoading] = useState(true), [creating,setCreating] = useState(false)
-  const [error,setError] = useState(''), [search,setSearch] = useState(''),[documentFilter,setDocumentFilter]=useState<DocumentType>('budget')
+  const [error,setError] = useState(''), [search,setSearch] = useState(''),[documentFilter,setDocumentFilter]=useState<DocumentType>('budget'),[statusFilter,setStatusFilter]=useState<BudgetStatus|null>(null)
   const [selected,setSelected] = useState<Budget|null>(null), [form,setForm] = useState<Editable>(blankEditable)
   const [saveState,setSaveState] = useState<'idle'|'waiting'|'saving'|'saved'|'error'>('idle')
   const saveTimer = useRef<number>(), initialized = useRef(false), saving = useRef(false), pending = useRef<Editable|null>(null), selectedRef = useRef<Budget|null>(null)
@@ -125,8 +125,10 @@ export function Budgets() {
     finally{setCreating(false)}
   }
 
-  const filtered=useMemo(()=>items.filter(item=>item.document_type===documentFilter&&`${item.display_number} ${item.client?.name??''} ${labels[item.status]}`.toLowerCase().includes(search.toLowerCase())),[items,search,documentFilter])
-  const counts=useMemo(()=>({draft:filtered.filter(x=>x.status==='draft').length,sent:filtered.filter(x=>x.status==='sent').length,approved:filtered.filter(x=>x.status==='approved').length,rejected:filtered.filter(x=>x.status==='rejected').length}),[filtered])
+  const matching=useMemo(()=>items.filter(item=>item.document_type===documentFilter&&`${item.display_number} ${item.client?.name??''} ${labels[item.status]}`.toLowerCase().includes(search.toLowerCase())),[items,search,documentFilter])
+  const filtered=useMemo(()=>statusFilter?matching.filter(item=>item.status===statusFilter):matching,[matching,statusFilter])
+  const counts=useMemo(()=>({draft:matching.filter(x=>x.status==='draft').length,sent:matching.filter(x=>x.status==='sent').length,approved:matching.filter(x=>x.status==='approved').length,rejected:matching.filter(x=>x.status==='rejected').length}),[matching])
+  const toggleStatusFilter=(status:BudgetStatus)=>setStatusFilter(current=>current===status?null:status)
   if(selected) return <BudgetEditor access={access!} budget={selected} setBudget={budget=>{selectedRef.current=budget;setSelected(budget);setItems(current=>current.map(item=>item.id===budget.id?budget:item))}} form={form} setForm={setForm} clients={clients} saveState={saveState} close={()=>{initialized.current=false;selectedRef.current=null;setSelected(null);navigateTo('orcamentos')}}/>
 
   return <Page title={documentFilter==='pre_budget'?'Pré-orçamentos':'Orçamentos'} description={documentFilter==='pre_budget'?'Estimativas rápidas, sem compromisso de valor final, para evoluir com o cliente.':'Propostas formais, revisões preservadas e uma única versão para tela, PDF e WhatsApp.'} action={<div className="page-actions">
@@ -134,24 +136,24 @@ export function Budgets() {
 <button className="button primary" disabled={creating} onClick={()=>void create('budget')}><Plus/>Novo orçamento</button></div>}>
     {loading&&<p role="status">Carregando orçamentos…</p>}{error&&<p role="alert">{error} <button className="button secondary" onClick={load}>Tentar novamente</button>
 </p>}
-    <div className="segmented-control" role="tablist" aria-label="Tipo de documento"><button className={documentFilter==='pre_budget'?'active':''} onClick={()=>setDocumentFilter('pre_budget')}>Pré-orçamentos</button><button className={documentFilter==='budget'?'active':''} onClick={()=>setDocumentFilter('budget')}>Orçamentos</button></div>
+    <div className="segmented-control" role="tablist" aria-label="Tipo de documento"><button className={documentFilter==='pre_budget'?'active':''} onClick={()=>{setDocumentFilter('pre_budget');setStatusFilter(null)}}>Pré-orçamentos</button><button className={documentFilter==='budget'?'active':''} onClick={()=>{setDocumentFilter('budget');setStatusFilter(null)}}>Orçamentos</button></div>
     <section className="status-grid">
-<article>
+<button type="button" className={`budget-status-card ${statusFilter==='draft'?'active':''}`} aria-pressed={statusFilter==='draft'} onClick={()=>toggleStatusFilter('draft')}>
 <span>Rascunhos</span>
 <strong>{counts.draft}</strong>
-</article>
-<article>
+</button>
+<button type="button" className={`budget-status-card ${statusFilter==='sent'?'active':''}`} aria-pressed={statusFilter==='sent'} onClick={()=>toggleStatusFilter('sent')}>
 <span>Enviados</span>
 <strong>{counts.sent}</strong>
-</article>
-<article>
+</button>
+<button type="button" className={`budget-status-card ${statusFilter==='approved'?'active':''}`} aria-pressed={statusFilter==='approved'} onClick={()=>toggleStatusFilter('approved')}>
 <span>Aprovados</span>
 <strong>{counts.approved}</strong>
-</article>
-<article>
+</button>
+<button type="button" className={`budget-status-card ${statusFilter==='rejected'?'active':''}`} aria-pressed={statusFilter==='rejected'} onClick={()=>toggleStatusFilter('rejected')}>
 <span>Reprovados</span>
 <strong>{counts.rejected}</strong>
-</article>
+</button>
 </section>
     <section className="panel">
 <div className="toolbar">
