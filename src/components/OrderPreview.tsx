@@ -5,7 +5,7 @@ type OrderItem = { id:string; snapshot:{ environment?:string|null; description?:
 type Receivable = { id:string; installment:number; installment_count:number; due_date:string|null; amount:number; payment_method:string|null; status:string }
 type PreviewOrder = {
   display_number:string; created_at:string; payment_terms:string|null; promised_date:string|null; client_address:string|null; notes:string|null; total:number
-  client:{ name:string; address:string|null; city:string|null }|null; order_items:OrderItem[]; receivables?:Receivable[]
+  client:{ name:string; document:string|null; address:string|null; city:string|null }|null; order_items:OrderItem[]; receivables?:Receivable[]
 }
 const displayDate = (value:string|null) => value ? new Date(`${value.slice(0,10)}T12:00:00`).toLocaleDateString('pt-BR') : 'A confirmar'
 
@@ -25,7 +25,7 @@ export function OrderPreview({order,onClose}:{order:PreviewOrder;onClose:()=>voi
           <div className="document-number"><small>PEDIDO</small><strong>{order.display_number}</strong><span>{displayDate(order.created_at)}</span></div>
         </header>
         <section className="document-client">
-          <div><small>CLIENTE</small><strong>{order.client?.name ?? 'Cliente não informado'}</strong>{address && <span>{address}</span>}</div>
+          <div><small>CLIENTE</small><strong>{order.client?.name ?? 'Cliente não informado'}</strong>{order.client?.document&&<span>CPF/CNPJ: {order.client.document}</span>}{address && <span>{address}</span>}</div>
           <div><small>CONDIÇÕES</small><strong>Pagamento: {order.payment_terms || 'A combinar'}</strong><span>Prazo de entrega: {displayDate(order.promised_date)}</span></div>
         </section>
         <section className="document-items order-document-items">

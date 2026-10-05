@@ -34,7 +34,7 @@ type Budget = {
   created_at:string; updated_at:string; client:{name:string}|null
 }
 type DocumentType='pre_budget'|'budget'
-type Client = { id:string; name:string; phone:string|null; address:string|null; city:string|null; client_type:string; master_client_id:string|null; master:{name:string;address:string|null;city:string|null}[] }
+type Client = { id:string; name:string; document:string|null; phone:string|null; address:string|null; city:string|null; client_type:string; master_client_id:string|null; master:{name:string;address:string|null;city:string|null}[] }
 type Editable = Pick<Budget,'client_id'|'client_address'|'client_address_edited'|'valid_until'|'payment_terms'|'delivery_terms'|'notes'|'internal_notes'|'discount'>
 type Family={id:string;name:string;code:string;form_key:string}
 type BudgetItem={id:string;family_id:string|null;position:number;presentation:string;environment:string|null;description:string;quantity:number;configuration:Record<string,unknown>;cost_total:number;margin_percent:number|null;sale_total:number;affects_total:boolean;family:{name:string}|null}
@@ -69,7 +69,7 @@ export function Budgets() {
     try {
       const [budgetResult,clientResult] = await Promise.all([
         supabase.from('budgets').select(columns).eq('organization_id',access.organizationId).order('number',{ascending:false}),
-        supabase.from('clients').select('id,name,phone,address,city,client_type,master_client_id').eq('organization_id',access.organizationId).is('archived_at',null).order('name'),
+        supabase.from('clients').select('id,name,document,phone,address,city,client_type,master_client_id').eq('organization_id',access.organizationId).is('archived_at',null).order('name'),
       ])
       if (clientResult.error) throw clientResult.error
       setClients(((clientResult.data ?? []) as Client[]).map(client=>({...client,master:[]})))
@@ -240,7 +240,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     return()=>{cancelled=true}
   },[budget.id,budget.status,budgetOrganizationId])
   const [visitOpen,setVisitOpen]=useState(false),[visitSaving,setVisitSaving]=useState(false),[visit,setVisit]=useState({date:new Date().toISOString().slice(0,10),time:'10:00',duration:60,address:form.client_address??'',notes:''})
-  const [newClient,setNewClient]=useState({name:'',phone:'',address:'',city:'',origin:'',notes:'',master_client_id:''})
+  const [newClient,setNewClient]=useState({name:'',document:'',phone:'',address:'',city:'',origin:'',notes:'',master_client_id:''})
   const isPreBudget=budget.document_type==='pre_budget'
   const client=availableClients.find(item=>item.id===form.client_id)
   const master=availableClients.find(item=>item.id===client?.master_client_id)
@@ -279,10 +279,10 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   const saveNewClient=async(event:FormEvent)=>{
     event.preventDefault();if(!supabase||newClientSaving||!newClient.name.trim())return
     setNewClientSaving(true)
-    const payload={id:crypto.randomUUID(),organization_id:budgetOrganizationId,client_type:'Cliente final',name:newClient.name.trim(),phone:newClient.phone.trim()||null,address:newClient.address.trim()||null,city:newClient.city.trim()||null,origin:newClient.origin||null,notes:newClient.notes.trim()||null,master_client_id:newClient.master_client_id||null,created_by:access.userId}
-    const {data,error}=await supabase.from('clients').insert(payload).select('id,name,phone,address,city,client_type,master_client_id').single()
+    const payload={id:crypto.randomUUID(),organization_id:budgetOrganizationId,client_type:'Cliente final',name:newClient.name.trim(),document:newClient.document.trim()||null,phone:newClient.phone.trim()||null,address:newClient.address.trim()||null,city:newClient.city.trim()||null,origin:newClient.origin||null,notes:newClient.notes.trim()||null,master_client_id:newClient.master_client_id||null,created_by:access.userId}
+    const {data,error}=await supabase.from('clients').insert(payload).select('id,name,document,phone,address,city,client_type,master_client_id').single()
     if(error||!data)show('Não foi possível cadastrar o cliente. Confira os dados e tente novamente.','error')
-    else {const saved={...(data as Client),master:[]};setAvailableClients(current=>[...current,saved].sort((a,b)=>a.name.localeCompare(b.name,'pt-BR')));setClientSearch(saved.name);setForm({...form,client_id:saved.id,client_address:[saved.address,saved.city].filter(Boolean).join(' · '),client_address_edited:false});setNewClientOpen(false);setNewClient({name:'',phone:'',address:'',city:'',origin:'',notes:'',master_client_id:''});show('Cliente cadastrado e selecionado no orçamento.','success')}
+    else {const saved={...(data as Client),master:[]};setAvailableClients(current=>[...current,saved].sort((a,b)=>a.name.localeCompare(b.name,'pt-BR')));setClientSearch(saved.name);setForm({...form,client_id:saved.id,client_address:[saved.address,saved.city].filter(Boolean).join(' · '),client_address_edited:false});setNewClientOpen(false);setNewClient({name:'',document:'',phone:'',address:'',city:'',origin:'',notes:'',master_client_id:''});show('Cliente cadastrado e selecionado no orçamento.','success')}
     setNewClientSaving(false)
   }
   const openItem=async(item?:BudgetItem)=>{
@@ -544,6 +544,8 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 </header>
 <div className="form-grid">
 <label className="field span-2">Nome<input required value={newClient.name} onChange={e=>setNewClient({...newClient,name:e.target.value})}/>
+</label>
+<label className="field">CPF/CNPJ<input value={newClient.document} onChange={e=>setNewClient({...newClient,document:e.target.value})} placeholder="Somente números ou formatado"/>
 </label>
 <label className="field">Telefone<input value={newClient.phone} onChange={e=>setNewClient({...newClient,phone:e.target.value})}/>
 </label>

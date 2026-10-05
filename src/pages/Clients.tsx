@@ -7,21 +7,21 @@ import { useAccess } from '../components/AuthorizedAccess'
 import { supabase } from '../lib/supabase'
 import {SortableHeader,compareValues,type SortState} from '../components/SortableHeader'
 
-type Client={id:string;name:string;phone:string|null;address:string|null;city:string|null;origin:string|null;notes:string|null;client_type:string;master_client_id:string|null;archived_at:string|null}
-type ClientForm={id?:string;name:string;phone:string;address:string;city:string;origin:string;origin_notes:string;client_type:string;master_client_id:string}
-const empty:ClientForm={name:'',phone:'',address:'',city:'',origin:'',origin_notes:'',client_type:'Cliente final',master_client_id:''}
+type Client={id:string;name:string;document:string|null;phone:string|null;address:string|null;city:string|null;origin:string|null;notes:string|null;client_type:string;master_client_id:string|null;archived_at:string|null}
+type ClientForm={id?:string;name:string;document:string;phone:string;address:string;city:string;origin:string;origin_notes:string;client_type:string;master_client_id:string}
+const empty:ClientForm={name:'',document:'',phone:'',address:'',city:'',origin:'',origin_notes:'',client_type:'Cliente final',master_client_id:''}
 const originOptions=['Porta de loja','Instagram','Google','Indicação']
 
 export function Clients(){
- const access=useAccess(),catalog=useCatalog<Client>('clients','id,name,phone,address,city,origin,notes,client_type,master_client_id,archived_at'),{items}=catalog,{show}=useToast()
+ const access=useAccess(),catalog=useCatalog<Client>('clients','id,name,document,phone,address,city,origin,notes,client_type,master_client_id,archived_at'),{items}=catalog,{show}=useToast()
  const [search,setSearch]=useState(''),[sort,setSort]=useState<SortState<'name'|'type'|'phone'|'city'|'origin'|'budgets'|'master'|'status'>>({key:'name',direction:'asc'}),[open,setOpen]=useState(false),[form,setForm]=useState<ClientForm>(empty),[changingStatus,setChangingStatus]=useState(''),[budgetCounts,setBudgetCounts]=useState<Record<string,number>>({})
  const masters=useMemo(()=>items.filter(item=>item.client_type==='Parceiro/master'&&!item.archived_at&&item.id!==form.id),[items,form.id])
  const masterNames=useMemo(()=>Object.fromEntries(items.map(item=>[item.id,item.name])),[items])
  useEffect(()=>{if(!supabase||!access)return;void supabase.from('budgets').select('client_id').eq('organization_id',access.organizationId).not('client_id','is',null).then(({data})=>setBudgetCounts((data??[]).reduce<Record<string,number>>((counts,row)=>{if(row.client_id)counts[row.client_id]=(counts[row.client_id]??0)+1;return counts},{})))},[access])
- const save=async(event:FormEvent)=>{event.preventDefault();try{const payload={name:form.name.trim(),phone:form.phone.trim()||null,address:form.address.trim()||null,city:form.city.trim()||null,origin:form.origin||null,notes:form.origin_notes.trim()||null,client_type:form.client_type,master_client_id:form.client_type==='Cliente final'?(form.master_client_id||null):null};const saved=form.id?await catalog.update(form.id,payload):await catalog.save(payload);if(saved){show(form.id?'Cliente atualizado.':'Cliente salvo.','success');setForm(empty);setOpen(false)}}catch(error){show(error instanceof Error?error.message:'Não foi possível salvar.','error')}}
- const edit=(item?:Client)=>{setForm(item?{id:item.id,name:item.name,phone:item.phone??'',address:item.address??'',city:item.city??'',origin:item.origin??'',origin_notes:item.notes??'',client_type:item.client_type,master_client_id:item.master_client_id??''}:empty);setOpen(true)}
+ const save=async(event:FormEvent)=>{event.preventDefault();try{const payload={name:form.name.trim(),document:form.document.trim()||null,phone:form.phone.trim()||null,address:form.address.trim()||null,city:form.city.trim()||null,origin:form.origin||null,notes:form.origin_notes.trim()||null,client_type:form.client_type,master_client_id:form.client_type==='Cliente final'?(form.master_client_id||null):null};const saved=form.id?await catalog.update(form.id,payload):await catalog.save(payload);if(saved){show(form.id?'Cliente atualizado.':'Cliente salvo.','success');setForm(empty);setOpen(false)}}catch(error){show(error instanceof Error?error.message:'Não foi possível salvar.','error')}}
+ const edit=(item?:Client)=>{setForm(item?{id:item.id,name:item.name,document:item.document??'',phone:item.phone??'',address:item.address??'',city:item.city??'',origin:item.origin??'',origin_notes:item.notes??'',client_type:item.client_type,master_client_id:item.master_client_id??''}:empty);setOpen(true)}
  const changeStatus=async(item:Client,active:boolean)=>{if(changingStatus||active===!item.archived_at)return;setChangingStatus(item.id);try{if(await catalog.update(item.id,{archived_at:active?null:new Date().toISOString()}))show(`Cliente ${active?'ativado':'inativado'}.`,'success')}catch(error){show(error instanceof Error?error.message:'Não foi possível alterar o status do cliente.','error')}finally{setChangingStatus('')}}
- const filtered=items.filter(item=>`${item.name} ${item.phone??''} ${item.city??''} ${item.origin??''} ${item.master_client_id?masterNames[item.master_client_id]??'':''}`.toLowerCase().includes(search.toLowerCase())).sort((a,b)=>{const values={name:[a.name,b.name],type:[a.client_type,b.client_type],phone:[a.phone??'',b.phone??''],city:[a.city??'',b.city??''],origin:[a.origin??'',b.origin??''],budgets:[budgetCounts[a.id]??0,budgetCounts[b.id]??0],master:[a.master_client_id?masterNames[a.master_client_id]??'':'',b.master_client_id?masterNames[b.master_client_id]??'':''],status:[a.archived_at?'Inativo':'Ativo',b.archived_at?'Inativo':'Ativo']}[sort.key];return compareValues(values[0],values[1])*(sort.direction==='asc'?1:-1)})
+ const filtered=items.filter(item=>`${item.name} ${item.document??''} ${item.phone??''} ${item.city??''} ${item.origin??''} ${item.master_client_id?masterNames[item.master_client_id]??'':''}`.toLowerCase().includes(search.toLowerCase())).sort((a,b)=>{const values={name:[a.name,b.name],type:[a.client_type,b.client_type],phone:[a.phone??'',b.phone??''],city:[a.city??'',b.city??''],origin:[a.origin??'',b.origin??''],budgets:[budgetCounts[a.id]??0,budgetCounts[b.id]??0],master:[a.master_client_id?masterNames[a.master_client_id]??'':'',b.master_client_id?masterNames[b.master_client_id]??'':''],status:[a.archived_at?'Inativo':'Ativo',b.archived_at?'Inativo':'Ativo']}[sort.key];return compareValues(values[0],values[1])*(sort.direction==='asc'?1:-1)})
  return <Page title="Clientes" description="Clientes finais e parceiros/master, com vínculos explícitos." action={<button className="button primary" onClick={()=>edit()}>
 <Plus/>Novo cliente</button>}>
   {catalog.loading&&<p role="status">Carregando clientes…</p>}{catalog.saving&&<p role="status">Salvando cliente…</p>}{catalog.error&&<p role="alert">{catalog.error} <button className="button secondary" onClick={catalog.reload}>Tentar novamente</button>
@@ -30,7 +30,7 @@ export function Clients(){
 <div className="toolbar">
 <label className="search">
 <Search/>
-<input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar por nome, telefone ou cidade"/>
+<input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar por nome, CPF/CNPJ, telefone ou cidade"/>
 </label>
 <span>{filtered.length} cadastro(s)</span>
 </div>
@@ -52,6 +52,7 @@ export function Clients(){
 <tr className="clickable-row" key={item.id} onClick={()=>edit(item)}>
 <td>
 <strong>{item.name}</strong>
+{item.document&&<small>{item.document}</small>}
 </td>
 <td>
 <span className="badge">{item.client_type}</span>
@@ -89,6 +90,8 @@ export function Clients(){
 </header>
 <div className="form-grid">
 <label className="field span-2">Nome<input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/>
+</label>
+<label className="field">CPF/CNPJ<input value={form.document} onChange={e=>setForm({...form,document:e.target.value})} placeholder="Somente números ou formatado"/>
 </label>
 <label className="field">Tipo<select value={form.client_type} onChange={e=>setForm({...form,client_type:e.target.value,master_client_id:e.target.value==='Cliente final'?form.master_client_id:''})}>
 <option>Cliente final</option>

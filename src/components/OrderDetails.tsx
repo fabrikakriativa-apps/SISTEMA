@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, ClipboardList, Eye, GitBranch, PackagePlus, X } from 'lucide-react'
+import { ArrowLeft, ClipboardList, Eye, GitBranch, PackagePlus, ReceiptText, X } from 'lucide-react'
 import { useToast } from './ToastProvider'
 import { supabase } from '../lib/supabase'
 import { money } from '../lib/format'
 import { OrderPreview } from './OrderPreview'
 import {SortableHeader,compareValues,type SortState} from './SortableHeader'
 import {orderStatusLabels,type OrderStatus} from '../lib/orderStatus'
+import { ReceiptPreview } from './ReceiptPreview'
 
 export type DetailOrder = {
   id:string; display_number:string; status:string; payment_terms:string|null; promised_date:string|null; client_address:string|null; notes:string|null; total:number; created_at:string
-  client:{name:string; address:string|null; city:string|null}|null; budget:{id:string;display_number:string}|null
+  client:{name:string; document:string|null; address:string|null; city:string|null}|null; budget:{id:string;display_number:string}|null
   order_items:{id:string; status:string; snapshot:{environment?:string|null; description?:string; quantity?:number; sale_total?:number}}[]
-  receivables:{id:string; installment:number; installment_count:number; due_date:string|null; amount:number; payment_method:string|null; status:string}[]
+  receivables:{id:string; installment:number; installment_count:number; due_date:string|null; amount:number; paid_amount:number; paid_at:string|null; payment_method:string|null; status:string}[]
 }
 const today = () => new Date().toISOString().slice(0,10)
 const date = (value:string|null) => value ? new Date(`${value.slice(0,10)}T12:00:00`).toLocaleDateString('pt-BR') : 'A confirmar'
@@ -22,7 +23,7 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
   const [promisedDate,setPromisedDate] = useState(order.promised_date ?? '')
   const [notes,setNotes] = useState(order.notes ?? '')
   const [deliverySaving,setDeliverySaving] = useState(false),[notesSaving,setNotesSaving] = useState(false)
-  const [method,setMethod] = useState('PIX'),[installments,setInstallments] = useState(1),[firstDue,setFirstDue] = useState(today()),[financeSaving,setFinanceSaving] = useState(false),[preview,setPreview] = useState(false),[actionsOpen,setActionsOpen] = useState(false),[revisionSaving,setRevisionSaving] = useState(false)
+  const [method,setMethod] = useState('PIX'),[installments,setInstallments] = useState(1),[firstDue,setFirstDue] = useState(today()),[financeSaving,setFinanceSaving] = useState(false),[preview,setPreview] = useState(false),[receipt,setReceipt] = useState(false),[actionsOpen,setActionsOpen] = useState(false),[revisionSaving,setRevisionSaving] = useState(false)
   const [itemSort,setItemSort]=useState<SortState<'item'|'quantity'|'value'|'operation'>>({key:'item',direction:'asc'})
   useEffect(() => {
     setAddress(order.client_address || [order.client?.address,order.client?.city].filter(Boolean).join(' · '))
@@ -31,6 +32,7 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
   },[order.id,order.client_address,order.promised_date,order.notes,order.client?.address,order.client?.city])
   const amount = Number(order.total)/Math.max(1,installments)
   const receivables = useMemo(() => order.receivables.filter(item => item.status !== 'cancelled').sort((a,b) => a.installment-b.installment),[order.receivables])
+  const receivedTotal = receivables.reduce((sum,item)=>sum+Number(item.paid_amount||0),0)
   const sortedItems=useMemo(()=>[...order.order_items].sort((a,b)=>{const values={item:[`${a.snapshot.environment??''} ${a.snapshot.description??''}`,`${b.snapshot.environment??''} ${b.snapshot.description??''}`],quantity:[Number(a.snapshot.quantity??0),Number(b.snapshot.quantity??0)],value:[Number(a.snapshot.sale_total??0),Number(b.snapshot.sale_total??0)],operation:[a.status,b.status]}[itemSort.key];return compareValues(values[0],values[1])*(itemSort.direction==='asc'?1:-1)}),[order.order_items,itemSort])
   const saveDelivery = async () => {
     if(!supabase || !promisedDate || deliverySaving) return
@@ -78,6 +80,7 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
 </div>
 </section>
     {preview && <OrderPreview order={order} onClose={() => setPreview(false)}/>}
+    {receipt && <ReceiptPreview order={order} onClose={() => setReceipt(false)}/>}
     {actionsOpen&&<div className="dialog-backdrop">
 <section className="dialog order-actions-dialog" role="dialog" aria-modal="true" aria-labelledby="order-actions-title">
 <header>
@@ -97,7 +100,19 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
 <strong>Versão do cliente</strong>
 <small>Visualize o documento que será apresentado ao cliente.</small>
 </span>
-</button>{order.status==='cancelled'&&order.budget?.id?<button type="button" className="order-action" disabled={revisionSaving} onClick={()=>void startRevision()}>
+</button>{receivedTotal>0?<button type="button" className="order-action" onClick={()=>{setActionsOpen(false);setReceipt(true)}}>
+<ReceiptText/>
+<span>
+<strong>Emitir recibo</strong>
+<small>{receivedTotal>=Number(order.total)-.005?'Quitação total conforme o financeiro do pedido.':'Recibo parcial pelo valor já recebido.'}</small>
+</span>
+</button>:<div className="order-action disabled">
+<ReceiptText/>
+<span>
+<strong>Emitir recibo</strong>
+<small>Disponível após o registro de um recebimento parcial ou total.</small>
+</span>
+</div>}{order.status==='cancelled'&&order.budget?.id?<button type="button" className="order-action" disabled={revisionSaving} onClick={()=>void startRevision()}>
 <GitBranch/>
 <span>
 <strong>{revisionSaving?'Criando revisão…':'Revisar pedido'}</strong>
