@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { money } from '../lib/format'
 import { OrderPreview } from './OrderPreview'
 import {SortableHeader,compareValues,type SortState} from './SortableHeader'
+import {orderStatusLabels,type OrderStatus} from '../lib/orderStatus'
 
 export type DetailOrder = {
   id:string; display_number:string; status:string; payment_terms:string|null; promised_date:string|null; client_address:string|null; notes:string|null; total:number; created_at:string
@@ -224,7 +225,7 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
 <td>
 <strong>{money.format(Number(item.snapshot.sale_total || 0))}</strong>
 </td>
-<td>{item.status}</td>
+<td>{orderStatusLabels[item.status as OrderStatus] ?? item.status}</td>
 </tr>)}</tbody>
 </table>
 </div>
