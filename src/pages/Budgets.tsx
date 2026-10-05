@@ -24,6 +24,7 @@ import { DateRangeFilter, inDateRange, type DateRange } from '../components/Date
 import { SortableHeader, compareValues, type SortState } from '../components/SortableHeader'
 import { newUpholsteryEstimate, type UpholsteryEstimate } from '../lib/upholsteryEstimate'
 import './Budgets.css'
+import { readRecovery,writeRecovery,clearRecovery,useRecoveryDraft } from '../lib/recoveryDraft'
 
 type Budget = {
   id:string; organization_id:string; number:number; display_number:string; current_revision:number; client_id:string|null
@@ -86,7 +87,7 @@ export function Budgets() {
 
   const openEditor = (budget:Budget) => {
     initialized.current = false; selectedRef.current=budget; setSelected(budget)
-    setForm({ client_id:budget.client_id, client_address:budget.client_address??'', client_address_edited:budget.client_address_edited, valid_until:budget.valid_until, payment_terms:budget.payment_terms??'', delivery_terms:budget.delivery_terms??'', notes:budget.notes??'', internal_notes:budget.internal_notes??'', discount:Number(budget.discount)||0 })
+    setForm(readRecovery<Editable>(`${budget.organization_id}:budget:${budget.id}:${budget.current_revision}`)??{ client_id:budget.client_id, client_address:budget.client_address??'', client_address_edited:budget.client_address_edited, valid_until:budget.valid_until, payment_terms:budget.payment_terms??'', delivery_terms:budget.delivery_terms??'', notes:budget.notes??'', internal_notes:budget.internal_notes??'', discount:Number(budget.discount)||0 })
     setSaveState('saved'); window.setTimeout(() => { initialized.current = true },0)
   }
 
@@ -101,6 +102,7 @@ export function Budgets() {
       if (error) throw error
       const saved = withClient(data as unknown as Budget,clients)
       selectedRef.current=saved; setSelected(saved); setItems(current=>current.map(item=>item.id===saved.id?saved:item)); setSaveState('saved')
+      if(!pending.current)clearRecovery(`${saved.organization_id}:budget:${saved.id}:${saved.current_revision}`)
     } catch (reason) { setSaveState('error'); show(errorMessage(reason,'Não foi possível salvar o rascunho. Seus dados permanecem na tela.'),'error') }
     finally {
       saving.current=false
@@ -111,6 +113,7 @@ export function Budgets() {
 
   useEffect(() => {
     if(!selected||!initialized.current) return
+    writeRecovery(`${selected.organization_id}:budget:${selected.id}:${selected.current_revision}`,form)
     setSaveState('waiting'); if(saveTimer.current) window.clearTimeout(saveTimer.current)
     saveTimer.current=window.setTimeout(()=>{void persist(form)},700)
   },[form,persist,selected?.id])
@@ -227,6 +230,21 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   const [previewOpen,setPreviewOpen]=useState(false)
   const [workflowBusy,setWorkflowBusy]=useState(false),[confirmApproval,setConfirmApproval]=useState(false),[confirmReplacementRevision,setConfirmReplacementRevision]=useState(false)
   const [hasCancelledOrder,setHasCancelledOrder]=useState(false)
+  const [specOpen,setSpecOpen]=useState(false),[specNotes,setSpecNotes]=useState(''),[specItems,setSpecItems]=useState<{id:string;description:string}[]>([])
+  const itemDraftKey=`${budgetOrganizationId}:budget-item:${budget.id}:${budget.current_revision}:${itemForm.id??'new'}`
+  useRecoveryDraft(itemDraftKey,{itemForm,supplyLines,laborLines,paymentOptions,upholsteryEstimate},itemOpen&&canEditItems)
+  const restoreItemDraft=(id?:string)=>{
+    const saved=readRecovery<{itemForm:ItemForm;supplyLines:SupplyLine[];laborLines:LaborLine[];paymentOptions:ItemPaymentOption[];upholsteryEstimate:UpholsteryEstimate}>(`${budgetOrganizationId}:budget-item:${budget.id}:${budget.current_revision}:${id??'new'}`)
+    if(saved){setItemForm(saved.itemForm);setSupplyLines(saved.supplyLines);setLaborLines(saved.laborLines);setPaymentOptions(saved.paymentOptions);setUpholsteryEstimate(saved.upholsteryEstimate);show('Preenchimento não finalizado recuperado.','info')}
+  }
+  const saveSpecifications=async()=>{
+    if(!supabase||workflowBusy)return
+    setWorkflowBusy(true)
+    const {data,error}=await supabase.rpc('revise_approved_specifications',{org_id:budgetOrganizationId,target_budget_id:budget.id,new_notes:specNotes,item_descriptions:specItems})
+    if(error)show('Não foi possível salvar a revisão de especificações.','error')
+    else{setBudget(data as unknown as Budget);setSpecOpen(false);await loadItems();show('Especificações revisadas; valores e pedido preservados.','success')}
+    setWorkflowBusy(false)
+  }
   const [pendingStatus,setPendingStatus]=useState<BudgetStatus|null>(null),[statusReason,setStatusReason]=useState('')
   const [availableClients,setAvailableClients]=useState(clients),[clientSearch,setClientSearch]=useState(clients.find(item=>item.id===form.client_id)?.name??'')
   const [newClientOpen,setNewClientOpen]=useState(false),[newClientSaving,setNewClientSaving]=useState(false)
@@ -288,16 +306,17 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   const openItem=async(item?:BudgetItem)=>{
     setPdfResult(null);setPdfName('');setPdfCandidate(0);setPdfRows([])
     setSupplyLines([]);setLaborLines([]);setPaymentOptions([]);setItemPhotos([])
-    if(!item){setItemForm(newBlankItem());setUpholsteryEstimate(newUpholsteryEstimate());setPaymentOptions(standardItemPaymentOptions());setItemOpen(true);return}
+    if(!item){setItemForm(newBlankItem());setUpholsteryEstimate(newUpholsteryEstimate());setPaymentOptions(standardItemPaymentOptions());restoreItemDraft();setItemOpen(true);return}
     const c=item.configuration??{}
     const storedEstimate=c.upholstery_estimate as Partial<UpholsteryEstimate>|undefined
     setUpholsteryEstimate(Array.isArray(storedEstimate?.pieces)?storedEstimate as UpholsteryEstimate:newUpholsteryEstimate())
     setItemForm({id:item.id,family_id:item.family_id??'',environment:item.environment??'',description:item.description,quantity:Number(item.quantity),presentation:item.presentation==='option'?'option':'principal',manufacturer_cost:Number(c.manufacturer_cost??item.cost_total),additional_cost:Number(c.additional_cost??0),margin_percent:Number(item.margin_percent??0),sale_total:Number(item.sale_total),confection_subitem:typeof c.confection_subitem==='string'?c.confection_subitem:'',initial_configuration:c})
-    setPaymentOptions(itemPaymentOptions[item.id]??[]);setItemOpen(true)
+    setPaymentOptions(itemPaymentOptions[item.id]??[])
     if(supabase){const [costResult,photoResult]=await Promise.all([
       supabase.from('item_cost_lines').select('kind,supply_id,supplier_id,description,quantity,unit,unit_cost,labor_days,labor_start_date').eq('organization_id',budgetOrganizationId).eq('budget_item_id',item.id),
       supabase.from('attachments').select('id,original_name,storage_path,created_at').eq('organization_id',budgetOrganizationId).eq('entity_type','budget_item').eq('entity_id',item.id).eq('purpose','item_reference_photo').order('created_at',{ascending:false})
-    ]);setSupplyLines((costResult.data??[]).filter(line=>line.kind==='supply').map(line=>({...line,supply_id:line.supply_id??'',quantity:Number(line.quantity),unit_cost:Number(line.unit_cost)})) as SupplyLine[]);setLaborLines((costResult.data??[]).filter(line=>line.kind==='service').map(line=>({supplier_id:line.supplier_id??'',description:line.description,days:Number(line.labor_days??1),amount:Number(line.unit_cost),start_date:line.labor_start_date??''})) as LaborLine[]);setItemPhotos((photoResult.data??[]) as ItemPhoto[])}
+    ]);setSupplyLines((costResult.data??[]).filter(line=>line.kind==='supply').map(line=>({...line,supply_id:line.supply_id??'',quantity:Number(line.quantity),unit_cost:Number(line.unit_cost)})) as SupplyLine[]);setLaborLines((costResult.data??[]).filter(line=>line.kind==='service').map(line=>({supplier_id:line.supplier_id??'',description:line.description,days:Number(line.labor_days??1),amount:Number(line.unit_cost),start_date:line.labor_start_date??''})) as LaborLine[]);setItemPhotos((photoResult.data??[]) as ItemPhoto[]);restoreItemDraft(item.id)}
+    setItemOpen(true)
   }
   const applyPdfCandidate=(document:ParsedManufacturerDocument,index:number)=>{
     const candidate=document.items[index];if(!candidate)return
@@ -397,7 +416,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
       const optionsResult=composition.error?null:await supabase.rpc('replace_budget_item_payment_options',{org_id:budgetOrganizationId,target_budget_item_id:result.data.id,new_options:paymentOptions.map((option,index)=>({...option,position:index+1}))})
       if(composition.error)show(`O item foi salvo, mas a composição não foi atualizada: ${composition.error.message}`,'error')
       else if(optionsResult?.error)show(`O item foi salvo, mas as opções comerciais não foram atualizadas: ${optionsResult.error.message}`,'error')
-      else {setItemOpen(false);await loadItems();const {data}=await supabase.from('budgets').select(columns).eq('id',budget.id).single();if(data)setBudget(data as unknown as Budget);show(itemForm.id?'Item e composição atualizados.':'Item adicionado ao orçamento.','success')}
+      else {clearRecovery(itemDraftKey);setItemOpen(false);await loadItems();const {data}=await supabase.from('budgets').select(columns).eq('id',budget.id).single();if(data)setBudget(data as unknown as Budget);show(itemForm.id?'Item e composição atualizados.':'Item adicionado ao orçamento.','success')}
     }
     setItemSaving(false)
   }
@@ -523,6 +542,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   return <Page title={isPreBudget?'Construção do pré-orçamento':'Construção do orçamento'} description={isPreBudget?'Registre a estimativa e as referências. Valor, medidas e materiais serão confirmados depois.':'Monte os dados comerciais e os itens que o cliente receberá.'} action={<div className="page-actions">
 <button className="button secondary" onClick={()=>setPreviewOpen(true)}>Prévia do cliente</button>
 {canStartRevision&&<button className="button secondary" disabled={workflowBusy} onClick={()=>void startRevision()}><GitBranch/>{workflowBusy?'Criando revisão…':'Criar revisão'}</button>}
+{budget.status==='approved'&&(access.role==='admin'||access.role==='comercial')&&<button className="button secondary" onClick={()=>{setSpecNotes(budget.notes??'');setSpecItems(items.map(item=>({id:item.id,description:item.description})));setSpecOpen(true)}}><GitBranch/>Revisar especificações</button>}
 {hasCancelledOrder&&(access.role==='admin'||access.role==='comercial')&&<button className="button secondary" disabled={workflowBusy} onClick={()=>setConfirmReplacementRevision(true)}><GitBranch/>Criar nova revisão</button>}
 {isPreBudget&&budget.status==='draft'&&<button className="button secondary" onClick={()=>{setVisit({...visit,address:form.client_address??''});setVisitOpen(true)}}><CalendarPlus/>Agendar visita</button>}
 {isPreBudget&&budget.status==='draft'&&<button className="button primary" disabled={workflowBusy} onClick={()=>void convertToBudget()}>Converter em orçamento</button>}
@@ -530,6 +550,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <ArrowLeft/>Voltar aos orçamentos</button>
 </div>}>
     {previewOpen&&<BudgetPreview budget={{...budget,valid_until:form.valid_until,payment_terms:form.payment_terms,delivery_terms:form.delivery_terms,notes:form.notes,discount:Number(form.discount||0),total:Math.max(0,Number(budget.subtotal)-Number(form.discount||0))}} items={items} paymentOptions={itemPaymentOptions} clientName={client?.name??'Cliente não informado'} clientAddress={form.client_address??''} onClose={()=>setPreviewOpen(false)}/>}
+    {specOpen&&<div className="dialog-backdrop"><form className="dialog" onSubmit={e=>{e.preventDefault();void saveSpecifications()}}><header><div><h2>Revisar especificações</h2><p>Complemente tecido, descrições e observações. Esta revisão mantém os valores aprovados e o pedido vinculado.</p></div><button type="button" className="icon-button" aria-label="Fechar" onClick={()=>setSpecOpen(false)}><X/></button></header><div className="form-grid">{specItems.map((item,index)=><label className="field span-2" key={item.id}>Descrição do item {index+1}<textarea required value={item.description} onChange={e=>setSpecItems(current=>current.map(x=>x.id===item.id?{...x,description:e.target.value}:x))}/></label>)}<label className="field span-2">Observações<textarea value={specNotes} onChange={e=>setSpecNotes(e.target.value)}/></label></div><footer><button type="button" className="button secondary" onClick={()=>setSpecOpen(false)}>Cancelar</button><button className="button primary" disabled={workflowBusy}>{workflowBusy?'Salvando…':'Salvar revisão'}</button></footer></form></div>}
     {newClientOpen&&<div className="dialog-backdrop">
 <form className="dialog" onSubmit={saveNewClient}>
 <header>
@@ -608,7 +629,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <span className={`save-state ${saveState}`}>{stateLabel}</span>
 </header>
 <div className="form-grid">
-      <label className="field">{isPreBudget?'Etapa':'Status'}<select value={budget.status} disabled={workflowBusy} onChange={e=>requestStatus(e.target.value as BudgetStatus)}>{(isPreBudget?[budget.status,...(budget.status==='draft'?['cancelled' as BudgetStatus]:[])]:budgetStatusOptions(budget.status)).map(status=>
+      <label className="field">{isPreBudget?'Etapa':'Status'}<select value={budget.status} disabled={workflowBusy} onChange={e=>requestStatus(e.target.value as BudgetStatus)}>{(isPreBudget?(budget.status==='draft'?['draft','sent','cancelled'] as BudgetStatus[]:budget.status==='sent'?['sent','draft','cancelled'] as BudgetStatus[]:[budget.status]):budgetStatusOptions(budget.status)).map(status=>
 <option value={status} key={status}>{labels[status]}</option>)}</select>
 </label>
 <div className="field">

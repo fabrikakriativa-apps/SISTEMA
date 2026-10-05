@@ -2,7 +2,7 @@ type TextItem={str:string;transform:number[];width:number}
 
 export async function extractPdfText(file:File) {
   const pdfjs=await import('pdfjs-dist')
-  pdfjs.GlobalWorkerOptions.workerSrc=new URL('pdfjs-dist/build/pdf.worker.min.mjs',import.meta.url).toString()
+  pdfjs.GlobalWorkerOptions.workerSrc=(await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default
   const bytes=new Uint8Array(await file.arrayBuffer())
   const document=await pdfjs.getDocument({data:bytes}).promise
   const pages:string[]=[]

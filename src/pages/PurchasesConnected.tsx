@@ -9,11 +9,14 @@ import { purchaseStatusLabels, purchaseStatusOptions, type PurchaseStatus } from
 import { supabase } from '../lib/supabase';
 import { DateRangeFilter, inDateRange, type DateRange } from '../components/DateRangeFilter';
 import { SortableHeader, compareValues, type SortState } from '../components/SortableHeader';
+import { ProcurementNeedEditor,type EditableNeed } from '../components/ProcurementNeedEditor';
 type Supplier = {
     id: string;
     name: string;
 };
 type Need = {
+    order_item_id:string;
+    deadline:string|null;
     id: string;
     created_at: string;
     kind: 'whole_item' | 'supply';
@@ -53,14 +56,15 @@ type Purchase = PurchaseForConfirmation & {
     })[];
 };
 export function PurchasesConnected() {
-    const access = useAccess(), { show } = useToast(), [tab, setTab] = useState<'needs' | 'orders'>('needs'), [needs, setNeeds] = useState<Need[]>([]), [orders, setOrders] = useState<Purchase[]>([]), [suppliers, setSuppliers] = useState<Supplier[]>([]), [dateRange, setDateRange] = useState<DateRange>({ from: '', to: '' }), [needSort, setNeedSort] = useState<SortState<'order' | 'type' | 'description' | 'quantity' | 'cost'>>({ key: 'order', direction: 'asc' }), [orderSort, setOrderSort] = useState<SortState<'order' | 'supplier' | 'mode' | 'date' | 'items' | 'total' | 'status'>>({ key: 'date', direction: 'desc' }), [selected, setSelected] = useState<string[]>([]), [detail, setDetail] = useState<Purchase | null>(null), [requestedStatus, setRequestedStatus] = useState(''), [creating, setCreating] = useState(false), [createOpen, setCreateOpen] = useState(false), [mode, setMode] = useState<'made_to_order' | 'immediate'>('made_to_order'), [supplier, setSupplier] = useState(''), [loading, setLoading] = useState(true);
+    const [editingNeed,setEditingNeed]=useState<EditableNeed|null|undefined>(undefined);
+    const access = useAccess(), { show } = useToast(), [tab, setTab] = useState<'needs' | 'orders'>('needs'), [needs, setNeeds] = useState<Need[]>([]), [orders, setOrders] = useState<Purchase[]>([]), [suppliers, setSuppliers] = useState<Supplier[]>([]), [dateRange, setDateRange] = useState<DateRange>({ from: '', to: '' }), [needSort, setNeedSort] = useState<SortState<'order' | 'type' | 'description' | 'quantity' | 'cost' | 'deadline'>>({ key: 'order', direction: 'asc' }), [orderSort, setOrderSort] = useState<SortState<'order' | 'supplier' | 'mode' | 'date' | 'items' | 'total' | 'status'>>({ key: 'date', direction: 'desc' }), [selected, setSelected] = useState<string[]>([]), [detail, setDetail] = useState<Purchase | null>(null), [requestedStatus, setRequestedStatus] = useState(''), [creating, setCreating] = useState(false), [createOpen, setCreateOpen] = useState(false), [mode, setMode] = useState<'made_to_order' | 'immediate'>('made_to_order'), [supplier, setSupplier] = useState(''), [loading, setLoading] = useState(true);
     const load = useCallback(async () => {
         if (!supabase || !access)
             return;
         setLoading(true);
         await supabase.rpc('refresh_purchase_delays', { org_id: access.organizationId });
         const [a, b, c] = await Promise.all([
-            supabase.from('procurement_needs').select('id,created_at,kind,description,quantity,unit,unit_cost,supply_id,order_item:order_items!procurement_needs_order_item_id_fkey(order_id,snapshot,order:orders!order_items_order_id_fkey(display_number,client:clients!orders_client_id_fkey(name)),budget_item:budget_items!order_items_budget_item_id_fkey(family:item_families!budget_items_family_id_fkey(name,form_key)))').eq('organization_id', access.organizationId).eq('status', 'awaiting_purchase'),
+            supabase.from('procurement_needs').select('id,order_item_id,deadline,created_at,kind,description,quantity,unit,unit_cost,supply_id,order_item:order_items!procurement_needs_order_item_id_fkey(order_id,snapshot,order:orders!order_items_order_id_fkey(display_number,client:clients!orders_client_id_fkey(name)),budget_item:budget_items!order_items_budget_item_id_fkey(family:item_families!budget_items_family_id_fkey(name,form_key)))').eq('organization_id', access.organizationId).eq('status', 'awaiting_purchase'),
             supabase.from('purchases').select('id,display_number,mode,status,total,created_at,supplier_id,external_number,ordered_at,supplier_due_date,payment_terms,supplier:suppliers!purchases_supplier_id_fkey(name),purchase_items:purchase_items!purchase_items_purchase_id_fkey(id,description,order_item:order_items!purchase_items_order_item_id_fkey(order:orders!order_items_order_id_fkey(display_number,promised_date)))').eq('organization_id', access.organizationId).order('number', { ascending: false }),
             supabase.from('suppliers').select('id,name').eq('organization_id', access.organizationId).eq('active', true).order('name')
         ]);
@@ -73,7 +77,7 @@ export function PurchasesConnected() {
     }, [access, show]);
     useEffect(() => { void load(); }, [load]);
     const visibleNeeds = useMemo(() => needs.filter(item => inDateRange(item.created_at, dateRange)).sort((a, b) => {
-        const values = { order: [a.order_item.order?.display_number ?? '', b.order_item.order?.display_number ?? ''], type: [a.kind === 'supply' ? 'Insumo' : a.order_item.budget_item?.family?.name ?? '', b.kind === 'supply' ? 'Insumo' : b.order_item.budget_item?.family?.name ?? ''], description: [a.description, b.description], quantity: [Number(a.quantity), Number(b.quantity)], cost: [Number(a.quantity) * Number(a.unit_cost), Number(b.quantity) * Number(b.unit_cost)] }[needSort.key];
+        const values = { order: [a.order_item.order?.display_number ?? '', b.order_item.order?.display_number ?? ''], type: [a.kind === 'supply' ? 'Insumo' : a.order_item.budget_item?.family?.name ?? '', b.kind === 'supply' ? 'Insumo' : b.order_item.budget_item?.family?.name ?? ''], description: [a.description, b.description], quantity: [Number(a.quantity), Number(b.quantity)], deadline:[a.deadline??'',b.deadline??''],cost: [Number(a.quantity) * Number(a.unit_cost), Number(b.quantity) * Number(b.unit_cost)] }[needSort.key];
         return compareValues(values[0], values[1]) * (needSort.direction === 'asc' ? 1 : -1);
     }), [needs, dateRange, needSort]);
     const visibleOrders = useMemo(() => orders.filter(item => inDateRange(item.ordered_at ?? item.created_at, dateRange)).sort((a, b) => {
@@ -115,6 +119,7 @@ export function PurchasesConnected() {
 <div className="toolbar">
 <DateRangeFilter label="Necessidade criada em" value={dateRange} onChange={setDateRange} />
 <span>{visibleNeeds.length} item(ns) aguardando compra</span>
+<button className="button secondary" onClick={()=>setEditingNeed(null)}>Adicionar necessidade</button>
 <button className="button primary" disabled={!selected.length} onClick={() => setCreateOpen(true)}>
 <ShoppingCart />{selected.length ? `Criar pedido de compra (${selected.length})` : 'Selecione os itens'}</button>
 </div>{loading ? <p className="panel-message">Carregando…</p> : <div className="table-wrap">
@@ -128,6 +133,7 @@ export function PurchasesConnected() {
 <SortableHeader label="Descrição" column="description" sort={needSort} onChange={setNeedSort} />
 <SortableHeader label="Qtd." column="quantity" sort={needSort} onChange={setNeedSort} />
 <SortableHeader label="Custo" column="cost" sort={needSort} onChange={setNeedSort} />
+<SortableHeader label="Data limite" column="deadline" sort={needSort} onChange={setNeedSort}/><th>Ações</th>
 </tr>
 </thead>
 <tbody>{visibleNeeds.map(x => <tr key={x.id} className={selected.includes(x.id) ? 'selected-row' : ''} onClick={() => toggle(x)}>
@@ -147,6 +153,7 @@ export function PurchasesConnected() {
 <td>
 <strong>{money.format(Number(x.quantity) * Number(x.unit_cost))}</strong>
 </td>
+<td>{x.deadline?new Date(`${x.deadline}T12:00:00`).toLocaleDateString('pt-BR'):'A definir'}</td><td><button className="button secondary" onClick={e=>{e.stopPropagation();setEditingNeed(x)}}>Editar</button></td>
                 </tr>)}</tbody>
 </table>{!visibleNeeds.length && <div className="empty-state">
 <ShoppingCart />
@@ -224,5 +231,6 @@ export function PurchasesConnected() {
 </div>
 </div>}
   {detail && access && <PurchaseConfirmation organizationId={access.organizationId} purchase={detail} suppliers={suppliers} requestedStatus={requestedStatus} onClose={() => { setDetail(null); setRequestedStatus(''); }} onSaved={load}/>}
+ {editingNeed!==undefined&&access&&<ProcurementNeedEditor organizationId={access.organizationId} need={editingNeed} onClose={()=>setEditingNeed(undefined)} onSaved={load}/>}
  </Page>;
 }

@@ -5,6 +5,28 @@ const header=`Data: 02/06/2026 Nro Pedido: #11013707-1 Cód . Interno: 260780 P�
 Condição de Pagamento: 30/60/90 DIAS Forma de Pagamento: BOLETO`
 
 describe('manufacturer PDF semantic parser',()=>{
+  it('reads compact New York quotations with integer quantities and rail included in item total',()=>{
+    const parsed=parseManufacturerText(`Código: #22073855 Cliente: Fabrika
+Valor total: R$ 2.527,62
+Data: 05/10/2026
+Cortina 2 - Wilson - Ambiente: sala Valor do item: R$ 985,54
+Medidas: 3,57 x 2,68 m Trilho: Trilho Max Reforçado Branco
+Qtd: 1 Acionamento: Sem Corda
+Tecido: LINHO MOOREA - 13992 BRANCO Prega/Fita wave: Prega Macho
+Posição: Voil Proporção: 3,00
+Valor da Cortina: R$ 944,24
+Valor do Trilho: R$ 41,30
+Cortina 3 - Wilson - Ambiente: Sala Valor do item: R$ 444,58
+Medidas: 3,3 x 2,75 m Trilho: Trilho Max Reforçado Branco
+Qtd: 2 Acionamento: Sem Corda
+Tecido: MICROFIBRA BRANCO Prega/Fita wave: Franzida
+Empresa FERREIRA E MAHS`)
+    expect(parsed.items).toHaveLength(2)
+    expect(parsed.items[0]).toMatchObject({width:3.57,height:2.68,quantity:1,value:985.54,environment:'sala',operation:'manual'})
+    expect(parsed.items[0].description).toContain('LINHO MOOREA')
+    expect(parsed.items[1].quantity).toBe(2)
+    expect(parsed.total).toBe(2527.62)
+  })
   it('reads blind items by semantic line structure and uses the final value',()=>{
     const parsed=parseManufacturerText(`${header}
 ROLLUX MOTORIZADA - SCREEN 1% - 167 WHITE M2 1,00 1,310 2,530 0 0 3,3143 3,3143 0 E 102,00 169,500 - 21,5% 1.107,560

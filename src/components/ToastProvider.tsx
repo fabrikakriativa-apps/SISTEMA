@@ -11,6 +11,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const timers=useRef(new Map<number,number>())
   const close = useCallback((id: number) => {const timer=timers.current.get(id);if(timer)window.clearTimeout(timer);timers.current.delete(id);setItems(current => current.filter(item => item.id !== id))}, [])
   const show = useCallback((message: string, kind: Kind = 'info') => {
+    if(kind==='success')window.dispatchEvent(new Event('fabrika:save-success'))
     const id = Date.now() + Math.random()
     setItems(current => [...current.slice(-2), { id, message, kind }])
     timers.current.set(id,window.setTimeout(() => close(id), 5000))

@@ -4,6 +4,7 @@ import { AuthGate } from './components/AuthorizedAccess'
 import { Layout } from './components/Layout'
 import { ToastProvider } from './components/ToastProvider'
 import { navigateTo, readRoute } from './lib/navigation'
+import { FormDraftProtection } from './components/FormDraftProtection'
 
 const Dashboard=lazy(()=>import('./pages/Dashboard').then(module=>({default:module.Dashboard})))
 const Prospecting=lazy(()=>import('./pages/Prospecting').then(module=>({default:module.Prospecting})))
@@ -36,5 +37,5 @@ export function App() {
     : active === 'fornecedores' ? <Suppliers/>
     : active === 'agenda' ? <Calendar/>
     : <Administration/>
-  return <ToastProvider><AuthGate><Layout active={active} setActive={navigate}><Suspense fallback={<p className="panel-message" role="status">Carregando módulo…</p>}>{content}</Suspense></Layout></AuthGate></ToastProvider>
+  return <ToastProvider><AuthGate><Layout active={active} setActive={navigate}><FormDraftProtection/><Suspense fallback={<p className="panel-message" role="status">Carregando módulo…</p>}>{content}</Suspense></Layout></AuthGate></ToastProvider>
 }

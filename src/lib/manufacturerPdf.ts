@@ -31,7 +31,7 @@ export function parseManufacturerText(text:string):ParsedManufacturerDocument {
   const external=normalized.match(/(?:Nro\s*Pedido|N[uú�]mero):\s*([^\s]+)(?=\s+(?:C[oó�]d|Cliente|$))/i)?.[1]??null
   const internal=normalized.match(/C[oó�]d\s*\.?(?:\s*Interno)?:\s*([^\s]+)/i)?.[1]??null
   const paymentLine=normalized.match(/Condi[çc][aã]o\s+de\s+Pagamento:\s*(.*?)\s+Forma\s+de\s+Pagamento:\s*([^\n]+)/i)
-  const totalMatches=[...normalized.matchAll(/(?:Total(?:\s+com\s+Impostos)?|Valor-Total[^:]*):\s*([\d.]+,\d{2})/gi)]
+  const totalMatches=[...normalized.matchAll(/(?:Total(?:\s+com\s+Impostos)?|Valor[ -]Total[^:]*):\s*(?:R\$\s*)?([\d.]+,\d{2})/gi)]
   const total=totalMatches.length?decimal(totalMatches.at(-1)![1]):null
   const items:ParsedManufacturerItem[]=[]
   for(const source of normalized.split('\n')){
@@ -77,5 +77,14 @@ export function parseManufacturerText(text:string):ParsedManufacturerDocument {
     const upper=block.toUpperCase()
     items.push({description,environment:environment||null,unit:'UN',quantity:decimal(dimensions[4]),width:decimal(dimensions[2]),height:decimal(dimensions[3]),value:money(price),operation:(/MOTORIZ|MOTOR|WIFI/.test(upper)?'motorized':/MANUAL|SEM CORDA/.test(upper)?'manual':'unspecified'),confidence:.98})
   }
-  return {documentDate:date?isoDate(date):null,externalNumber:external,internalCode:internal,paymentTerms:paymentLine?clean(paymentLine[1]):null,paymentMethod:paymentLine?clean(paymentLine[2]):null,total,items}
+  const compactBlocks=[...normalized.matchAll(/^(Cortina|Persiana)\s+([^\n]*?)\s*-\s*Ambiente:\s*(.*?)\s+Valor do item:\s*R\$\s*([\d.]+,\d{2})\s*\n([\s\S]*?)(?=^(?:Cortina|Persiana)\s+.*?Ambiente:|^Empresa\b|(?![\s\S]))/gmi)]
+  for(const match of compactBlocks){
+    const block=match[5], dimensions=block.match(/Medidas:\s*(\d+(?:[,.]\d+)?)\s*[x×]\s*(\d+(?:[,.]\d+)?)/i)
+    if(!dimensions)continue
+    const field=(label:string)=>clean(block.match(new RegExp(`${label}:\\s*([^\\n]+)`,'i'))?.[1]??'')
+    const fabric=[field('Tecido').split(/Prega\/Fita wave:/i)[0].trim(),block.match(/\n(\d[^\n]+?)\s+Proporção:/i)?.[1]??''].filter(Boolean).join(' ')
+    const rail=field('Trilho'),position=field('Posição').split(/Proporção:|Ponteira:/i)[0].trim()
+    items.push({description:[match[1],fabric&&`Tecido ${fabric}`,position&&`Posição ${position}`,rail&&`Trilho ${rail}`].filter(Boolean).join(' · '),environment:clean(match[3]),unit:'UN',quantity:decimal(block.match(/Qtd:\s*(\d+(?:[,.]\d+)?)/i)?.[1]??'1'),width:decimal(dimensions[1]),height:decimal(dimensions[2]),value:money(match[4]),operation:/MOTOR|WIFI/i.test(block)?'motorized':/MANUAL|SEM CORDA/i.test(block)?'manual':'unspecified',confidence:.98})
+  }
+  return {documentDate:date?isoDate(date):null,externalNumber:external??normalized.match(/Código:\s*#(\d+)/i)?.[1]??null,internalCode:internal,paymentTerms:paymentLine?clean(paymentLine[1]):null,paymentMethod:paymentLine?clean(paymentLine[2]):null,total,items}
 }

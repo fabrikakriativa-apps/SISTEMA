@@ -1,5 +1,6 @@
 import { Printer, X } from 'lucide-react'
 import { money } from '../lib/format'
+import { SaveDocumentImage } from './SaveDocumentImage'
 
 type OrderItem = { id:string; snapshot:{ environment?:string|null; description?:string; quantity?:number; sale_total?:number } }
 type Receivable = { id:string; installment:number; installment_count:number; due_date:string|null; amount:number; payment_method:string|null; status:string }
@@ -17,6 +18,7 @@ export function OrderPreview({order,onClose}:{order:PreviewOrder;onClose:()=>voi
       <div className="preview-toolbar">
         <div><strong>Pedido para o cliente</strong><span>Versão final para impressão ou salvamento em PDF.</span></div>
         <button className="button secondary" onClick={() => window.print()}><Printer/>Imprimir / salvar PDF</button>
+        <SaveDocumentImage number={order.display_number}/>
         <button className="icon-button" aria-label="Fechar prévia" onClick={onClose}><X/></button>
       </div>
       <article className="client-document order-client-document">

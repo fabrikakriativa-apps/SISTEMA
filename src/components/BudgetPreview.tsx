@@ -1,5 +1,6 @@
 import { Printer, X } from 'lucide-react'
 import { money } from '../lib/format'
+import { SaveDocumentImage } from './SaveDocumentImage'
 import { optionFinalValue, type ItemPaymentOption } from '../lib/paymentOptions'
 
 type PreviewItem = { id:string; environment:string|null; description:string; quantity:number; sale_total:number; affects_total:boolean; family:{name:string}|null }
@@ -12,7 +13,7 @@ export function BudgetPreview({budget,items,paymentOptions,clientName,clientAddr
   const optionalItems = items.filter(item => !item.affects_total)
   return <div className="preview-backdrop">
     <div className="client-preview-shell">
-      <div className="preview-toolbar"><div><strong>Prévia do {isPreBudget ? 'pré-orçamento' : 'orçamento'} para o cliente</strong><span>Esta é a mesma versão usada na impressão e no PDF.</span></div><button className="button secondary" onClick={() => window.print()}><Printer/>Imprimir / salvar PDF</button><button className="icon-button" aria-label="Fechar prévia" onClick={onClose}><X/></button></div>
+      <div className="preview-toolbar"><div><strong>Prévia do {isPreBudget ? 'pré-orçamento' : 'orçamento'} para o cliente</strong><span>Esta é a mesma versão usada na impressão e no PDF.</span></div><button className="button secondary" onClick={() => window.print()}><Printer/>Imprimir / salvar PDF</button><SaveDocumentImage number={budget.display_number}/><button className="icon-button" aria-label="Fechar prévia" onClick={onClose}><X/></button></div>
       <article className="client-document budget-client-document">
         <header><div className="document-brand"><span>FK</span><div><strong>FÁBRIKA KRIATIVA</strong><small>Soluções personalizadas para ambientes</small></div></div><div className="document-number"><small>{isPreBudget ? 'PRÉ-ORÇAMENTO' : 'ORÇAMENTO'}</small><strong>{budget.display_number}</strong><span>{date(budget.created_at)}</span></div></header>
         <section className="budget-client-heading"><div><small>PROPOSTA PARA</small><strong>{clientName}</strong>{clientAddress && <span>{clientAddress}</span>}</div><div><small>VALIDADE</small><strong>{date(budget.valid_until)}</strong>{budget.delivery_terms && <span>Previsão: {budget.delivery_terms}</span>}</div></section>

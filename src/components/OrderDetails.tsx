@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, ClipboardList, Eye, GitBranch, PackagePlus, ReceiptText, X } from 'lucide-react'
 import { useToast } from './ToastProvider'
 import { supabase } from '../lib/supabase'
@@ -7,6 +7,7 @@ import { OrderPreview } from './OrderPreview'
 import {SortableHeader,compareValues,type SortState} from './SortableHeader'
 import {orderStatusLabels,type OrderStatus} from '../lib/orderStatus'
 import { ReceiptPreview } from './ReceiptPreview'
+import { readRecovery, writeRecovery, clearRecovery } from '../lib/recoveryDraft'
 
 export type DetailOrder = {
   id:string; display_number:string; status:string; payment_terms:string|null; promised_date:string|null; client_address:string|null; notes:string|null; total:number; created_at:string
@@ -25,19 +26,45 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
   const [deliverySaving,setDeliverySaving] = useState(false),[notesSaving,setNotesSaving] = useState(false)
   const [method,setMethod] = useState('PIX'),[installments,setInstallments] = useState(1),[firstDue,setFirstDue] = useState(today()),[financeSaving,setFinanceSaving] = useState(false),[preview,setPreview] = useState(false),[receipt,setReceipt] = useState(false),[actionsOpen,setActionsOpen] = useState(false),[revisionSaving,setRevisionSaving] = useState(false)
   const [itemSort,setItemSort]=useState<SortState<'item'|'quantity'|'value'|'operation'>>({key:'item',direction:'asc'})
+  const recoveryKey=`${organizationId}:order:${order.id}`
+  const [autoState,setAutoState]=useState('saved')
+  const latest=useRef({address,promisedDate,notes}), savingAuto=useRef(false)
+  const persisted=useRef({address:order.client_address||[order.client?.address,order.client?.city].filter(Boolean).join(' · '),promisedDate:order.promised_date??'',notes:order.notes??''})
   useEffect(() => {
-    setAddress(order.client_address || [order.client?.address,order.client?.city].filter(Boolean).join(' · '))
-    setPromisedDate(order.promised_date ?? '')
-    setNotes(order.notes ?? '')
-  },[order.id,order.client_address,order.promised_date,order.notes,order.client?.address,order.client?.city])
+    const saved=readRecovery<{address:string;promisedDate:string;notes:string}>(recoveryKey)
+    const initial={address:order.client_address||[order.client?.address,order.client?.city].filter(Boolean).join(' · '),promisedDate:order.promised_date??'',notes:order.notes??''}
+    persisted.current=initial
+    setAddress(saved?.address??initial.address);setPromisedDate(saved?.promisedDate??initial.promisedDate);setNotes(saved?.notes??initial.notes)
+  },[order.id])
+  useEffect(()=>{
+    const value={address,promisedDate,notes};latest.current=value
+    if(['completed','cancelled'].includes(order.status))return
+    if(JSON.stringify(value)===JSON.stringify(persisted.current))return
+    writeRecovery(recoveryKey,value);setAutoState('waiting')
+    const timer=window.setTimeout(async()=>{
+      if(!supabase||savingAuto.current)return
+      savingAuto.current=true;setAutoState('saving')
+      try{
+        do {
+        const queued=latest.current
+        if(queued.notes!==persisted.current.notes){const result=await supabase.rpc('set_order_general_notes',{org_id:organizationId,target_order_id:order.id,new_notes:queued.notes});if(result.error)throw result.error;persisted.current.notes=queued.notes}
+        if(queued.address!==persisted.current.address||queued.promisedDate!==persisted.current.promisedDate){const result=await supabase.rpc('set_order_delivery_details',{org_id:organizationId,target_order_id:order.id,new_client_address:queued.address,new_promised_date:queued.promisedDate||null});if(result.error)throw result.error;persisted.current.address=queued.address;persisted.current.promisedDate=queued.promisedDate}
+        if(JSON.stringify(latest.current)===JSON.stringify(persisted.current)){clearRecovery(recoveryKey);setAutoState('saved');break}
+        if(JSON.stringify(latest.current)===JSON.stringify(queued)){setAutoState('waiting');break}
+        } while(true)
+      }catch{setAutoState('error')}
+      finally{savingAuto.current=false}
+    },800)
+    return()=>window.clearTimeout(timer)
+  },[address,promisedDate,notes,order.id,order.status])
   const amount = Number(order.total)/Math.max(1,installments)
   const receivables = useMemo(() => order.receivables.filter(item => item.status !== 'cancelled').sort((a,b) => a.installment-b.installment),[order.receivables])
   const receivedTotal = receivables.reduce((sum,item)=>sum+Number(item.paid_amount||0),0)
   const sortedItems=useMemo(()=>[...order.order_items].sort((a,b)=>{const values={item:[`${a.snapshot.environment??''} ${a.snapshot.description??''}`,`${b.snapshot.environment??''} ${b.snapshot.description??''}`],quantity:[Number(a.snapshot.quantity??0),Number(b.snapshot.quantity??0)],value:[Number(a.snapshot.sale_total??0),Number(b.snapshot.sale_total??0)],operation:[a.status,b.status]}[itemSort.key];return compareValues(values[0],values[1])*(itemSort.direction==='asc'?1:-1)}),[order.order_items,itemSort])
   const saveDelivery = async () => {
-    if(!supabase || !promisedDate || deliverySaving) return
+    if(!supabase || deliverySaving) return
     setDeliverySaving(true)
-    const {error} = await supabase.rpc('set_order_delivery_details',{org_id:organizationId,target_order_id:order.id,new_client_address:address.trim(),new_promised_date:promisedDate})
+    const {error} = await supabase.rpc('set_order_delivery_details',{org_id:organizationId,target_order_id:order.id,new_client_address:address.trim(),new_promised_date:promisedDate||null})
     if(error) show('Não foi possível salvar os dados de entrega.','error')
     else { await onSaved(); show('Dados de entrega atualizados.','success') }
     setDeliverySaving(false)
@@ -45,7 +72,7 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
   const saveNotes = async () => {
     if(!supabase || notesSaving) return
     setNotesSaving(true)
-    const {error} = await supabase.rpc('set_order_general_notes',{org_id:organizationId,target_order_id:order.id,new_notes:notes.trim()})
+    const {error} = await supabase.rpc('set_order_general_notes',{org_id:organizationId,target_order_id:order.id,new_notes:notes})
     if(error) show('Não foi possível salvar as observações do pedido.','error')
     else { await onSaved(); show('Observações do pedido atualizadas.','success') }
     setNotesSaving(false)
@@ -55,7 +82,7 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
     setFinanceSaving(true)
     const {error} = await supabase.rpc('configure_order_receivables',{org_id:organizationId,target_order_id:order.id,installment_count:installments,first_due_date:firstDue,payment_method:method})
     if(error) show(error.code === '23514' ? 'Este pedido já possui recebimento configurado ou os dados são inválidos.' : 'Não foi possível gerar as parcelas.','error')
-    else { await onSaved(); show('Contas a receber geradas e itens liberados para Compras.','success') }
+    else { await onSaved(); show('Contas a receber geradas. O status do pedido pode ser definido por você.','success') }
     setFinanceSaving(false)
   }
   const startRevision = async () => {
@@ -71,6 +98,7 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
 <div>
 <h1>{order.display_number}</h1>
 <p>{order.client?.name ?? 'Cliente não informado'} · criado em {date(order.created_at)}</p>
+<small role="status">{autoState==='saving'?'Salvando automaticamente…':autoState==='waiting'?'Rascunho protegido neste navegador':autoState==='error'?'Falha ao sincronizar; rascunho protegido neste navegador':'Alterações salvas'}</small>
 </div>
 <div>
 <button className="button secondary" onClick={() => setActionsOpen(true)}>
@@ -79,7 +107,7 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
 <ArrowLeft/>Voltar aos pedidos</button>
 </div>
 </section>
-    {preview && <OrderPreview order={order} onClose={() => setPreview(false)}/>}
+    {preview && <OrderPreview order={{...order,client_address:address,promised_date:promisedDate||null,notes}} onClose={() => setPreview(false)}/>}
     {receipt && <ReceiptPreview order={order} onClose={() => setReceipt(false)}/>}
     {actionsOpen&&<div className="dialog-backdrop">
 <section className="dialog order-actions-dialog" role="dialog" aria-modal="true" aria-labelledby="order-actions-title">
@@ -124,11 +152,13 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
 <strong>Revisar pedido</strong>
 <small>A revisão comercial fica disponível após o cancelamento deste pedido.</small>
 </span>
-</div>}<div className="order-action info">
+</div>}<button type="button" className="order-action" onClick={()=>{setActionsOpen(false);onReviewBudget()}}>
+<GitBranch/><span><strong>Revisar especificações do orçamento</strong><small>Complemente tecido e descrições mantendo os valores aprovados e este pedido.</small></span>
+</button><div className="order-action info">
 <PackagePlus/>
 <span>
 <strong>Insumos e lista de compras</strong>
-<small>Na revisão do orçamento, abra cada item e use “Insumos cadastrados”. Ao aprovar, esses insumos geram a lista de compras.</small>
+<small>Em Compras, edite as necessidades ou adicione os materiais e insumos necessários para este pedido.</small>
 </span>
 </div>
 </div>
@@ -149,7 +179,7 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
 <div className="form-grid">
 <label className="field span-2">Endereço de entrega<input value={address} onChange={event => setAddress(event.target.value)} placeholder="Endereço + cidade / UF"/>
 </label>
-<label className="field">Entrega combinada<input required type="date" value={promisedDate} onChange={event => setPromisedDate(event.target.value)}/>
+<label className="field">Entrega combinada<input type="date" value={promisedDate} onChange={event => setPromisedDate(event.target.value)}/>
 </label>
 <div className="order-field-note">
 <strong>{promisedDate ? date(promisedDate) : 'A confirmar'}</strong>
@@ -157,7 +187,7 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
 </div>
 </div>
 <footer>
-<button className="button primary" disabled={!promisedDate || deliverySaving} onClick={() => void saveDelivery()}>{deliverySaving ? 'Salvando…' : 'Salvar entrega'}</button>
+<button className="button primary" disabled={deliverySaving} onClick={() => void saveDelivery()}>{deliverySaving ? 'Salvando…' : 'Salvar entrega'}</button>
 </footer>
 </section>
       <section className="panel order-detail-card">
