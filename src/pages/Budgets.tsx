@@ -27,6 +27,7 @@ import './Budgets.css'
 import { readRecovery,writeRecovery,clearRecovery,useRecoveryDraft } from '../lib/recoveryDraft'
 import { itemFieldRules } from '../lib/itemFieldRules'
 import { RemoveAttachment } from '../components/RemoveAttachment'
+import { PendingItemPhoto } from '../components/PendingItemPhoto'
 import {loadAllPages} from '../lib/loadAllPages'
 
 type Budget = {
@@ -307,7 +308,9 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     else {const saved={...(data as Client),master:[]};setAvailableClients(current=>[...current,saved].sort((a,b)=>a.name.localeCompare(b.name,'pt-BR')));setClientSearch(saved.name);setForm({...form,client_id:saved.id,client_address:[saved.address,saved.city].filter(Boolean).join(' · '),client_address_edited:false});setNewClientOpen(false);setNewClient({name:'',document:'',phone:'',address:'',city:'',origin:'',notes:'',master_client_id:''});show('Cliente cadastrado e selecionado no orçamento.','success')}
     setNewClientSaving(false)
   }
+  const [pendingPhotos,setPendingPhotos]=useState<File[]>([])
   const openItem=async(item?:BudgetItem)=>{
+    setPendingPhotos([])
     setPdfResult(null);setPdfName('');setPdfCandidate(0);setPdfRows([])
     setSupplyLines([]);setLaborLines([]);setPaymentOptions([]);setItemPhotos([])
     if(!item){setItemForm(newBlankItem());setUpholsteryEstimate(newUpholsteryEstimate());setPaymentOptions(standardItemPaymentOptions());restoreItemDraft();setItemOpen(true);return}
@@ -420,7 +423,14 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
       const optionsResult=composition.error?null:await supabase.rpc('replace_budget_item_payment_options',{org_id:budgetOrganizationId,target_budget_item_id:result.data.id,new_options:paymentOptions.map((option,index)=>({...option,position:index+1}))})
       if(composition.error)show(`O item foi salvo, mas a composição não foi atualizada: ${composition.error.message}`,'error')
       else if(optionsResult?.error)show(`O item foi salvo, mas as opções comerciais não foram atualizadas: ${optionsResult.error.message}`,'error')
-      else {clearRecovery(itemDraftKey);setItemOpen(false);await loadItems();const {data}=await supabase.from('budgets').select(columns).eq('id',budget.id).single();if(data)setBudget(data as unknown as Budget);show(itemForm.id?'Item e composição atualizados.':'Item adicionado ao orçamento.','success')}
+      else {
+        setItemForm(current=>({...current,id:result.data.id}))
+        const failed=pendingPhotos.length?await addItemPhotos(pendingPhotos,result.data.id):[]
+        setPendingPhotos(failed)
+        await loadItems();const {data}=await supabase.from('budgets').select(columns).eq('id',budget.id).single();if(data)setBudget(data as unknown as Budget)
+        if(failed.length)show('Item salvo; algumas imagens falharam. Elas foram mantidas para tentar novamente.','error')
+        else {clearRecovery(itemDraftKey);setItemOpen(false);show(itemForm.id?'Item e composição atualizados.':'Item adicionado ao orçamento.','success')}
+      }
     }
     setItemSaving(false)
   }
@@ -525,23 +535,27 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   const openAttachment=async(attachment:Attachment)=>{if(!supabase)return;const {data,error}=await supabase.storage.from('documents').createSignedUrl(attachment.storage_path,300);if(error||!data?.signedUrl)show('Não foi possível abrir o documento.','error');else window.open(data.signedUrl,'_blank','noopener,noreferrer')}
   const openItemPhoto=async(photo:ItemPhoto)=>{if(!supabase)return;const {data,error}=await supabase.storage.from('documents').createSignedUrl(photo.storage_path,300);if(error||!data?.signedUrl)show('Não foi possível abrir a foto.','error');else window.open(data.signedUrl,'_blank','noopener,noreferrer')}
   const safePhotoName=(name:string)=>{const extension=name.match(/\.[a-zA-Z0-9]{1,8}$/)?.[0].toLowerCase()??'';const base=name.slice(0,name.length-extension.length).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9._-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,80)||'foto';return `${base}${extension}`}
-  const addItemPhotos=async(files:FileList|null)=>{
-    if(!supabase||!itemForm.id||photoUploading||!files?.length)return
+  const addItemPhotos=async(files:FileList|File[]|null,targetId=itemForm.id):Promise<File[]>=>{
+    if(!files?.length)return []
     const selected=[...files]
-    if(selected.some(file=>!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>10485760)){show('Use fotos JPG, PNG ou WebP de até 10 MB.','error');return}
+    if(selected.some(file=>!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>10485760)){show('Use fotos JPG, PNG ou WebP de até 10 MB.','error');return selected}
+    if(!targetId){setPendingPhotos(current=>[...current,...selected]);return []}
+    if(!supabase||photoUploading)return selected
     setPhotoUploading(true)
     let added=0
+    const failed:File[]=[]
     for(const file of selected){
-      const path=`${budgetOrganizationId}/budget-items/${itemForm.id}/photos/${crypto.randomUUID()}-${safePhotoName(file.name)}`
+      const path=`${budgetOrganizationId}/budget-items/${targetId}/photos/${crypto.randomUUID()}-${safePhotoName(file.name)}`
       const upload=await supabase.storage.from('documents').upload(path,file,{contentType:file.type,upsert:false})
-      if(upload.error)continue
-      const registration=await supabase.rpc('register_budget_item_photo',{org_id:budgetOrganizationId,target_budget_item_id:itemForm.id,object_path:path,file_name:file.name,content_type:file.type,byte_size:file.size})
-      if(registration.error){await supabase.storage.from('documents').remove([path]);continue}
+      if(upload.error){failed.push(file);continue}
+      const registration=await supabase.rpc('register_budget_item_photo',{org_id:budgetOrganizationId,target_budget_item_id:targetId,object_path:path,file_name:file.name,content_type:file.type,byte_size:file.size})
+      if(registration.error){await supabase.storage.from('documents').remove([path]);failed.push(file);continue}
       added++
     }
-    if(added){const {data}=await supabase.from('attachments').select('id,original_name,storage_path,created_at').eq('organization_id',budgetOrganizationId).is('deleted_at',null).eq('entity_type','budget_item').eq('entity_id',itemForm.id).eq('purpose','item_reference_photo').order('created_at',{ascending:false});setItemPhotos((data??[]) as ItemPhoto[]);show(`${added} foto(s) adicionada(s) ao histórico do item.`,'success')}
+    if(added){const {data}=await supabase.from('attachments').select('id,original_name,storage_path,created_at').eq('organization_id',budgetOrganizationId).is('deleted_at',null).eq('entity_type','budget_item').eq('entity_id',targetId).eq('purpose','item_reference_photo').order('created_at',{ascending:false});setItemPhotos((data??[]) as ItemPhoto[]);show(`${added} foto(s) adicionada(s) ao histórico do item.`,'success')}
     else show('Não foi possível adicionar as fotos.','error')
     setPhotoUploading(false)
+    return failed
   }
   return <Page title={isPreBudget?'Construção do pré-orçamento':'Construção do orçamento'} description={isPreBudget?'Registre a estimativa e as referências. Valor, medidas e materiais serão confirmados depois.':'Monte os dados comerciais e os itens que o cliente receberá.'} action={<div className="page-actions">
 <button className="button secondary" onClick={()=>setPreviewOpen(true)}>Prévia do cliente</button>
@@ -818,10 +832,11 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 </div>
 </fieldset>
 <section className="item-photos item-photos-independent">
-<header><div><h3>Fotos e referências</h3><p>Fotos enviadas pelo cliente, do ambiente ou da visita técnica.</p></div>{canEditItems&&itemForm.id&&<label className="button secondary photo-upload"><ImagePlus/>{photoUploading?'Adicionando…':'Adicionar fotos'}<input type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={photoUploading} onChange={e=>void addItemPhotos(e.target.files)}/></label>}</header>
-{itemForm.id?(itemPhotos.length?<div className="item-photo-list">{itemPhotos.map(photo=><div className="attachment-entry" key={photo.id}><button type="button" className="item-photo" onClick={()=>void openItemPhoto(photo)}><ImagePlus/><span>{photo.original_name}</span><small>{new Date(photo.created_at).toLocaleDateString('pt-BR')}</small></button><RemoveAttachment organizationId={budgetOrganizationId} id={photo.id} name={photo.original_name} onRemoved={()=>setItemPhotos(current=>current.filter(x=>x.id!==photo.id))}/></div>)}</div>:<div className="item-photo-empty">Nenhuma foto anexada a este item.</div>):<div className="item-photo-empty">Salve o item uma vez para anexar fotos.</div>}
+<header><div><h3>Imagens e referências do item</h3><p>Selecione as imagens agora; em itens novos elas serão anexadas ao salvar.</p></div>{canEditItems&&<label className="button secondary photo-upload"><ImagePlus/>{photoUploading?'Adicionando…':'Adicionar imagens'}<input aria-label="Adicionar imagens ao item" type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={photoUploading||itemSaving} onChange={e=>{void addItemPhotos(e.target.files);e.target.value=''}}/></label>}</header>
+{pendingPhotos.length>0&&<div className="item-photo-list">{pendingPhotos.map((file,index)=><PendingItemPhoto key={`${file.name}-${index}`} file={file} disabled={itemSaving} onRemove={()=>setPendingPhotos(current=>current.filter((_,i)=>i!==index))}/>)}</div>}
+{itemPhotos.length>0?<div className="item-photo-list">{itemPhotos.map(photo=><div className="attachment-entry" key={photo.id}><button type="button" className="item-photo" onClick={()=>void openItemPhoto(photo)}><ImagePlus/><span>{photo.original_name}</span><small>{new Date(photo.created_at).toLocaleDateString('pt-BR')}</small></button><RemoveAttachment organizationId={budgetOrganizationId} id={photo.id} name={photo.original_name} onRemoved={()=>setItemPhotos(current=>current.filter(x=>x.id!==photo.id))}/></div>)}</div>:pendingPhotos.length===0&&<div className="item-photo-empty">Nenhuma imagem selecionada. Use Adicionar imagens (JPG, PNG ou WebP, até 10 MB).</div>}
 </section><footer><button type="button" className="button secondary" onClick={()=>setItemOpen(false)}>{canEditItems?'Cancelar':'Fechar'}</button>
-{canEditItems&&<button className="button primary" disabled={itemSaving||pdfReading}>{itemSaving?'Salvando…':'Salvar apenas este item'}</button>}
+{canEditItems&&<button className="button primary" disabled={itemSaving||pdfReading||photoUploading}>{itemSaving?'Salvando…':'Salvar apenas este item'}</button>}
 </footer>
 </form>
 </div>}
