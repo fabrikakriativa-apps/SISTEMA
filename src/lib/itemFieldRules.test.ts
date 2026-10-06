@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { itemFieldRules } from './itemFieldRules'
 describe('campos por tipo de item', () => {
-  it.each(['confection', 'upholstery'])('simplifica %s', key => {
+  it.each(['confection', 'upholstery', 'upholstery_reform'])('simplifica %s', key => {
     expect(itemFieldRules(key)).toEqual({environment:false,manufacturerCost:false,additionalCost:false})
   })
   it('mantém ambiente no papel de parede, sem custos avulsos', () => {
