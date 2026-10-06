@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useAccess } from '../components/AuthorizedAccess'
 import { supabase } from './supabase'
 import { catalogPayload } from './catalog'
+import {loadAllPages} from './loadAllPages'
 
 export function useCatalog<T extends { id: string; name: string }>(table: 'clients' | 'supplies', columns: string) {
   const access = useAccess()
@@ -23,8 +24,7 @@ export function useCatalog<T extends { id: string; name: string }>(table: 'clien
     setLoading(true); setError('')
     const load = async () => {
       try {
-        let query = supabase!.from(table).select(columns).eq('organization_id', access.organizationId).order('name')
-        const { data, error } = await query.abortSignal(controller.signal)
+        const { data, error } = await loadAllPages<T>((from,to)=>supabase!.from(table).select(columns,{count:'exact'}).eq('organization_id', access.organizationId).order('name').order('id').range(from,to).abortSignal(controller.signal) as unknown as PromiseLike<{data:T[]|null;error:unknown;count:number|null}>)
         if (error) throw error
         if (!cancelled) setItems((data ?? []) as unknown as T[])
       } catch (reason) { if (!cancelled) { const detail=typeof reason==='object'&&reason&&'message' in reason?String(reason.message):'';setError(detail?`Não foi possível carregar os cadastros: ${detail}`:'Não foi possível carregar os cadastros. Verifique a conexão e tente novamente.') } }

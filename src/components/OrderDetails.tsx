@@ -94,13 +94,15 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
     setRevisionSaving(false)
   }
   return <>
-    <section className="order-detail-header">
-<div>
-<h1>{order.display_number}</h1>
-<p>{order.client?.name ?? 'Cliente não informado'} · criado em {date(order.created_at)}</p>
+    <section className="panel order-detail-header" aria-label="Identificação do pedido">
+<div className="order-identity">
+<span className="eyebrow">Número do pedido</span>
+<h2 className="order-number">{order.display_number}</h2>
+<p className="order-client-name">{order.client?.name ?? 'Cliente não informado'}</p>
+<p className="order-created-date">Criado em {date(order.created_at)}</p>
 <small role="status">{autoState==='saving'?'Salvando automaticamente…':autoState==='waiting'?'Rascunho protegido neste navegador':autoState==='error'?'Falha ao sincronizar; rascunho protegido neste navegador':'Alterações salvas'}</small>
 </div>
-<div>
+<div className="order-header-actions">
 <button className="button secondary" onClick={() => setActionsOpen(true)}>
 <ClipboardList/>Ações</button>
 <button className="button secondary" onClick={onBack}>

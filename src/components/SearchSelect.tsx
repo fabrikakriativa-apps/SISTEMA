@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
+import {searchOptions} from '../lib/searchOptions'
 
 export type SearchSelectOption = { id:string; label:string; detail?:string }
 
@@ -16,10 +17,7 @@ type Props = {
 export function SearchSelect({value,options,placeholder,disabled,emptyMessage='Nenhum resultado encontrado.',ariaLabel,onChange,onSelect}:Props){
   const [open,setOpen]=useState(false)
   const closeTimer=useRef<number>()
-  const matches=useMemo(()=>{
-    const term=value.trim().toLocaleLowerCase('pt-BR')
-    return (term?options.filter(option=>`${option.label} ${option.detail??''}`.toLocaleLowerCase('pt-BR').includes(term)):options).slice(0,8)
-  },[options,value])
+  const matches=useMemo(()=>searchOptions(options,value),[options,value])
   const close=()=>{closeTimer.current=window.setTimeout(()=>setOpen(false),140)}
   const choose=(option:SearchSelectOption)=>{if(closeTimer.current)window.clearTimeout(closeTimer.current);onSelect(option);setOpen(false)}
   return <div className="search-select">

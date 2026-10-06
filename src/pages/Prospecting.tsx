@@ -8,6 +8,7 @@ import { money } from '../lib/format'
 import { supabase } from '../lib/supabase'
 import { navigateTo } from '../lib/navigation'
 import { SearchSelect } from '../components/SearchSelect'
+import {loadAllPages} from '../lib/loadAllPages'
 
 type Opportunity = { id:string; name:string; phone:string|null; email:string|null; origin:string|null; notes:string|null; stage:OpportunityStage; estimated_value:number|null; next_follow_up_at:string|null; lost_reason:string|null; client_id:string|null; budget_id:string|null }
 type ClientRef = {id:string;name:string;phone:string|null;city:string|null}
@@ -23,7 +24,7 @@ export function Prospecting(){
     setLoading(true)
     const [opportunities,clientResult]=await Promise.all([
       supabase.from('sales_opportunities').select('id,name,phone,email,origin,notes,stage,estimated_value,next_follow_up_at,lost_reason,client_id,budget_id').eq('organization_id',access.organizationId).is('archived_at',null).order('updated_at',{ascending:false}).limit(500),
-      supabase.from('clients').select('id,name,phone,city').eq('organization_id',access.organizationId).is('archived_at',null).eq('client_type','Cliente final').order('name')
+      loadAllPages<ClientRef>((from,to)=>supabase!.from('clients').select('id,name,phone,city',{count:'exact'}).eq('organization_id',access.organizationId).is('archived_at',null).order('name').order('id').range(from,to))
     ])
     if(opportunities.error||clientResult.error)show('Não foi possível carregar a prospecção.','error'); else {setItems((opportunities.data??[]) as Opportunity[]);setClients((clientResult.data??[]) as ClientRef[])}
     setLoading(false)

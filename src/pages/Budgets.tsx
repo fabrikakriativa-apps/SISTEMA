@@ -27,6 +27,7 @@ import './Budgets.css'
 import { readRecovery,writeRecovery,clearRecovery,useRecoveryDraft } from '../lib/recoveryDraft'
 import { itemFieldRules } from '../lib/itemFieldRules'
 import { RemoveAttachment } from '../components/RemoveAttachment'
+import {loadAllPages} from '../lib/loadAllPages'
 
 type Budget = {
   id:string; organization_id:string; number:number; display_number:string; current_revision:number; client_id:string|null
@@ -72,7 +73,7 @@ export function Budgets() {
     try {
       const [budgetResult,clientResult] = await Promise.all([
         supabase.from('budgets').select(columns).eq('organization_id',access.organizationId).order('number',{ascending:false}),
-        supabase.from('clients').select('id,name,document,phone,address,city,client_type,master_client_id').eq('organization_id',access.organizationId).is('archived_at',null).order('name'),
+        loadAllPages<Client>((from,to)=>supabase!.from('clients').select('id,name,document,phone,address,city,client_type,master_client_id',{count:'exact'}).eq('organization_id',access.organizationId).is('archived_at',null).order('name').order('id').range(from,to) as unknown as PromiseLike<{data:Client[]|null;error:unknown;count:number|null}>),
       ])
       if (clientResult.error) throw clientResult.error
       setClients(((clientResult.data ?? []) as Client[]).map(client=>({...client,master:[]})))
@@ -636,9 +637,9 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <option value={status} key={status}>{labels[status]}</option>)}</select>
 </label>
 <div className="field">
-<span>Cliente final</span>
+<span>Cliente</span>
 <div className="client-picker">
-<SearchSelect ariaLabel="Buscar cliente final" disabled={budget.status!=='draft'} value={clientSearch} onChange={value=>{setClientSearch(value);if(!value.trim())setForm({...form,client_id:null,client_address:'',client_address_edited:false})}} onSelect={option=>{const selectedClient=availableClients.find(item=>item.id===option.id);if(selectedClient)selectClient(selectedClient)}} options={availableClients.filter(item=>item.client_type==='Cliente final').map(item=>({id:item.id,label:item.name,detail:[item.phone,item.city].filter(Boolean).join(' · ')}))} placeholder="Digite para buscar"/>
+<SearchSelect ariaLabel="Buscar cliente" disabled={budget.status!=='draft'} value={clientSearch} onChange={value=>{setClientSearch(value);if(!value.trim())setForm({...form,client_id:null,client_address:'',client_address_edited:false})}} onSelect={option=>{const selectedClient=availableClients.find(item=>item.id===option.id);if(selectedClient)selectClient(selectedClient)}} options={availableClients.map(item=>({id:item.id,label:item.name,detail:[item.client_type,item.phone,item.city].filter(Boolean).join(' · ')}))} placeholder="Digite para buscar"/>
 <button type="button" className="button secondary" disabled={budget.status!=='draft'} onClick={()=>setNewClientOpen(true)}>
 <Plus/>Novo</button>
 </div>
