@@ -25,6 +25,8 @@ import { SortableHeader, compareValues, type SortState } from '../components/Sor
 import { newUpholsteryEstimate, type UpholsteryEstimate } from '../lib/upholsteryEstimate'
 import './Budgets.css'
 import { readRecovery,writeRecovery,clearRecovery,useRecoveryDraft } from '../lib/recoveryDraft'
+import { itemFieldRules } from '../lib/itemFieldRules'
+import { RemoveAttachment } from '../components/RemoveAttachment'
 
 type Budget = {
   id:string; organization_id:string; number:number; display_number:string; current_revision:number; client_id:string|null
@@ -264,10 +266,11 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   const master=availableClients.find(item=>item.id===client?.master_client_id)
   const masterAddress=master?[master.address,master.city].filter(Boolean).join(' · '):''
   const selectedFormKey=families.find(family=>family.id===itemForm.family_id)?.form_key
+  const fields=itemFieldRules(selectedFormKey)
   const confectionSelected=selectedFormKey==='confection'
   const supportsUpholsteryCalculator=selectedFormKey==='confection'||selectedFormKey==='upholstery'
   const selectItemFamily=(value:string)=>setItemForm(current=>({...current,family_id:value,confection_subitem:''}))
-  const stateLabel=saveState==='saving'?'Salvando…':saveState==='waiting'?'Alterações pendentes':saveState==='error'?'Falha ao salvar':'Rascunho sincronizado'
+  const stateLabel=saveState==='saving'?'Salvando…':saveState==='waiting'?'Alterações pendentes':saveState==='error'?'Falha ao salvar':'Alterações salvas'
   const loadItems=useCallback(async()=>{
     if(!supabase)return
     setItemsLoading(true)
@@ -276,7 +279,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
       supabase.from('budget_items').select('id,family_id,position,presentation,environment,description,quantity,configuration,cost_total,margin_percent,sale_total,affects_total,family:item_families!budget_items_family_id_fkey(name)').eq('organization_id',budgetOrganizationId).eq('budget_id',budget.id).order('position'),
       supabase.from('supplies').select('id,code,name,category,usage_unit,current_cost').eq('organization_id',budgetOrganizationId).eq('active',true).order('name'),
       supabase.from('suppliers').select('id,name,phone,supplier_types').eq('organization_id',budgetOrganizationId).eq('active',true).order('name'),
-      supabase.from('attachments').select('id,original_name,storage_path,created_at').eq('organization_id',budgetOrganizationId).eq('entity_type','budget').eq('entity_id',budget.id).order('created_at',{ascending:false}),
+      supabase.from('attachments').select('id,original_name,storage_path,created_at').eq('organization_id',budgetOrganizationId).is('deleted_at',null).eq('entity_type','budget').eq('entity_id',budget.id).order('created_at',{ascending:false}),
       supabase.from('budget_item_payment_options').select('id,budget_item_id,position,description,adjustment_percent,final_value,observation').eq('organization_id',budgetOrganizationId).order('position')
     ])
     if(familyResult.error||itemResult.error||supplyResult.error||providerResult.error||optionResult.error)show(`Não foi possível carregar os itens: ${familyResult.error?.message??itemResult.error?.message??supplyResult.error?.message??providerResult.error?.message??optionResult.error?.message}`,'error')
@@ -314,7 +317,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     setPaymentOptions(itemPaymentOptions[item.id]??[])
     if(supabase){const [costResult,photoResult]=await Promise.all([
       supabase.from('item_cost_lines').select('kind,supply_id,supplier_id,description,quantity,unit,unit_cost,labor_days,labor_start_date').eq('organization_id',budgetOrganizationId).eq('budget_item_id',item.id),
-      supabase.from('attachments').select('id,original_name,storage_path,created_at').eq('organization_id',budgetOrganizationId).eq('entity_type','budget_item').eq('entity_id',item.id).eq('purpose','item_reference_photo').order('created_at',{ascending:false})
+      supabase.from('attachments').select('id,original_name,storage_path,created_at').eq('organization_id',budgetOrganizationId).is('deleted_at',null).eq('entity_type','budget_item').eq('entity_id',item.id).eq('purpose','item_reference_photo').order('created_at',{ascending:false})
     ]);setSupplyLines((costResult.data??[]).filter(line=>line.kind==='supply').map(line=>({...line,supply_id:line.supply_id??'',quantity:Number(line.quantity),unit_cost:Number(line.unit_cost)})) as SupplyLine[]);setLaborLines((costResult.data??[]).filter(line=>line.kind==='service').map(line=>({supplier_id:line.supplier_id??'',description:line.description,days:Number(line.labor_days??1),amount:Number(line.unit_cost),start_date:line.labor_start_date??''})) as LaborLine[]);setItemPhotos((photoResult.data??[]) as ItemPhoto[]);restoreItemDraft(item.id)}
     setItemOpen(true)
   }
@@ -535,7 +538,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
       if(registration.error){await supabase.storage.from('documents').remove([path]);continue}
       added++
     }
-    if(added){const {data}=await supabase.from('attachments').select('id,original_name,storage_path,created_at').eq('organization_id',budgetOrganizationId).eq('entity_type','budget_item').eq('entity_id',itemForm.id).eq('purpose','item_reference_photo').order('created_at',{ascending:false});setItemPhotos((data??[]) as ItemPhoto[]);show(`${added} foto(s) adicionada(s) ao histórico do item.`,'success')}
+    if(added){const {data}=await supabase.from('attachments').select('id,original_name,storage_path,created_at').eq('organization_id',budgetOrganizationId).is('deleted_at',null).eq('entity_type','budget_item').eq('entity_id',itemForm.id).eq('purpose','item_reference_photo').order('created_at',{ascending:false});setItemPhotos((data??[]) as ItemPhoto[]);show(`${added} foto(s) adicionada(s) ao histórico do item.`,'success')}
     else show('Não foi possível adicionar as fotos.','error')
     setPhotoUploading(false)
   }
@@ -656,7 +659,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 </label>
     </div>{attachments.length>0&&<div className="document-links">
 <strong>Documentos anexados</strong>{attachments.map(attachment=>
-<button type="button" key={attachment.id} onClick={()=>void openAttachment(attachment)}>{attachment.original_name}</button>)}</div>}</section>
+<span className="attachment-entry" key={attachment.id}><button type="button" onClick={()=>void openAttachment(attachment)}>{attachment.original_name}</button><RemoveAttachment organizationId={budgetOrganizationId} id={attachment.id} name={attachment.original_name} onRemoved={()=>setAttachments(current=>current.filter(x=>x.id!==attachment.id))}/></span>)}</div>}</section>
 <aside className="panel budget-summary">
 <header>
 <h2>Resumo</h2>
@@ -733,7 +736,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <div>
 <span className="eyebrow">{isPreBudget?'Item do pré-orçamento':'Item do orçamento'}</span>
 <h2>{itemForm.id?(canEditItems?'Editar item':'Visualizar item'):'Adicionar item'}</h2>
-<p>{canEditItems?(isPreBudget?'Registre a referência, as medidas aproximadas e o valor estimado.':'Cortina e Persiana podem ser preenchidas pela leitura do PDF e sempre passam por conferência.'):'Esta versão está preservada e disponível somente para consulta. Crie uma revisão para alterá-la.'}</p>
+<p>{canEditItems?(isPreBudget?'Registre a referência, as medidas aproximadas e o custo estimado.':'Cortina e Persiana podem ser preenchidas pela leitura do PDF e sempre passam por conferência.'):'Esta versão está preservada e disponível somente para consulta. Crie uma revisão para alterá-la.'}</p>
 </div>
 <button type="button" className="icon-button" onClick={()=>setItemOpen(false)}>
 <X/>
@@ -745,7 +748,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <strong>{pdfReading?'Lendo o documento…':'Arraste o PDF aqui ou clique para anexar'}</strong>
 <span>Reconhece cotações New York e tabelas de persianas; confira os itens destacados antes de importar.</span>
 </label>{pdfResult&&<div className="pdf-result">
-<strong>{pdfName} · {pdfResult.items.length} item(ns)</strong>
+<strong>{pdfName} · {pdfResult.items.length} item(ns)</strong><button type="button" className="button secondary" onClick={()=>{setPdfFile(null);setPdfResult(null);setPdfName('');setPdfRows([])}}>Remover arquivo selecionado</button>
 <div className="pdf-bulk-list">{pdfResult.items.map((item,index)=>
 <div className="pdf-bulk-row" key={`${item.description}-${index}`}>
 <input aria-label={`Importar item ${index+1}`} type="checkbox" checked={pdfRows[index]?.selected??false} onChange={e=>setPdfRows(current=>current.map((row,i)=>i===index?{...row,selected:e.target.checked}:row))}/>
@@ -769,8 +772,8 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <option value="">Selecione</option>{families.map(x=>
 <option key={x.id} value={x.id}>{x.name}</option>)}</select>
 </label>
-<label className="field">Ambiente<input value={itemForm.environment} onChange={e=>setItemForm({...itemForm,environment:e.target.value})} placeholder="Ex.: Sala"/>
-</label>{confectionSelected&&<label className="field span-2">Subitem de confecção<select required value={itemForm.confection_subitem} onChange={e=>setItemForm({...itemForm,confection_subitem:e.target.value})}>
+{fields.environment&&<label className="field">Ambiente<input value={itemForm.environment} onChange={e=>setItemForm({...itemForm,environment:e.target.value})} placeholder="Ex.: Sala"/>
+</label>}{confectionSelected&&<label className="field span-2">Subitem de confecção<select required value={itemForm.confection_subitem} onChange={e=>setItemForm({...itemForm,confection_subitem:e.target.value})}>
 <option value="">Selecione</option>{confectionSubitems.map(subitem=><option key={subitem} value={subitem}>{subitem}</option>)}</select>
 <small>O detalhamento comercial continua na descrição do item.</small>
 </label>}<label className="field span-2">Descrição para o cliente<textarea required value={itemForm.description} onChange={e=>setItemForm({...itemForm,description:e.target.value})} placeholder="Descreva modelo, material, medidas e acabamento"/>
@@ -784,27 +787,23 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     description:current.description.includes(summary)?current.description:[current.description.trim(),summary].filter(Boolean).join('\n')
   }))}
 />}
-<section className="item-photos span-2">
-<header><div><h3>Fotos e referências</h3><p>Opcional: fotos enviadas pelo cliente, do ambiente ou da visita técnica. Não aparecem ao cliente automaticamente.</p></div>{itemForm.id&&<label className="button secondary photo-upload"><ImagePlus/>{photoUploading?'Adicionando…':'Adicionar fotos'}<input type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={photoUploading} onChange={e=>void addItemPhotos(e.target.files)}/></label>}</header>
-{itemForm.id?(itemPhotos.length?<div className="item-photo-list">{itemPhotos.map(photo=><button type="button" key={photo.id} className="item-photo" onClick={()=>void openItemPhoto(photo)}><ImagePlus/><span>{photo.original_name}</span><small>{new Date(photo.created_at).toLocaleDateString('pt-BR')}</small></button>)}</div>:<div className="item-photo-empty">Nenhuma foto anexada a este item.</div>):<div className="item-photo-empty">Salve o item uma vez para anexar fotos e preservar seu histórico.</div>}
-</section>
 {isPreBudget?<div className="pre-budget-item-basics span-2">
 <label className="field">Quantidade<input type="number" min="0.001" step="0.001" value={itemForm.quantity} onChange={e=>setItemForm({...itemForm,quantity:Number(e.target.value)})}/></label>
 <label className="field">Apresentação<select value={itemForm.presentation} onChange={e=>setItemForm({...itemForm,presentation:e.target.value as ItemForm['presentation']})}>
 <option value="principal">Item principal</option>
 <option value="option">Opção (não soma)</option>
 </select></label>
-<label className="field pre-budget-value">Valor estimado<DecimalInput value={itemForm.sale_total} decimalScale={2} onValueChange={sale=>setItemForm(current=>({...current,sale_total:sale}))}/><small className="field-note">O custo e a composição real serão definidos ao converter em orçamento.</small></label>
+<label className="field pre-budget-value">Custo estimado<DecimalInput value={itemForm.sale_total} decimalScale={2} onValueChange={sale=>setItemForm(current=>({...current,sale_total:sale}))}/><small className="field-note">A composição real será definida ao converter em orçamento.</small></label>
 </div>:<>
 <label className="field">Quantidade<input type="number" min="0.001" step="0.001" value={itemForm.quantity} onChange={e=>setItemForm({...itemForm,quantity:Number(e.target.value)})}/></label>
 <label className="field">Apresentação<select value={itemForm.presentation} onChange={e=>setItemForm({...itemForm,presentation:e.target.value as ItemForm['presentation']})}>
 <option value="principal">Item principal</option>
 <option value="option">Opção (não soma)</option>
 </select></label>
-<label className="field">Custo do fabricante<DecimalInput value={itemForm.manufacturer_cost} decimalScale={2} onValueChange={value=>setItemForm(current=>withMargin({...current,manufacturer_cost:value}))}/>
-</label>
-<label className="field">Custos adicionais<DecimalInput value={itemForm.additional_cost} decimalScale={2} onValueChange={value=>setItemForm(current=>withMargin({...current,additional_cost:value}))}/>
-</label>
+{fields.manufacturerCost&&<label className="field">Custo do fabricante<DecimalInput value={itemForm.manufacturer_cost} decimalScale={2} onValueChange={value=>setItemForm(current=>withMargin({...current,manufacturer_cost:value}))}/>
+</label>}
+{fields.additionalCost&&<label className="field">Custos adicionais<DecimalInput value={itemForm.additional_cost} decimalScale={2} onValueChange={value=>setItemForm(current=>withMargin({...current,additional_cost:value}))}/>
+</label>}
 <ItemCostComposition supplies={supplies} lines={supplyLines} onChange={changeSupplyLines}/>
 <ItemLaborComposition providers={providers} lines={laborLines} onChange={changeLaborLines}/>
 <div className="item-pricing-row span-2"><label className="field">Custo total<input readOnly value={money.format(costOf(itemForm))}/>
@@ -816,7 +815,11 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 </label></div></>}
 <ItemPaymentOptions saleTotal={itemForm.sale_total} options={paymentOptions} onChange={setPaymentOptions}/>
 </div>
-</fieldset><footer><button type="button" className="button secondary" onClick={()=>setItemOpen(false)}>{canEditItems?'Cancelar':'Fechar'}</button>
+</fieldset>
+<section className="item-photos item-photos-independent">
+<header><div><h3>Fotos e referências</h3><p>Fotos enviadas pelo cliente, do ambiente ou da visita técnica.</p></div>{canEditItems&&itemForm.id&&<label className="button secondary photo-upload"><ImagePlus/>{photoUploading?'Adicionando…':'Adicionar fotos'}<input type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={photoUploading} onChange={e=>void addItemPhotos(e.target.files)}/></label>}</header>
+{itemForm.id?(itemPhotos.length?<div className="item-photo-list">{itemPhotos.map(photo=><div className="attachment-entry" key={photo.id}><button type="button" className="item-photo" onClick={()=>void openItemPhoto(photo)}><ImagePlus/><span>{photo.original_name}</span><small>{new Date(photo.created_at).toLocaleDateString('pt-BR')}</small></button><RemoveAttachment organizationId={budgetOrganizationId} id={photo.id} name={photo.original_name} onRemoved={()=>setItemPhotos(current=>current.filter(x=>x.id!==photo.id))}/></div>)}</div>:<div className="item-photo-empty">Nenhuma foto anexada a este item.</div>):<div className="item-photo-empty">Salve o item uma vez para anexar fotos.</div>}
+</section><footer><button type="button" className="button secondary" onClick={()=>setItemOpen(false)}>{canEditItems?'Cancelar':'Fechar'}</button>
 {canEditItems&&<button className="button primary" disabled={itemSaving||pdfReading}>{itemSaving?'Salvando…':'Salvar apenas este item'}</button>}
 </footer>
 </form>

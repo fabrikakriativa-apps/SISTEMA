@@ -18,10 +18,10 @@ export function ProcurementNeedEditor({organizationId,need,onClose,onSaved}:{org
  const save=async(remove=false)=>{
  if(!supabase||saving)return;setSaving(true)
  const {error}=await supabase.rpc('save_procurement_need',{org_id:organizationId,target_need_id:need?.id??null,target_order_item_id:form.order_item_id,new_supply_id:form.supply_id||null,new_description:form.description,new_quantity:Number(form.quantity),new_unit:form.unit,new_unit_cost:Number(form.unit_cost),new_deadline:form.deadline||null,remove_need:remove})
- if(error)show('Não foi possível salvar. Necessidades já compradas devem ser ajustadas no pedido ao fornecedor.','error')
- else{clearRecovery(key);await onSaved();show(remove?'Necessidade removida.':'Necessidade de compra salva.','success');onClose()}setSaving(false)
+ if(error)show('Não foi possível salvar. Itens já comprados devem ser ajustados no pedido ao fornecedor.','error')
+ else{clearRecovery(key);await onSaved();show(remove?'Item de compra removido.':'Item de compra salvo.','success');onClose()}setSaving(false)
  }
- return <div className="dialog-backdrop"><form className="dialog" onSubmit={e=>{e.preventDefault();void save()}}><header><div><h2>{need?'Editar necessidade':'Nova necessidade de compra'}</h2><p>Defina o que precisa comprar para o item do pedido.</p></div><button type="button" className="icon-button" onClick={onClose} aria-label="Fechar"><X/></button></header><div className="form-grid">
+ return <div className="dialog-backdrop"><form className="dialog" onSubmit={e=>{e.preventDefault();void save()}}><header><div><h2>{need?'Editar item de compra':'Adicionar item de compra'}</h2><p>Defina o material que precisa comprar para o item do pedido.</p></div><button type="button" className="icon-button" onClick={onClose} aria-label="Fechar"><X/></button></header><div className="form-grid">
  <label className="field span-2">Item do pedido<select required value={form.order_item_id} onChange={e=>setForm({...form,order_item_id:e.target.value})}><option value="">Selecione</option>{items.map(item=><option key={item.id} value={item.id}>{item.order?.display_number} · {item.order?.client?.name} · {item.snapshot.description}</option>)}</select></label>
  <label className="field span-2">Insumo cadastrado<select value={form.supply_id??''} onChange={e=>{const supply=supplies.find(x=>x.id===e.target.value);setForm({...form,supply_id:supply?.id??null,...(supply?{description:supply.name,unit:supply.usage_unit,unit_cost:Number(supply.current_cost)}:{})})}}><option value="">Produto ou material avulso</option>{supplies.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
  <label className="field span-2">Descrição<textarea required value={form.description} onChange={e=>setForm({...form,description:e.target.value})}/></label>
@@ -29,6 +29,6 @@ export function ProcurementNeedEditor({organizationId,need,onClose,onSaved}:{org
  <label className="field">Unidade<input required value={form.unit} onChange={e=>setForm({...form,unit:e.target.value})}/></label>
  <label className="field">Custo unitário<input type="number" required min="0" step="0.01" value={form.unit_cost} onChange={e=>setForm({...form,unit_cost:Number(e.target.value)})}/></label>
  <label className="field">Data limite<input type="date" value={form.deadline??''} onChange={e=>setForm({...form,deadline:e.target.value||null})}/></label>
- {confirmDelete&&<p className="span-2">Remover esta necessidade da lista? O item do pedido será preservado.</p>}
- </div><footer>{need&&<button type="button" className="button secondary" disabled={saving} onClick={()=>confirmDelete?void save(true):setConfirmDelete(true)}><Trash2/>{confirmDelete?'Confirmar exclusão':'Excluir necessidade'}</button>}<button type="button" className="button secondary" onClick={onClose}>Cancelar</button><button className="button primary" disabled={saving}>{saving?'Salvando…':'Salvar'}</button></footer></form></div>
+ {confirmDelete&&<p className="span-2">Remover este material da lista de compras? O item do pedido será preservado.</p>}
+ </div><footer>{need&&<button type="button" className="button secondary" disabled={saving} onClick={()=>confirmDelete?void save(true):setConfirmDelete(true)}><Trash2/>{confirmDelete?'Confirmar exclusão':'Excluir item de compra'}</button>}<button type="button" className="button secondary" onClick={onClose}>Cancelar</button><button className="button primary" disabled={saving}>{saving?'Salvando…':'Salvar'}</button></footer></form></div>
 }

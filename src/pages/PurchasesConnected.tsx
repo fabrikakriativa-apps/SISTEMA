@@ -71,6 +71,7 @@ export function PurchasesConnected() {
         if (a.error || b.error || c.error)
             show('Não foi possível carregar todos os dados de Compras. Tente novamente.', 'error');
         setNeeds((a.data ?? []) as unknown as Need[]);
+        setSelected(current=>current.filter(id=>(a.data??[]).some(item=>item.id===id)));
         setOrders((b.data ?? []) as unknown as Purchase[]);
         setSuppliers((c.data ?? []) as Supplier[]);
         setLoading(false);
@@ -110,19 +111,20 @@ export function PurchasesConnected() {
     } setCreating(false); };
     const openStatus = (purchase: Purchase, next: PurchaseStatus) => { if (next === purchase.status)
         return; setRequestedStatus(next); setDetail(purchase); };
-    return <Page title="Compras" description="Necessidades dos pedidos, compras ao fornecedor e integração financeira.">
+    return <Page title="Compras" description="Insumos dos pedidos, compras ao fornecedor e integração financeira.">
   <div className="finance-tabs">
-<button className={tab === 'needs' ? 'active' : ''} onClick={() => setTab('needs')}>Necessidades de compra</button>
+<button className={tab === 'needs' ? 'active' : ''} onClick={() => setTab('needs')}>Lista de compras</button>
 <button className={tab === 'orders' ? 'active' : ''} onClick={() => setTab('orders')}>Pedidos aos fornecedores</button>
 </div>
   {tab === 'needs' ? <section className="panel">
-<div className="toolbar">
-<DateRangeFilter label="Necessidade criada em" value={dateRange} onChange={setDateRange} />
+<div className="toolbar purchase-list-toolbar">
+<DateRangeFilter label="Item de compra criado em" value={dateRange} onChange={setDateRange} />
+<div className="purchase-list-actions">
 <span>{visibleNeeds.length} item(ns) aguardando compra</span>
-<button className="button secondary" onClick={()=>setEditingNeed(null)}>Adicionar necessidade</button>
+<button className="button secondary" onClick={()=>setEditingNeed(null)}>Adicionar item de compra</button>
 <button className="button primary" disabled={!selected.length} onClick={() => setCreateOpen(true)}>
 <ShoppingCart />{selected.length ? `Criar pedido de compra (${selected.length})` : 'Selecione os itens'}</button>
-</div>{loading ? <p className="panel-message">Carregando…</p> : <div className="table-wrap">
+</div></div>{loading ? <p className="panel-message">Carregando…</p> : <div className="table-wrap">
 <table>
 <thead>
 <tr>
@@ -133,12 +135,12 @@ export function PurchasesConnected() {
 <SortableHeader label="Descrição" column="description" sort={needSort} onChange={setNeedSort} />
 <SortableHeader label="Qtd." column="quantity" sort={needSort} onChange={setNeedSort} />
 <SortableHeader label="Custo" column="cost" sort={needSort} onChange={setNeedSort} />
-<SortableHeader label="Data limite" column="deadline" sort={needSort} onChange={setNeedSort}/><th>Ações</th>
+<SortableHeader label="Data limite" column="deadline" sort={needSort} onChange={setNeedSort}/>
 </tr>
 </thead>
-<tbody>{visibleNeeds.map(x => <tr key={x.id} className={selected.includes(x.id) ? 'selected-row' : ''} onClick={() => toggle(x)}>
-<td>
-<input type="checkbox" aria-label={`Selecionar ${x.description}`} checked={selected.includes(x.id)} readOnly/>
+<tbody>{visibleNeeds.map(x => <tr key={x.id} className={`clickable-row ${selected.includes(x.id) ? 'selected-row' : ''}`} tabIndex={0} aria-label={`Abrir ${x.description}`} onClick={() => setEditingNeed(x)} onKeyDown={e=>{if(e.target===e.currentTarget&&(e.key==='Enter'||e.key===' ')){e.preventDefault();setEditingNeed(x)}}}>
+<td onClick={e=>e.stopPropagation()}>
+<input type="checkbox" aria-label={`Selecionar ${x.description}`} checked={selected.includes(x.id)} onChange={()=>toggle(x)}/>
 </td>
                 <td>
 <strong>{x.order_item.order?.display_number}</strong>
@@ -153,11 +155,11 @@ export function PurchasesConnected() {
 <td>
 <strong>{money.format(Number(x.quantity) * Number(x.unit_cost))}</strong>
 </td>
-<td>{x.deadline?new Date(`${x.deadline}T12:00:00`).toLocaleDateString('pt-BR'):'A definir'}</td><td><button className="button secondary" onClick={e=>{e.stopPropagation();setEditingNeed(x)}}>Editar</button></td>
+<td>{x.deadline?new Date(`${x.deadline}T12:00:00`).toLocaleDateString('pt-BR'):'A definir'}</td>
                 </tr>)}</tbody>
 </table>{!visibleNeeds.length && <div className="empty-state">
 <ShoppingCart />
-<strong>Nenhuma necessidade de compra</strong>
+<strong>Nenhum item na lista de compras</strong><p>Inclua insumos nos itens do orçamento ou adicione um item de compra.</p>
 </div>}</div>}</section> : <section className="panel"><div className="toolbar"><DateRangeFilter label="Data do pedido" value={dateRange} onChange={setDateRange} /><span>{visibleOrders.length} pedido(s)</span></div>{loading ? <p className="panel-message">Carregando…</p> : <div className="table-wrap">
 <table>
 <thead>
