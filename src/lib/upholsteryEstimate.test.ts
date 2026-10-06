@@ -2,6 +2,16 @@ import { describe, expect, it } from 'vitest'
 import { calculateUpholsteryEstimate, upholsteryDescription, type UpholsteryEstimate } from './upholsteryEstimate'
 
 describe('calculateUpholsteryEstimate',()=>{
+  it('multiplies the entered value by manual meters and preserves legacy calculation without override',()=>{
+    const estimate:UpholsteryEstimate={pieces:[],fabric_width:1.4,fabric_estimate:87,labor_estimate:100,additional_estimate:10,margin_percent:45}
+    expect(calculateUpholsteryEstimate(estimate).base_total).toBe(197)
+    const manual=calculateUpholsteryEstimate({...estimate,fabric_meters_manual:5})
+    expect(manual.fabric_cost).toBe(435)
+    expect(manual.base_total).toBe(545)
+    expect(manual.sale_total).toBe(790.25)
+    expect(calculateUpholsteryEstimate({...estimate,fabric_meters_manual:0}).fabric_cost).toBe(0)
+    expect(calculateUpholsteryEstimate({...estimate,fabric_meters_manual:null}).base_total).toBe(197)
+  })
   it('calculates foam and combines only pieces with the same fabric reference',()=>{
     const estimate:UpholsteryEstimate={fabric_width:1.4,fabric_estimate:80,labor_estimate:100,additional_estimate:0,margin_percent:50,pieces:[
       {id:'1',name:'Cabeceira',width:2,height:1,thickness:3,density:'d28',fabric_reference:'Linho'},

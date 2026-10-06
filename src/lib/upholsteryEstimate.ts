@@ -14,6 +14,7 @@ export type UpholsteryEstimate={
   pieces:UpholsteryPiece[]
   fabric_width:number
   fabric_estimate:number
+  fabric_meters_manual?:number|null
   labor_estimate:number
   additional_estimate:number
   margin_percent:number
@@ -31,7 +32,7 @@ export const newUpholsteryEstimate=():UpholsteryEstimate=>({
 
 export type UpholsteryPieceResult=UpholsteryPiece & {foam_area:number;foam_rate:number;foam_cost:number;cut_width:number;cut_length:number}
 export type FabricGroup={reference:string;meters:number;piece_count:number}
-export type UpholsteryEstimateResult={pieces:UpholsteryPieceResult[];fabric_groups:FabricGroup[];cost_per_square_meter:number;foam_quantity:number;base_total:number;sale_total:number}
+export type UpholsteryEstimateResult={pieces:UpholsteryPieceResult[];fabric_groups:FabricGroup[];fabric_meters:number;suggested_fabric_meters:number;fabric_cost:number;cost_per_square_meter:number;foam_quantity:number;base_total:number;sale_total:number}
 
 export function calculateUpholsteryEstimate(estimate:UpholsteryEstimate):UpholsteryEstimateResult{
   const fabricWidth=positive(estimate.fabric_width)||1.4
@@ -58,8 +59,12 @@ export function calculateUpholsteryEstimate(estimate:UpholsteryEstimate):Upholst
   })
   const cost_per_square_meter=round(pieces.reduce((total,piece)=>total+piece.foam_cost,0))
   const foam_quantity=round(pieces.reduce((total,piece)=>total+piece.foam_area,0),3)
-  const base_total=round(cost_per_square_meter+positive(estimate.fabric_estimate)+positive(estimate.labor_estimate)+positive(estimate.additional_estimate))
-  return {pieces,fabric_groups,cost_per_square_meter,foam_quantity,base_total,sale_total:round(base_total*(1+positive(estimate.margin_percent)/100))}
+  const suggested_fabric_meters=round(fabric_groups.reduce((total,group)=>total+group.meters,0),3)
+  const manual=estimate.fabric_meters_manual!==undefined&&estimate.fabric_meters_manual!==null
+  const fabric_meters=manual?positive(estimate.fabric_meters_manual!):suggested_fabric_meters
+  const fabric_cost=round(positive(estimate.fabric_estimate)*(manual?fabric_meters:1))
+  const base_total=round(cost_per_square_meter+fabric_cost+positive(estimate.labor_estimate)+positive(estimate.additional_estimate))
+  return {pieces,fabric_groups,fabric_meters,suggested_fabric_meters,fabric_cost,cost_per_square_meter,foam_quantity,base_total,sale_total:round(base_total*(1+positive(estimate.margin_percent)/100))}
 }
 
 export function upholsteryDescription(estimate:UpholsteryEstimate,result=calculateUpholsteryEstimate(estimate)){
