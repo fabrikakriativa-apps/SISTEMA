@@ -34,13 +34,24 @@ export function parseManufacturerText(text:string):ParsedManufacturerDocument {
   const totalMatches=[...normalized.matchAll(/(?:Total(?:\s+com\s+Impostos)?|Valor[ -]Total[^:]*):\s*(?:R\$\s*)?([\d.]+,\d{2})/gi)]
   const total=totalMatches.length?decimal(totalMatches.at(-1)![1]):null
   const items:ParsedManufacturerItem[]=[]
+  let awaitingEnvironment=false
   for(const source of normalized.split('\n')){
     const line=clean(source)
-    const observation=line.match(/^OBS\s*:\s*(.+)$/i)?.[1]
-    if(observation){
+    if(!line)continue
+    const observation=line.match(/^(?:OBS\.?|Ambiente)\s*(?::|\s)\s*(.*)$/i)
+    if(observation||/^(?:OBS\.?|Ambiente)\s*:?(?:\s*)$/i.test(line)){
       const previous=items.at(-1)
-      if(previous)previous.environment=clean(observation)
+      const value=clean(observation?.[1]??'')
+      if(previous&&value)previous.environment=value
+      awaitingEnvironment=!value&&Boolean(previous)
       continue
+    }
+    if(awaitingEnvironment){
+      awaitingEnvironment=false
+      if(!/^(?:Acresc|Total|Descri|Data:|Cliente:)/i.test(line)&&!line.match(/\s+(M2|UN|ML)\s+\d/i)){
+        items.at(-1)!.environment=line
+        continue
+      }
     }
     if(!line||/^(DESCRI|Data:|Cliente:|Endere|CNPJ|Transportadora|Condi|Entrega:|Observa|Valor-|Total:|IPI:|ICMS)/i.test(line)||/Acresc\.:/i.test(line))continue
     const head=line.match(/^(.+?)\s+(M2|UN|ML)\s+(\d+[,.]\d+)\s+(\d+[,.]\d+)\s+(\d+[,.]\d+)\s+(.+)$/i)
@@ -49,7 +60,8 @@ export function parseManufacturerText(text:string):ParsedManufacturerDocument {
     if(!numbers.length)continue
     const description=clean(head[1])
     const upper=description.toUpperCase()
-    const item={description,environment:null,unit:head[2].toUpperCase(),quantity:decimal(head[3]),width:decimal(head[4]),height:decimal(head[5]),value:money(numbers.at(-1)!),operation:(/MOTORIZAD/.test(upper)?'motorized':/MANUAL/.test(upper)?'manual':'unspecified') as ParsedManufacturerItem['operation'],confidence:numbers.length>=2?.96:.82}
+    const inlineEnvironment=head[6].match(/\b(?:OBS\.?|Ambiente)\s*:\s*(.+)$/i)?.[1]
+    const item={description,environment:inlineEnvironment?clean(inlineEnvironment):null,unit:head[2].toUpperCase(),quantity:decimal(head[3]),width:decimal(head[4]),height:decimal(head[5]),value:money(numbers.at(-1)!),operation:(/MOTORIZAD/.test(upper)?'motorized':/MANUAL/.test(upper)?'manual':'unspecified') as ParsedManufacturerItem['operation'],confidence:numbers.length>=2?.96:.82}
     const previous=items.at(-1)
     if(/^TRILHO\b/i.test(description)&&previous&&/\bCORTINA\b/i.test(previous.description)){
       previous.description=`${previous.description}, com ${description}`
@@ -88,3 +100,4 @@ export function parseManufacturerText(text:string):ParsedManufacturerDocument {
   }
   return {documentDate:date?isoDate(date):null,externalNumber:external??normalized.match(/Código:\s*#(\d+)/i)?.[1]??null,internalCode:internal,paymentTerms:paymentLine?clean(paymentLine[1]):null,paymentMethod:paymentLine?clean(paymentLine[2]):null,total,items}
 }
+

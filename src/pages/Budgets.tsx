@@ -239,6 +239,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   useRecoveryDraft(itemDraftKey,{itemForm,supplyLines,laborLines,paymentOptions,upholsteryEstimate},itemOpen&&canEditItems)
   const restoreItemDraft=(id?:string)=>{
     const saved=readRecovery<{itemForm:ItemForm;supplyLines:SupplyLine[];laborLines:LaborLine[];paymentOptions:ItemPaymentOption[];upholsteryEstimate:UpholsteryEstimate}>(`${budgetOrganizationId}:budget-item:${budget.id}:${budget.current_revision}:${id??'new'}`)
+    if(!id&&saved&&items.some(item=>item.family_id===saved.itemForm.family_id&&item.description.trim()===saved.itemForm.description.trim()&&Number(item.quantity)===Number(saved.itemForm.quantity))){clearRecovery(`${budgetOrganizationId}:budget-item:${budget.id}:${budget.current_revision}:new`);return}
     if(saved){setItemForm(saved.itemForm);setSupplyLines(saved.supplyLines);setLaborLines(saved.laborLines);setPaymentOptions(saved.paymentOptions);setUpholsteryEstimate(saved.upholsteryEstimate);show('Preenchimento não finalizado recuperado.','info')}
   }
   const saveSpecifications=async()=>{
@@ -380,6 +381,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     const {data:created,error}=await supabase.from('budget_items').insert(payloads).select('id,cost_total')
     if(error)show('Não foi possível importar os itens selecionados. Nenhum item foi incluído.','error')
     else {
+      clearRecovery(itemDraftKey)
       const compositions=await Promise.all((created??[]).map((saved,index)=>supabase!.rpc('replace_budget_item_cost_lines',{org_id:budgetOrganizationId,target_budget_item_id:saved.id,new_lines:[{kind:'product',supply_id:null,description:'Custo do fabricante',quantity:1,unit:'un',unit_cost:selected[index].item.value}]})))
       if(compositions.some(result=>result.error))show('Os itens foram importados, mas uma composição de custos precisa ser conferida.','error')
       else {
@@ -842,3 +844,4 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 </div>}
   </Page>
 }
+

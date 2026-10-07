@@ -5,6 +5,14 @@ const header=`Data: 02/06/2026 Nro Pedido: #11013707-1 Cód . Interno: 260780 P�
 Condição de Pagamento: 30/60/90 DIAS Forma de Pagamento: BOLETO`
 
 describe('manufacturer PDF semantic parser',()=>{
+  it.each(['OBS: sala','OBS.: sala','OBS sala','OBS:\nsala','Ambiente: sala','Ambiente:\nsala'])('reads environment from %s',field=>{
+    const parsed=parseManufacturerText(`ROLLUX MANUAL UN 1,00 1,850 1,350 970,10\n${field}`)
+    expect(parsed.items[0].environment).toBe('sala')
+  })
+  it('reads inline OBS and keeps each environment with its own item',()=>{
+    const parsed=parseManufacturerText('ROLLUX MANUAL UN 1,00 1,850 1,350 970,10 OBS: sala\nROLLUX MANUAL UN 1,00 1,000 1,000 500,00\nOBS: quarto')
+    expect(parsed.items.map(item=>item.environment)).toEqual(['sala','quarto'])
+  })
   it('reads compact New York quotations with integer quantities and rail included in item total',()=>{
     const parsed=parseManufacturerText(`Código: #22073855 Cliente: Fabrika
 Valor total: R$ 2.527,62
@@ -84,3 +92,4 @@ Cotação válida até 05/08/2026.`)
     expect(parsed.items[0].description).toContain('LINHO MOOREA')
   })
 })
+
