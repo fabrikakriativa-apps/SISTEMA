@@ -8,9 +8,11 @@ import {SortableHeader,compareValues,type SortState} from './SortableHeader'
 import {orderStatusLabels,type OrderStatus} from '../lib/orderStatus'
 import { ReceiptPreview } from './ReceiptPreview'
 import { readRecovery, writeRecovery, clearRecovery } from '../lib/recoveryDraft'
+import { DecimalInput } from './DecimalInput'
 
 export type DetailOrder = {
   id:string; display_number:string; status:string; payment_terms:string|null; promised_date:string|null; client_address:string|null; notes:string|null; total:number; created_at:string
+  commercial_terms?:{condition:string;additional_discount:number;subtotal:number;total:number}|null
   client:{name:string; document:string|null; address:string|null; city:string|null}|null; budget:{id:string;display_number:string}|null
   order_items:{id:string; status:string; snapshot:{environment?:string|null; description?:string; quantity?:number; sale_total?:number}}[]
   receivables:{id:string; installment:number; installment_count:number; due_date:string|null; amount:number; paid_amount:number; paid_at:string|null; payment_method:string|null; status:string}[]
@@ -20,6 +22,21 @@ const date = (value:string|null) => value ? new Date(`${value.slice(0,10)}T12:00
 
 export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved}:{organizationId:string;order:DetailOrder;onBack:()=>void;onReviewBudget:()=>void;onSaved:()=>Promise<void>}) {
   const {show} = useToast()
+  const [choices,setChoices]=useState<{label:string;total:number}[]>([])
+  const [condition,setCondition]=useState(order.commercial_terms?.condition??'Valor original do orçamento')
+  const [discount,setDiscount]=useState(Number(order.commercial_terms?.additional_discount??0))
+  const [commercialSaving,setCommercialSaving]=useState(false)
+  const commercialDirty=condition!==(order.commercial_terms?.condition??'Valor original do orçamento')||discount!==Number(order.commercial_terms?.additional_discount??0)
+  const commercialTotal=Math.max(0,Number(choices.find(x=>x.label===condition)?.total??order.total)-discount)
+  useEffect(()=>{let active=true;void supabase?.rpc('get_order_payment_choices',{org_id:organizationId,target_order_id:order.id}).then(({data,error})=>{if(active&&!error)setChoices(data as {label:string;total:number}[])});return()=>{active=false}},[organizationId,order.id,order.total])
+  const saveCommercial=async()=>{
+    if(!supabase||commercialSaving)return
+    setCommercialSaving(true)
+    const {error}=await supabase.rpc('set_order_payment_condition',{org_id:organizationId,target_order_id:order.id,condition_label:condition,additional_discount:discount})
+    if(error)show('Não foi possível aplicar a condição. Confira o desconto e se já existem parcelas.','error')
+    else{await onSaved();show('Condição e desconto aplicados ao pedido.','success')}
+    setCommercialSaving(false)
+  }
   const [address,setAddress] = useState(order.client_address || [order.client?.address,order.client?.city].filter(Boolean).join(' · '))
   const [promisedDate,setPromisedDate] = useState(order.promised_date ?? '')
   const [notes,setNotes] = useState(order.notes ?? '')
@@ -124,7 +141,7 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
 </button>
 </header>
 <div className="order-actions-content">
-<button type="button" className="order-action" onClick={()=>{setActionsOpen(false);setPreview(true)}}>
+<button type="button" className="order-action" onClick={()=>{if(commercialDirty){show('Aplique a condição e o desconto antes de emitir o pedido.','info');return}setActionsOpen(false);setPreview(true)}}>
 <Eye/>
 <span>
 <strong>Versão do cliente</strong>
@@ -201,6 +218,10 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
 </div>
 </header>{order.status === 'awaiting_finance' ? <>
 <div className="form-grid">
+<label className="field">Condição escolhida no orçamento<select value={condition} disabled={receivables.length>0||!choices.length} onChange={event=>setCondition(event.target.value)}>{choices.map(choice=><option key={choice.label} value={choice.label}>{choice.label} — {money.format(choice.total)}</option>)}</select></label>
+<label className="field">Desconto adicional (R$)<DecimalInput value={discount} decimalScale={2} onValueChange={setDiscount}/></label>
+<label className="field">Total após desconto<input readOnly value={money.format(commercialTotal)}/></label>
+<div className="field"><span>Aplicar antes de emitir ou gerar parcelas</span><button type="button" className="button secondary" disabled={commercialSaving||receivables.length>0||!choices.length||discount>(choices.find(x=>x.label===condition)?.total??0)} onClick={()=>void saveCommercial()}>{commercialSaving?'Aplicando…':'Aplicar condição e desconto'}</button></div>
 <label className="field">Forma de recebimento<select value={method} onChange={event => setMethod(event.target.value)}>
 <option>PIX</option>
 <option>Transferência bancária</option>
@@ -219,7 +240,7 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
 </label>
 </div>
 <footer>
-<button className="button primary" disabled={financeSaving} onClick={() => void configureReceivables()}>{financeSaving ? 'Gerando…' : 'Gerar contas a receber'}</button>
+<button className="button primary" disabled={financeSaving||commercialSaving||commercialDirty} onClick={() => void configureReceivables()}>{financeSaving ? 'Gerando…' : 'Gerar contas a receber'}</button>
 </footer>
 </> : <div className="order-receivable-list">{receivables.length ? receivables.map(item => <div key={item.id}>
 <span>Parcela {item.installment}/{item.installment_count}</span>
@@ -279,3 +300,4 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
 </section>
   </>
 }
+

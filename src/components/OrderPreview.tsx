@@ -5,6 +5,7 @@ import { SaveDocumentImage } from './SaveDocumentImage'
 type OrderItem = { id:string; snapshot:{ environment?:string|null; description?:string; quantity?:number; sale_total?:number } }
 type Receivable = { id:string; installment:number; installment_count:number; due_date:string|null; amount:number; payment_method:string|null; status:string }
 type PreviewOrder = {
+  commercial_terms?:{subtotal:number;additional_discount:number}|null
   display_number:string; created_at:string; payment_terms:string|null; promised_date:string|null; client_address:string|null; notes:string|null; total:number
   client:{ name:string; document:string|null; address:string|null; city:string|null }|null; order_items:OrderItem[]; receivables?:Receivable[]
 }
@@ -39,9 +40,10 @@ export function OrderPreview({order,onClose}:{order:PreviewOrder;onClose:()=>voi
           </div>)}
         </section>
         {installments.length > 0 && <section className="order-installments"><strong>PARCELAS</strong>{installments.map(item => <div key={item.id}><span>Parcela {item.installment}/{item.installment_count}</span><span>{item.payment_method || 'A combinar'}</span><span>{displayDate(item.due_date)}</span><b>{money.format(Number(item.amount))}</b></div>)}</section>}
-        <section className="document-total"><div><span>Subtotal</span><strong>{money.format(Number(order.total))}</strong></div><div className="grand-total"><span>Total do pedido</span><strong>{money.format(Number(order.total))}</strong></div></section>
+        <section className="document-total"><div><span>Subtotal</span><strong>{money.format(Number(order.commercial_terms?.subtotal??order.total))}</strong></div>{order.commercial_terms&&Number(order.commercial_terms.subtotal)>Number(order.total)&&<div><span>Descontos</span><strong>{money.format(Number(order.commercial_terms.subtotal)-Number(order.total))}</strong></div>}<div className="grand-total"><span>Total do pedido</span><strong>{money.format(Number(order.total))}</strong></div></section>
         {order.notes && <footer><p><strong>Observações:</strong> {order.notes}</p></footer>}
       </article>
     </div>
   </div>
 }
+
