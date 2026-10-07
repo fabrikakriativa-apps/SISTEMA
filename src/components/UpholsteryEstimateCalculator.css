@@ -1,3 +1,7 @@
+.upholstery-calculator .upholstery-piece{
+  grid-template-columns:1.25fr repeat(5,minmax(0,1fr)) 1.4fr;
+}
+
 .upholstery-calculator .upholstery-summary{
   grid-template-columns:repeat(5,minmax(0,1fr));
 }
@@ -19,6 +23,4 @@
   .upholstery-calculator .upholstery-piece{grid-template-columns:1fr}
   .upholstery-calculator .upholstery-summary{grid-template-columns:1fr}
 }
-.upholstery-calculator .upholstery-piece{
-  grid-template-columns:1.25fr repeat(5,minmax(0,1fr)) 1.4fr;
-}
+
