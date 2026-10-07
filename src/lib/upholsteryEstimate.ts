@@ -5,6 +5,7 @@ export type UpholsteryPiece={
   name:string
   width:number
   height:number
+  piece_thickness?:number
   thickness:number
   density:FoamDensity
   fabric_reference:string
@@ -71,8 +72,8 @@ export function upholsteryDescription(estimate:UpholsteryEstimate,result=calcula
   const meter=(value:number)=>value.toLocaleString('pt-BR',{maximumFractionDigits:3})
   return result.pieces.map(piece=>[
     `Item: ${piece.name.trim()||'Peça'}`,
-    `Medidas aproximadas: ${meter(piece.width)} m x ${meter(piece.height)} m x ${meter(piece.thickness/100)} m`,
-    `Espuma: ${foamDensityLabels[piece.density]}`,
+    `Medidas aproximadas: ${meter(piece.width)} m x ${meter(piece.height)} m${positive(piece.piece_thickness??0)>0?` x ${meter(piece.piece_thickness!/100)} m`:''}`,
+    `Espuma: ${foamDensityLabels[piece.density]} — espessura: ${meter(piece.thickness)} cm`,
     piece.fabric_reference.trim()?`Tecido: ${piece.fabric_reference.trim()}`:''
   ].filter(Boolean).join('\n')).join('\n\n')
 }

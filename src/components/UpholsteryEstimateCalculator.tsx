@@ -20,8 +20,9 @@ export function UpholsteryEstimateCalculator({estimate,onChange,onApplyValue,onI
         <label className="field">Nome da peça<input value={piece.name} onChange={event=>updatePiece(piece.id,{name:event.target.value})} placeholder="Ex.: Cabeceira"/></label>
         <label className="field">Largura (m)<DecimalInput value={piece.width} decimalScale={3} onValueChange={value=>updatePiece(piece.id,{width:value})}/></label>
         <label className="field">Altura / profundidade (m)<DecimalInput value={piece.height} decimalScale={3} onValueChange={value=>updatePiece(piece.id,{height:value})}/></label>
-        <label className="field">Espessura (cm)<DecimalInput value={piece.thickness} decimalScale={1} onValueChange={value=>updatePiece(piece.id,{thickness:value})}/></label>
+        <label className="field">Espessura da peça (cm)<DecimalInput value={piece.piece_thickness??0} decimalScale={1} onValueChange={value=>updatePiece(piece.id,{piece_thickness:value})}/></label>
         <label className="field">Espuma<select value={piece.density} onChange={event=>updatePiece(piece.id,{density:event.target.value as UpholsteryPiece['density']})}>{Object.entries(foamDensityLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
+        <label className="field">Espessura da espuma (cm)<DecimalInput value={piece.thickness} decimalScale={1} onValueChange={value=>updatePiece(piece.id,{thickness:value})}/></label>
         <label className="field">Referência do tecido<input value={piece.fabric_reference} onChange={event=>updatePiece(piece.id,{fabric_reference:event.target.value})} placeholder="Ex.: Linho linha essencial"/></label>
       </div>)}
     </div>

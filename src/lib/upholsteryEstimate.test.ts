@@ -25,9 +25,17 @@ describe('calculateUpholsteryEstimate',()=>{
     expect(result.base_total).toBe(1296)
     expect(result.sale_total).toBe(1944)
     expect(upholsteryDescription(estimate,result)).toContain('Item: Cabeceira')
-    expect(upholsteryDescription(estimate,result)).toContain('Medidas aproximadas: 2 m x 1 m x 0,03 m')
+    expect(upholsteryDescription(estimate,result)).toContain('Medidas aproximadas: 2 m x 1 m\n')
+    expect(upholsteryDescription(estimate,result)).not.toContain('x 0,03 m')
+    expect(upholsteryDescription(estimate,result)).toContain('Espuma: D28 — espessura: 3 cm')
     expect(upholsteryDescription(estimate,result)).toContain('Espuma: D28')
     expect(upholsteryDescription(estimate,result)).toContain('Tecido: Linho')
     expect(upholsteryDescription(estimate,result)).not.toContain('metragem estimada')
+  })
+  it('keeps piece thickness separate from foam thickness and cost',()=>{
+    const estimate:UpholsteryEstimate={pieces:[{id:'1',name:'Cabeceira',width:2,height:1,piece_thickness:10,thickness:3,density:'d28',fabric_reference:''}],fabric_width:1.4,fabric_estimate:0,labor_estimate:0,additional_estimate:0,margin_percent:0}
+    expect(upholsteryDescription(estimate)).toContain('Medidas aproximadas: 2 m x 1 m x 0,1 m')
+    expect(upholsteryDescription(estimate)).toContain('Espuma: D28 — espessura: 3 cm')
+    expect(calculateUpholsteryEstimate(estimate).base_total).toBe(calculateUpholsteryEstimate({...estimate,pieces:estimate.pieces.map(p=>({...p,piece_thickness:20}))}).base_total)
   })
 })
