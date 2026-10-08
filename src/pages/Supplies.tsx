@@ -16,7 +16,7 @@ const empty:SupplyForm={code:'',name:'',category:'',purchase_unit:'un',usage_uni
 type ImportSource={rowNumber:number;values:Partial<Omit<Supply,'id'>>}
 const chunks=<T,>(items:T[],size:number)=>Array.from({length:Math.ceil(items.length/size)},(_,index)=>items.slice(index*size,index*size+size))
 export function Supplies(){
- const catalog=useCatalog<Supply>('supplies','id,code,name,category,purchase_unit,usage_unit,current_cost,active')
+ const catalog=useCatalog<Supply & {import_details?:Record<string,string|number>}>('supplies','id,code,name,category,purchase_unit,usage_unit,current_cost,active,import_details')
  const {items}=catalog
  const access=useAccess(),[search,setSearch]=useState(''),[sort,setSort]=useState<SortState<'code'|'name'|'category'|'purchase'|'usage'|'cost'|'status'>>({key:'name',direction:'asc'}),[open,setOpen]=useState(false),[form,setForm]=useState<SupplyForm>(empty),[changingStatus,setChangingStatus]=useState(''),[history,setHistory]=useState<PriceHistory[]>([]),[historyLoading,setHistoryLoading]=useState(false),[importOpen,setImportOpen]=useState(false),[importMode,setImportMode]=useState<SupplyImportMode>('merge'),[importRows,setImportRows]=useState<ImportSource[]>([]),[importFile,setImportFile]=useState(''),[importSheet,setImportSheet]=useState(''),[importing,setImporting]=useState(false);const {show}=useToast()
  const edit=(item?:Supply)=>{setForm(item?{id:item.id,code:item.code,name:item.name,category:item.category,purchase_unit:item.purchase_unit,usage_unit:item.usage_unit,current_cost:Number(item.current_cost)}:empty);setOpen(true)}
@@ -96,6 +96,7 @@ export function Supplies(){
 </button>
 </header>
 <div className="form-grid">
+{form.id&&catalog.items.find(item=>item.id===form.id)?.import_details&&<details className="span-2"><summary>Dados complementares da planilha</summary><dl>{Object.entries(catalog.items.find(item=>item.id===form.id)!.import_details!).map(([key,value])=><div key={key}><dt><strong>{key}</strong></dt><dd style={{whiteSpace:'pre-wrap'}}>{String(value)}</dd></div>)}</dl><small>Confecção abrange todos os itens e subitens.</small></details>}
 <label className="field">Código<input required value={form.code} onChange={e=>setForm({...form,code:e.target.value})}/>
 </label>
 <label className="field span-2">Nome<input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/>
@@ -135,7 +136,7 @@ export function Supplies(){
 <label className="file-dropzone">
 <Upload/>
 <strong>{importFile||'Selecionar planilha'}</strong>
-<small>{importFile?`Aba lida: ${importSheet||'principal'}`:'Excel (.xlsx, .xls) ou CSV. Colunas: Código, Nome, Categoria, Unidade de compra, Unidade de uso, Custo atual e Status.'}</small>
+<small>{importFile?`Aba lida: ${importSheet||'principal'}`:'Excel (.xlsx, .xls) ou CSV. Aceita Código Interno, Preço de compra, Categoria, unidades e Status. Fornecedor, catálogo, medidas e vínculos também são preservados.'}</small>
 <input type="file" accept=".xlsx,.xls,.csv" onChange={readFile}/>
 </label>{importRows.length>0&&<>
 <div className="import-mode">
@@ -243,6 +244,7 @@ export function Supplies(){
 </button>
 </header>
 <div className="form-grid">
+{form.id&&catalog.items.find(item=>item.id===form.id)?.import_details&&<details className="span-2"><summary>Dados complementares da planilha</summary><dl>{Object.entries(catalog.items.find(item=>item.id===form.id)!.import_details!).map(([key,value])=><div key={key}><dt><strong>{key}</strong></dt><dd style={{whiteSpace:'pre-wrap'}}>{String(value)}</dd></div>)}</dl><small>Confecção abrange todos os itens e subitens.</small></details>}
 <label className="field">Código<input required value={form.code} onChange={e=>setForm({...form,code:e.target.value})}/>
 </label>
 <label className="field span-2">Nome<input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/>

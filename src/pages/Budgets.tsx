@@ -280,12 +280,12 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     const [familyResult,itemResult,supplyResult,providerResult,attachmentResult,optionResult]=await Promise.all([
       supabase.from('item_families').select('id,name,code,form_key').eq('organization_id',budgetOrganizationId).eq('active',true).order('name'),
       supabase.from('budget_items').select('id,family_id,position,presentation,environment,description,quantity,configuration,cost_total,margin_percent,sale_total,affects_total,family:item_families!budget_items_family_id_fkey(name)').eq('organization_id',budgetOrganizationId).eq('budget_id',budget.id).order('position'),
-      supabase.from('supplies').select('id,code,name,category,usage_unit,current_cost').eq('organization_id',budgetOrganizationId).eq('active',true).order('name'),
+      loadAllPages<SupplyOption>((from,to)=>supabase!.from('supplies').select('id,code,name,category,usage_unit,current_cost').eq('organization_id',budgetOrganizationId).eq('active',true).order('name').order('id').range(from,to)),
       supabase.from('suppliers').select('id,name,phone,supplier_types').eq('organization_id',budgetOrganizationId).eq('active',true).order('name'),
       supabase.from('attachments').select('id,original_name,storage_path,created_at').eq('organization_id',budgetOrganizationId).is('deleted_at',null).eq('entity_type','budget').eq('entity_id',budget.id).order('created_at',{ascending:false}),
       supabase.from('budget_item_payment_options').select('id,budget_item_id,position,description,adjustment_percent,final_value,observation').eq('organization_id',budgetOrganizationId).order('position')
     ])
-    if(familyResult.error||itemResult.error||supplyResult.error||providerResult.error||optionResult.error)show(`Não foi possível carregar os itens: ${familyResult.error?.message??itemResult.error?.message??supplyResult.error?.message??providerResult.error?.message??optionResult.error?.message}`,'error')
+    if(familyResult.error||itemResult.error||supplyResult.error||providerResult.error||optionResult.error)show(`Não foi possível carregar os itens: ${familyResult.error?.message??itemResult.error?.message??(supplyResult.error as {message?:string}|null)?.message??providerResult.error?.message??optionResult.error?.message}`,'error')
     else {setFamilies((familyResult.data??[]) as Family[]);setItems((itemResult.data??[]) as unknown as BudgetItem[]);setSupplies((supplyResult.data??[]) as SupplyOption[]);setProviders((providerResult.data??[]) as ProviderOption[]);setAttachments((attachmentResult.data??[]) as Attachment[]);setItemPaymentOptions((optionResult.data??[]).reduce((result,item)=>({...result,[item.budget_item_id]:[...(result[item.budget_item_id]??[]),{id:item.id,position:item.position,description:item.description,adjustment_percent:Number(item.adjustment_percent),final_value:item.final_value===null?null:Number(item.final_value),observation:item.observation??''}]}),{} as Record<string,ItemPaymentOption[]>))}
     setItemsLoading(false)
   },[budget.id,budgetOrganizationId,show])
@@ -844,4 +844,3 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 </div>}
   </Page>
 }
-
