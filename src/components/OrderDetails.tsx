@@ -26,17 +26,30 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
   const [condition,setCondition]=useState(order.commercial_terms?.condition??'Valor original do orçamento')
   const [discount,setDiscount]=useState(Number(order.commercial_terms?.additional_discount??0))
   const [commercialSaving,setCommercialSaving]=useState(false)
+  const [commercialError,setCommercialError]=useState(false)
+  const commercialAttempt=useRef('')
   const commercialDirty=condition!==(order.commercial_terms?.condition??'Valor original do orçamento')||discount!==Number(order.commercial_terms?.additional_discount??0)
   const commercialTotal=Math.max(0,Number(choices.find(x=>x.label===condition)?.total??order.total)-discount)
   useEffect(()=>{let active=true;void supabase?.rpc('get_order_payment_choices',{org_id:organizationId,target_order_id:order.id}).then(({data,error})=>{if(active&&!error)setChoices(data as {label:string;total:number}[])});return()=>{active=false}},[organizationId,order.id,order.total])
-  const saveCommercial=async()=>{
+  useEffect(()=>{
+    if(!commercialDirty){commercialAttempt.current='';setCommercialError(false);return}
     if(!supabase||commercialSaving)return
-    setCommercialSaving(true)
-    const {error}=await supabase.rpc('set_order_payment_condition',{org_id:organizationId,target_order_id:order.id,condition_label:condition,additional_discount:discount})
-    if(error)show('Não foi possível aplicar a condição. Confira o desconto e se já existem parcelas.','error')
-    else{await onSaved();show('Condição e desconto aplicados ao pedido.','success')}
-    setCommercialSaving(false)
-  }
+    const key=JSON.stringify([order.id,condition,discount])
+    if(commercialAttempt.current===key)return
+    const selected=choices.find(x=>x.label===condition)
+    if(!selected||discount>selected.total){setCommercialError(true);return}
+    setCommercialError(false)
+    const timer=window.setTimeout(async()=>{
+      commercialAttempt.current=key;setCommercialSaving(true)
+      try{
+        const {error}=await supabase!.rpc('set_order_payment_condition',{org_id:organizationId,target_order_id:order.id,condition_label:condition,additional_discount:discount})
+        if(error)throw error
+        await onSaved()
+      }catch{setCommercialError(true);show('Não foi possível salvar a condição e o desconto. Confira se já existem parcelas.','error')}
+      finally{setCommercialSaving(false)}
+    },800)
+    return()=>window.clearTimeout(timer)
+  },[condition,discount,commercialDirty,commercialSaving,choices,order.id])
   const [address,setAddress] = useState(order.client_address || [order.client?.address,order.client?.city].filter(Boolean).join(' · '))
   const [promisedDate,setPromisedDate] = useState(order.promised_date ?? '')
   const [notes,setNotes] = useState(order.notes ?? '')
@@ -46,7 +59,7 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
   const [customParts,setCustomParts]=useState<{amount:number;due_date:string;on_delivery:boolean}[]|null>(null)
   const equalParts=useMemo(()=>{const cents=Math.round(Number(order.total)*100),base=Math.floor(cents/installments);return Array.from({length:installments},(_,index)=>{const due=new Date(`${firstDue}T12:00:00`);const day=due.getDate();due.setDate(1);due.setMonth(due.getMonth()+index);due.setDate(Math.min(day,new Date(due.getFullYear(),due.getMonth()+1,0).getDate()));return {amount:(base+(index===installments-1?cents-base*installments:0))/100,due_date:firstDue?`${due.getFullYear()}-${String(due.getMonth()+1).padStart(2,'0')}-${String(due.getDate()).padStart(2,'0')}`:'',on_delivery:false}})},[order.total,installments,firstDue])
   const parts=customParts??equalParts
-  useEffect(()=>setCustomParts(null),[order.id,order.total,installments,firstDue])
+  useEffect(()=>setCustomParts(null),[order.id,installments,firstDue])
   const partsMatch=parts.every(p=>p.amount>0)&&Math.round(parts.reduce((s,p)=>s+p.amount,0)*100)===Math.round(Number(order.total)*100)
   const recoveryKey=`${organizationId}:order:${order.id}`
   const [autoState,setAutoState]=useState('saved')
@@ -223,9 +236,9 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
 </header>{order.status === 'awaiting_finance' ? <>
 <div className="form-grid">
 <label className="field">Condição escolhida no orçamento<select value={condition} disabled={receivables.length>0||!choices.length} onChange={event=>setCondition(event.target.value)}>{choices.map(choice=><option key={choice.label} value={choice.label}>{choice.label} — {money.format(choice.total)}</option>)}</select></label>
-<label className="field">Desconto adicional (R$)<DecimalInput value={discount} decimalScale={2} onValueChange={setDiscount}/></label>
+<label className="field">Desconto adicional (R$)<DecimalInput value={discount} decimalScale={2} disabled={receivables.length>0} onValueChange={setDiscount}/></label>
 <label className="field">Total após desconto<input readOnly value={money.format(commercialTotal)}/></label>
-<div className="field"><span>Aplicar antes de emitir ou gerar parcelas</span><button type="button" className="button secondary" disabled={commercialSaving||receivables.length>0||!choices.length||discount>(choices.find(x=>x.label===condition)?.total??0)} onClick={()=>void saveCommercial()}>{commercialSaving?'Aplicando…':'Aplicar condição e desconto'}</button></div>
+<div className="field" role="status"><span>{commercialError?'Condição não salva. Confira o desconto e as parcelas existentes.':commercialSaving?'Salvando condição e desconto…':commercialDirty?'Aguardando salvamento automático…':'Condição e desconto salvos automaticamente'}</span></div>
 <label className="field">Forma de recebimento<select value={method} onChange={event => setMethod(event.target.value)}>
 <option>PIX</option>
 <option>Transferência bancária</option>
