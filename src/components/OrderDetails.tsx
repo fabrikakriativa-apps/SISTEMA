@@ -44,7 +44,10 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
   const [method,setMethod] = useState('PIX'),[installments,setInstallments] = useState(1),[firstDue,setFirstDue] = useState(today()),[financeSaving,setFinanceSaving] = useState(false),[preview,setPreview] = useState(false),[receipt,setReceipt] = useState(false),[actionsOpen,setActionsOpen] = useState(false),[revisionSaving,setRevisionSaving] = useState(false)
   const [itemSort,setItemSort]=useState<SortState<'item'|'quantity'|'value'|'operation'>>({key:'item',direction:'asc'})
   const [customParts,setCustomParts]=useState<{amount:number;due_date:string;on_delivery:boolean}[]|null>(null)
-  const partsMatch=!customParts||Math.round(customParts.reduce((s,p)=>s+p.amount,0)*100)===Math.round(Number(order.total)*100)
+  const equalParts=useMemo(()=>{const cents=Math.round(Number(order.total)*100),base=Math.floor(cents/installments);return Array.from({length:installments},(_,index)=>{const due=new Date(`${firstDue}T12:00:00`);const day=due.getDate();due.setDate(1);due.setMonth(due.getMonth()+index);due.setDate(Math.min(day,new Date(due.getFullYear(),due.getMonth()+1,0).getDate()));return {amount:(base+(index===installments-1?cents-base*installments:0))/100,due_date:firstDue?`${due.getFullYear()}-${String(due.getMonth()+1).padStart(2,'0')}-${String(due.getDate()).padStart(2,'0')}`:'',on_delivery:false}})},[order.total,installments,firstDue])
+  const parts=customParts??equalParts
+  useEffect(()=>setCustomParts(null),[order.id,order.total,installments,firstDue])
+  const partsMatch=parts.every(p=>p.amount>0)&&Math.round(parts.reduce((s,p)=>s+p.amount,0)*100)===Math.round(Number(order.total)*100)
   const recoveryKey=`${organizationId}:order:${order.id}`
   const [autoState,setAutoState]=useState('saved')
   const latest=useRef({address,promisedDate,notes}), savingAuto=useRef(false)
@@ -76,7 +79,6 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
     },800)
     return()=>window.clearTimeout(timer)
   },[address,promisedDate,notes,order.id,order.status])
-  const amount = Number(order.total)/Math.max(1,installments)
   const receivables = useMemo(() => order.receivables.filter(item => item.status !== 'cancelled').sort((a,b) => a.installment-b.installment),[order.receivables])
   const receivedTotal = receivables.reduce((sum,item)=>sum+Number(item.paid_amount||0),0)
   const sortedItems=useMemo(()=>[...order.order_items].sort((a,b)=>{const values={item:[`${a.snapshot.environment??''} ${a.snapshot.description??''}`,`${b.snapshot.environment??''} ${b.snapshot.description??''}`],quantity:[Number(a.snapshot.quantity??0),Number(b.snapshot.quantity??0)],value:[Number(a.snapshot.sale_total??0),Number(b.snapshot.sale_total??0)],operation:[a.status,b.status]}[itemSort.key];return compareValues(values[0],values[1])*(itemSort.direction==='asc'?1:-1)}),[order.order_items,itemSort])
@@ -238,10 +240,8 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
 </label>
 <label className="field">Primeiro vencimento<input required type="date" value={firstDue} onChange={event => setFirstDue(event.target.value)}/>
 </label>
-<label className="field">Valor por parcela<input readOnly value={customParts?'Valores personalizados abaixo':money.format(amount)}/>
-</label>
-<div className="field"><button type="button" className="button secondary" onClick={()=>{setInstallments(2);const entry=Math.round(Number(order.total)*60)/100;setCustomParts([{amount:entry,due_date:firstDue,on_delivery:false},{amount:Number((Number(order.total)-entry).toFixed(2)),due_date:order.promised_date??'',on_delivery:true}])}}>60% entrada + 40% na entrega</button><button type="button" className="text-button" onClick={()=>setCustomParts(null)}>Usar parcelas iguais</button></div>
-{customParts?.map((part,index)=><div className="field" key={index}><span>Parcela {index+1} · {(part.amount/Number(order.total)*100||0).toFixed(2)}%</span><DecimalInput value={part.amount} decimalScale={2} onValueChange={amount=>setCustomParts(parts=>parts!.map((p,i)=>i===index?{...p,amount}:p))}/><label><input type="checkbox" checked={part.on_delivery} onChange={e=>setCustomParts(parts=>parts!.map((p,i)=>i===index?{...p,on_delivery:e.target.checked}:p))}/>Na entrega</label>{part.on_delivery?<small>{order.promised_date?`Entrega: ${date(order.promised_date)}`:'Vencimento a confirmar: entrega ainda sem data.'}</small>:<input aria-label={`Vencimento da parcela ${index+1}`} type="date" value={part.due_date} onChange={e=>setCustomParts(parts=>parts!.map((p,i)=>i===index?{...p,due_date:e.target.value}:p))}/>}</div>)}
+<div className="field"><span>Total das parcelas</span><input readOnly value={money.format(parts.reduce((sum,p)=>sum+p.amount,0))}/><button type="button" className="text-button" onClick={()=>setCustomParts(null)}>Distribuir igualmente</button></div>
+{parts.map((part,index)=><div className="field" key={index}><label>Valor da parcela {index+1}<DecimalInput value={part.amount} decimalScale={2} onValueChange={amount=>setCustomParts(current=>(current??equalParts).map((p,i)=>i===index?{...p,amount}:p))}/></label><label><input type="checkbox" checked={part.on_delivery} onChange={e=>setCustomParts(current=>(current??equalParts).map((p,i)=>i===index?{...p,on_delivery:e.target.checked}:p))}/>Na entrega</label>{part.on_delivery?<small>{order.promised_date?`Entrega: ${date(order.promised_date)}`:'Vencimento a confirmar: entrega ainda sem data.'}</small>:<input aria-label={`Vencimento da parcela ${index+1}`} type="date" value={part.due_date} onChange={e=>setCustomParts(current=>(current??equalParts).map((p,i)=>i===index?{...p,due_date:e.target.value}:p))}/>}</div>)}
 {!partsMatch&&<p role="alert">A soma das parcelas deve corresponder ao total do pedido.</p>}
 </div>
 <footer>
