@@ -258,8 +258,7 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
 {parts.map((part,index)=><section className="order-payment-part" key={index} aria-label={`Parcela ${index+1}`}>
 <strong className="order-payment-part-title">Parcela {index+1} de {parts.length}</strong>
 <label className="field">Valor (R$)<DecimalInput ariaLabel={`Valor da parcela ${index+1}`} value={part.amount} decimalScale={2} onValueChange={amount=>setCustomParts(current=>(current??equalParts).map((p,i)=>i===index?{...p,amount}:p))}/></label>
-<label className="order-payment-delivery"><input type="checkbox" checked={part.on_delivery} onChange={e=>setCustomParts(current=>(current??equalParts).map((p,i)=>i===index?{...p,on_delivery:e.target.checked}:p))}/>Vencimento na entrega</label>
-{part.on_delivery?<small>{order.promised_date?`Entrega: ${date(order.promised_date)}`:'Vencimento a confirmar: entrega ainda sem data.'}</small>:<label className="field">Vencimento<input aria-label={`Vencimento da parcela ${index+1}`} type="date" value={part.due_date} onChange={e=>setCustomParts(current=>(current??equalParts).map((p,i)=>i===index?{...p,due_date:e.target.value}:p))}/></label>}
+<label className="field">Vencimento<input aria-label={`Vencimento da parcela ${index+1}`} type="date" value={part.due_date} onChange={e=>setCustomParts(current=>(current??equalParts).map((p,i)=>i===index?{...p,due_date:e.target.value}:p))}/></label>
 </section>)}
 </div>
 {!partsMatch&&<p role="alert">A soma das parcelas deve corresponder ao total do pedido.</p>}
