@@ -43,6 +43,8 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
   const [deliverySaving,setDeliverySaving] = useState(false),[notesSaving,setNotesSaving] = useState(false)
   const [method,setMethod] = useState('PIX'),[installments,setInstallments] = useState(1),[firstDue,setFirstDue] = useState(today()),[financeSaving,setFinanceSaving] = useState(false),[preview,setPreview] = useState(false),[receipt,setReceipt] = useState(false),[actionsOpen,setActionsOpen] = useState(false),[revisionSaving,setRevisionSaving] = useState(false)
   const [itemSort,setItemSort]=useState<SortState<'item'|'quantity'|'value'|'operation'>>({key:'item',direction:'asc'})
+  const [customParts,setCustomParts]=useState<{amount:number;due_date:string;on_delivery:boolean}[]|null>(null)
+  const partsMatch=!customParts||Math.round(customParts.reduce((s,p)=>s+p.amount,0)*100)===Math.round(Number(order.total)*100)
   const recoveryKey=`${organizationId}:order:${order.id}`
   const [autoState,setAutoState]=useState('saved')
   const latest=useRef({address,promisedDate,notes}), savingAuto=useRef(false)
@@ -97,7 +99,7 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
   const configureReceivables = async () => {
     if(!supabase || financeSaving) return
     setFinanceSaving(true)
-    const {error} = await supabase.rpc('configure_order_receivables',{org_id:organizationId,target_order_id:order.id,installment_count:installments,first_due_date:firstDue,payment_method:method})
+    const {error} = customParts?await supabase.rpc('configure_order_custom_receivables',{org_id:organizationId,target_order_id:order.id,payment_method:method,installments_json:customParts}):await supabase.rpc('configure_order_receivables',{org_id:organizationId,target_order_id:order.id,installment_count:installments,first_due_date:firstDue,payment_method:method})
     if(error) show(error.code === '23514' ? 'Este pedido já possui recebimento configurado ou os dados são inválidos.' : 'Não foi possível gerar as parcelas.','error')
     else { await onSaved(); show('Contas a receber geradas. O status do pedido pode ser definido por você.','success') }
     setFinanceSaving(false)
@@ -236,11 +238,14 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
 </label>
 <label className="field">Primeiro vencimento<input required type="date" value={firstDue} onChange={event => setFirstDue(event.target.value)}/>
 </label>
-<label className="field">Valor por parcela<input readOnly value={money.format(amount)}/>
+<label className="field">Valor por parcela<input readOnly value={customParts?'Valores personalizados abaixo':money.format(amount)}/>
 </label>
+<div className="field"><button type="button" className="button secondary" onClick={()=>{setInstallments(2);const entry=Math.round(Number(order.total)*60)/100;setCustomParts([{amount:entry,due_date:firstDue,on_delivery:false},{amount:Number((Number(order.total)-entry).toFixed(2)),due_date:order.promised_date??'',on_delivery:true}])}}>60% entrada + 40% na entrega</button><button type="button" className="text-button" onClick={()=>setCustomParts(null)}>Usar parcelas iguais</button></div>
+{customParts?.map((part,index)=><div className="field" key={index}><span>Parcela {index+1} · {(part.amount/Number(order.total)*100||0).toFixed(2)}%</span><DecimalInput value={part.amount} decimalScale={2} onValueChange={amount=>setCustomParts(parts=>parts!.map((p,i)=>i===index?{...p,amount}:p))}/><label><input type="checkbox" checked={part.on_delivery} onChange={e=>setCustomParts(parts=>parts!.map((p,i)=>i===index?{...p,on_delivery:e.target.checked}:p))}/>Na entrega</label>{part.on_delivery?<small>{order.promised_date?`Entrega: ${date(order.promised_date)}`:'Vencimento a confirmar: entrega ainda sem data.'}</small>:<input aria-label={`Vencimento da parcela ${index+1}`} type="date" value={part.due_date} onChange={e=>setCustomParts(parts=>parts!.map((p,i)=>i===index?{...p,due_date:e.target.value}:p))}/>}</div>)}
+{!partsMatch&&<p role="alert">A soma das parcelas deve corresponder ao total do pedido.</p>}
 </div>
 <footer>
-<button className="button primary" disabled={financeSaving||commercialSaving||commercialDirty} onClick={() => void configureReceivables()}>{financeSaving ? 'Gerando…' : 'Gerar contas a receber'}</button>
+<button className="button primary" disabled={financeSaving||commercialSaving||commercialDirty||!partsMatch} onClick={() => void configureReceivables()}>{financeSaving ? 'Gerando…' : 'Gerar contas a receber'}</button>
 </footer>
 </> : <div className="order-receivable-list">{receivables.length ? receivables.map(item => <div key={item.id}>
 <span>Parcela {item.installment}/{item.installment_count}</span>
