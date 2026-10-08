@@ -14,6 +14,8 @@ const displayDate = (value:string|null) => value ? new Date(`${value.slice(0,10)
 export function OrderPreview({order,onClose}:{order:PreviewOrder;onClose:()=>void}) {
   const address = order.client_address || [order.client?.address,order.client?.city].filter(Boolean).join(' · ')
   const installments = (order.receivables ?? []).filter(item => item.status !== 'cancelled').sort((a,b) => a.installment-b.installment)
+  const paymentParts = (order.payment_terms || 'A combinar').split(' · ').filter(part => !/^desconto adicional\b/i.test(part.trim()))
+  const paymentTerms = paymentParts.filter((part,index) => index === 0 || !paymentParts[0].toLocaleLowerCase().includes(`(${part.trim().toLocaleLowerCase()})`)).join(' · ')
   return <div className="preview-backdrop">
     <div className="client-preview-shell">
       <div className="preview-toolbar">
@@ -29,7 +31,7 @@ export function OrderPreview({order,onClose}:{order:PreviewOrder;onClose:()=>voi
         </header>
         <section className="document-client">
           <div><small>CLIENTE</small><strong>{order.client?.name ?? 'Cliente não informado'}</strong>{order.client?.document&&<span>CPF/CNPJ: {order.client.document}</span>}{address && <span>{address}</span>}</div>
-          <div><small>CONDIÇÕES</small><strong>Pagamento: {order.payment_terms || 'A combinar'}</strong><span>Prazo de entrega: {displayDate(order.promised_date)}</span></div>
+          <div><small>CONDIÇÕES</small><strong>Pagamento: {paymentTerms}</strong><span>Prazo de entrega: {displayDate(order.promised_date)}</span></div>
         </section>
         <section className="document-items order-document-items">
           <div className="order-document-head"><small>DESCRIÇÃO</small><small>QTD.</small><small>TOTAL</small></div>
@@ -46,4 +48,3 @@ export function OrderPreview({order,onClose}:{order:PreviewOrder;onClose:()=>voi
     </div>
   </div>
 }
-
