@@ -472,7 +472,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     if(saveState==='waiting'||saveState==='saving'){show('Aguarde o salvamento do pré-orçamento antes de converter.','info');return}
     setWorkflowBusy(true)
     const {data,error}=await supabase.rpc('convert_pre_budget_to_budget',{org_id:access.organizationId,target_budget_id:budget.id})
-    if(error)show('Não foi possível converter este pré-orçamento. Confira se ele ainda está como rascunho.','error')
+    if(error)show('Não foi possível converter este pré-orçamento. Confira se ele está como rascunho ou enviado.','error')
     else {setBudget(data as unknown as Budget);show('Pré-orçamento convertido em orçamento rascunho. Agora confirme materiais e valor final.','success')}
     setWorkflowBusy(false)
   }
@@ -565,7 +565,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 {budget.status==='approved'&&(access.role==='admin'||access.role==='comercial')&&<button className="button secondary" onClick={()=>{setSpecNotes(budget.notes??'');setSpecItems(items.map(item=>({id:item.id,description:item.description})));setSpecOpen(true)}}><GitBranch/>Revisar especificações</button>}
 {hasCancelledOrder&&(access.role==='admin'||access.role==='comercial')&&<button className="button secondary" disabled={workflowBusy} onClick={()=>setConfirmReplacementRevision(true)}><GitBranch/>Criar nova revisão</button>}
 {isPreBudget&&budget.status==='draft'&&<button className="button secondary" onClick={()=>{setVisit({...visit,address:form.client_address??''});setVisitOpen(true)}}><CalendarPlus/>Agendar visita</button>}
-{isPreBudget&&budget.status==='draft'&&<button className="button primary" disabled={workflowBusy} onClick={()=>void convertToBudget()}>Converter em orçamento</button>}
+{isPreBudget&&['draft','sent'].includes(budget.status)&&<button className="button primary" disabled={workflowBusy} onClick={()=>void convertToBudget()}>Converter em orçamento</button>}
 <button className="button secondary" onClick={close}>
 <ArrowLeft/>Voltar aos orçamentos</button>
 </div>}>
