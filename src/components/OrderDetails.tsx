@@ -253,14 +253,14 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
 </label>
 <label className="field">Primeiro vencimento<input required type="date" value={firstDue} onChange={event => setFirstDue(event.target.value)}/>
 </label>
-<div className="field"><span>Total das parcelas</span><input readOnly value={money.format(parts.reduce((sum,p)=>sum+p.amount,0))}/><button type="button" className="text-button" onClick={()=>setCustomParts(null)}>Distribuir igualmente</button></div>
-<div className="order-payment-parts span-2">
+<div className="field"><span>{installments>1?'Total das parcelas':'Total a receber'}</span><input readOnly value={money.format(parts.reduce((sum,p)=>sum+p.amount,0))}/>{installments>1&&<button type="button" className="text-button" onClick={()=>setCustomParts(null)}>Distribuir igualmente</button>}</div>
+{installments>1&&<div className="order-payment-parts span-2">
 {parts.map((part,index)=><section className="order-payment-part" key={index} aria-label={`Parcela ${index+1}`}>
 <strong className="order-payment-part-title">Parcela {index+1} de {parts.length}</strong>
 <label className="field">Valor (R$)<DecimalInput ariaLabel={`Valor da parcela ${index+1}`} value={part.amount} decimalScale={2} onValueChange={amount=>setCustomParts(current=>(current??equalParts).map((p,i)=>i===index?{...p,amount}:p))}/></label>
 <label className="field">Vencimento<input aria-label={`Vencimento da parcela ${index+1}`} type="date" value={part.due_date} onChange={e=>setCustomParts(current=>(current??equalParts).map((p,i)=>i===index?{...p,due_date:e.target.value}:p))}/></label>
 </section>)}
-</div>
+</div>}
 {!partsMatch&&<p role="alert">A soma das parcelas deve corresponder ao total do pedido.</p>}
 </div>
 <footer>
