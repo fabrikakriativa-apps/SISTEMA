@@ -37,7 +37,7 @@ export function Orders() {
     const active = matching.filter(x => !['completed', 'cancelled'].includes(x.status)).length, awaitingPurchase = matching.filter(x => x.status === 'awaiting_purchase').length, scheduling = matching.filter(x => x.status === 'ready_to_schedule').length, issues = matching.filter(x => x.status === 'pending_issue').length;
     const toggleCard = (filter: NonNullable<typeof cardFilter>) => setCardFilter(current => current === filter ? null : filter);
     if (detailId) {
-        return <Page title="Pedido" description="Itens, valores, entrega e recebimento do pedido em uma única tela.">{loading ? <p className="panel-message">Carregando pedido…</p> : detailOrder && access ? <OrderDetails organizationId={access.organizationId} order={detailOrder} onBack={() => navigateTo('pedidos')} onReviewBudget={() => detailOrder.budget?.id && navigateTo('orcamentos', detailOrder.budget.id)} onSaved={load}/> : <div className="empty-state">
+        return <Page title="Pedido" description="Itens, valores, entrega e recebimento do pedido em uma única tela.">{loading && !detailOrder ? <p className="panel-message">Carregando pedido…</p> : detailOrder && access ? <OrderDetails key={detailOrder.id} organizationId={access.organizationId} order={detailOrder} onBack={() => navigateTo('pedidos')} onReviewBudget={() => detailOrder.budget?.id && navigateTo('orcamentos', detailOrder.budget.id)} onSaved={load}/> : <div className="empty-state">
 <PackageCheck />
 <strong>Pedido não encontrado</strong>
 <button className="button secondary" onClick={() => navigateTo('pedidos')}>Voltar aos pedidos</button>

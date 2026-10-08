@@ -112,10 +112,10 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
     setNotesSaving(false)
   }
   const configureReceivables = async () => {
-    if(!supabase || financeSaving) return
+    if(!supabase || financeSaving || commercialSaving || commercialDirty || !partsMatch) return
     setFinanceSaving(true)
     const {error} = customParts?await supabase.rpc('configure_order_custom_receivables',{org_id:organizationId,target_order_id:order.id,payment_method:method,installments_json:customParts}):await supabase.rpc('configure_order_receivables',{org_id:organizationId,target_order_id:order.id,installment_count:installments,first_due_date:firstDue,payment_method:method})
-    if(error) show(error.code === '23514' ? 'Este pedido já possui recebimento configurado ou os dados são inválidos.' : 'Não foi possível gerar as parcelas.','error')
+    if(error) show(error.message.includes('Receivables already configured')?'Este pedido já possui parcelas no financeiro. Os valores digitados foram mantidos.':error.message.includes('Installments must equal')?'A soma das parcelas deve corresponder ao total salvo do pedido.':error.message.includes('not awaiting finance')?'O pedido precisa estar aguardando financeiro para gerar as parcelas.':error.message.includes('Due date')?'Informe o vencimento de todas as parcelas.':'Não foi possível gerar as parcelas. Os valores digitados foram mantidos.','error')
     else { await onSaved(); show('Contas a receber geradas. O status do pedido pode ser definido por você.','success') }
     setFinanceSaving(false)
   }
@@ -233,7 +233,7 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
 <h2>Recebimento</h2>
 <p>{order.payment_terms || 'Condição comercial a combinar.'}</p>
 </div>
-</header>{order.status === 'awaiting_finance' ? <>
+</header>{order.status === 'awaiting_finance' && receivables.length===0 ? <>
 <div className="form-grid">
 <label className="field">Condição escolhida no orçamento<select value={condition} disabled={receivables.length>0||!choices.length} onChange={event=>setCondition(event.target.value)}>{choices.map(choice=><option key={choice.label} value={choice.label}>{choice.label} — {money.format(choice.total)}</option>)}</select></label>
 <label className="field">Desconto adicional (R$)<DecimalInput value={discount} decimalScale={2} disabled={receivables.length>0} onValueChange={setDiscount}/></label>
@@ -257,6 +257,7 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
 {installments>1&&<div className="order-payment-parts span-2">
 {parts.map((part,index)=><section className="order-payment-part" key={index} aria-label={`Parcela ${index+1}`}>
 <strong className="order-payment-part-title">Parcela {index+1} de {parts.length}</strong>
+<label className="field">Percentual (%)<DecimalInput ariaLabel={`Percentual da parcela ${index+1}`} value={Number(order.total)>0?Number((part.amount/Number(order.total)*100).toFixed(2)):0} decimalScale={2} onValueChange={percent=>setCustomParts(current=>(current??equalParts).map((p,i)=>i===index?{...p,amount:Math.round(Number(order.total)*percent)/100}:p))}/></label>
 <label className="field">Valor (R$)<DecimalInput ariaLabel={`Valor da parcela ${index+1}`} value={part.amount} decimalScale={2} onValueChange={amount=>setCustomParts(current=>(current??equalParts).map((p,i)=>i===index?{...p,amount}:p))}/></label>
 <label className="field">Vencimento<input aria-label={`Vencimento da parcela ${index+1}`} type="date" value={part.due_date} onChange={e=>setCustomParts(current=>(current??equalParts).map((p,i)=>i===index?{...p,due_date:e.target.value}:p))}/></label>
 </section>)}

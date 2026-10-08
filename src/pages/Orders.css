@@ -2,7 +2,7 @@
 @media(max-width:900px){.order-detail-grid{grid-template-columns:1fr}.order-detail-header{align-items:flex-start;flex-direction:column}.order-detail-header>div:last-child{justify-content:flex-start}}@media(max-width:600px){.order-receivable-list>div,.order-installments>div{grid-template-columns:1fr 1fr}.order-receivable-list>div strong,.order-installments>div b{text-align:right}.order-document-head,.order-document-items .document-item{grid-template-columns:minmax(0,1fr) 45px 95px;gap:8px}.order-detail-header>div:last-child .button{flex:1}}
 .order-detail-header{padding:22px;align-items:center}
 .order-payment-parts{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;min-width:0;align-items:start}
-.order-payment-part{display:grid;grid-template-columns:minmax(90px,.7fr) minmax(0,1fr) minmax(0,1.1fr);align-items:center;gap:12px;min-width:0;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--surface,#fff)}
+.order-payment-part{display:grid;grid-template-columns:minmax(75px,.7fr) minmax(65px,.65fr) minmax(0,1fr) minmax(0,1.15fr);align-items:center;gap:10px;min-width:0;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--surface,#fff)}
 .order-payment-part-title{font-size:13px;line-height:1.4}
 .order-payment-part .field{display:flex;flex-direction:column;gap:7px;min-width:0;font-size:12px;line-height:1.4}
 .order-payment-part .field input{width:100%;min-width:0;box-sizing:border-box}
