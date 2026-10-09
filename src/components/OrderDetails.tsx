@@ -9,6 +9,7 @@ import {orderStatusLabels,type OrderStatus} from '../lib/orderStatus'
 import { ReceiptPreview } from './ReceiptPreview'
 import { readRecovery, writeRecovery, clearRecovery } from '../lib/recoveryDraft'
 import { DecimalInput } from './DecimalInput'
+import { ReviseOrderReceivables } from './ReviseOrderReceivables'
 
 export type DetailOrder = {
   id:string; display_number:string; status:string; payment_terms:string|null; promised_date:string|null; client_address:string|null; notes:string|null; total:number; created_at:string
@@ -58,15 +59,7 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
   const [itemSort,setItemSort]=useState<SortState<'item'|'quantity'|'value'|'operation'>>({key:'item',direction:'asc'})
   const [customParts,setCustomParts]=useState<{amount:number;due_date:string;on_delivery:boolean}[]|null>(null)
   const [editingReceivable,setEditingReceivable]=useState<DetailOrder['receivables'][number]|null>(null)
-  const [receivableAmount,setReceivableAmount]=useState(0),[receivableDue,setReceivableDue]=useState(''),[receivableMethod,setReceivableMethod]=useState('PIX'),[receivableSaving,setReceivableSaving]=useState(false)
-  const openReceivable=(item:DetailOrder['receivables'][number])=>{setActionsOpen(false);setEditingReceivable(item);setReceivableAmount(Number(item.amount));setReceivableDue(item.due_date??'');setReceivableMethod(item.payment_method??'PIX')}
-  const saveReceivable=async()=>{
-    if(!supabase||!editingReceivable||receivableSaving)return
-    setReceivableSaving(true)
-    try{const {error}=await supabase.rpc('update_receivable',{org_id:organizationId,target_receivable_id:editingReceivable.id,edit_scope:'single',new_due_date:receivableDue,new_amount:receivableAmount,new_payment_method:receivableMethod});if(error)throw error;await onSaved();setEditingReceivable(null);show('Parcela atualizada no pedido e no financeiro.','success')}
-    catch{show('Não foi possível atualizar. Somente parcelas abertas e sem recebimento podem ser corrigidas por usuários com acesso financeiro.','error')}
-    finally{setReceivableSaving(false)}
-  }
+  const openReceivable=(item:DetailOrder['receivables'][number])=>{setActionsOpen(false);setEditingReceivable(item)}
   const equalParts=useMemo(()=>{const cents=Math.round(Number(order.total)*100),base=Math.floor(cents/installments);return Array.from({length:installments},(_,index)=>{const due=new Date(`${firstDue}T12:00:00`);const day=due.getDate();due.setDate(1);due.setMonth(due.getMonth()+index);due.setDate(Math.min(day,new Date(due.getFullYear(),due.getMonth()+1,0).getDate()));return {amount:(base+(index===installments-1?cents-base*installments:0))/100,due_date:firstDue?`${due.getFullYear()}-${String(due.getMonth()+1).padStart(2,'0')}-${String(due.getDate()).padStart(2,'0')}`:'',on_delivery:false}})},[order.total,installments,firstDue])
   const parts=customParts??equalParts
   useEffect(()=>setCustomParts(null),[order.id,installments,firstDue])
@@ -284,7 +277,7 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
 <strong>{money.format(Number(item.amount))}</strong>
 </div>) : <p>Nenhuma parcela registrada neste pedido.</p>}</div>}</section>
     </section>
-    {editingReceivable&&<div className="dialog-backdrop"><section className="dialog" role="dialog" aria-modal="true" aria-labelledby="edit-order-installment-title"><header><h2 id="edit-order-installment-title">Revisar parcela do pedido</h2><button className="icon-button" aria-label="Fechar revisão" disabled={receivableSaving} onClick={()=>setEditingReceivable(null)}><X/></button></header><div className="form-grid"><label className="field span-2">Parcela<select value={editingReceivable.id} disabled={receivableSaving} onChange={e=>openReceivable(receivables.find(x=>x.id===e.target.value)!)}>{receivables.filter(x=>['open','overdue'].includes(x.status)&&Number(x.paid_amount)===0).map(x=><option key={x.id} value={x.id}>Parcela {x.installment}/{x.installment_count}</option>)}</select></label><label className="field">Valor (R$)<DecimalInput value={receivableAmount} decimalScale={2} disabled={receivableSaving} onValueChange={setReceivableAmount}/></label><label className="field">Vencimento<input type="date" value={receivableDue} disabled={receivableSaving} onChange={e=>setReceivableDue(e.target.value)}/></label><label className="field span-2">Forma de recebimento<select value={receivableMethod} disabled={receivableSaving} onChange={e=>setReceivableMethod(e.target.value)}>{['PIX','Transferência bancária','Boleto','Cartão de crédito','Cartão de débito','Dinheiro','A combinar'].map(x=><option key={x}>{x}</option>)}</select></label><p className="span-2">A alteração é feita na parcela existente, sem gerar outra cobrança. Pagamentos registrados não serão alterados.</p></div><footer><button className="button secondary" disabled={receivableSaving} onClick={()=>setEditingReceivable(null)}>Cancelar</button><button className="button primary" disabled={receivableSaving||!receivableDue||receivableAmount<=0} onClick={()=>void saveReceivable()}>{receivableSaving?'Salvando…':'Salvar parcela'}</button></footer></section></div>}
+    {editingReceivable&&<ReviseOrderReceivables organizationId={organizationId} orderId={order.id} rows={receivables} onClose={()=>setEditingReceivable(null)} onSaved={onSaved}/>}
     <section className="panel order-notes-card">
 <header>
 <div>
