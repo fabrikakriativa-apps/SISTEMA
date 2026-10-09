@@ -25,11 +25,14 @@ type Need = {
     unit: string;
     unit_cost: number;
     supply_id: string | null;
+    supplier_name: string;
+    supply: { category: string; supplier_name: string | null } | null;
     order_item: {
         order_id: string;
         snapshot: {
             description?: string;
             environment?: string;
+            configuration?: { confection_subitem?: string };
         };
         order: {
             display_number: string;
@@ -64,7 +67,7 @@ export function PurchasesConnected() {
         setLoading(true);
         await supabase.rpc('refresh_purchase_delays', { org_id: access.organizationId });
         const [a, b, c] = await Promise.all([
-            supabase.from('procurement_needs').select('id,order_item_id,deadline,created_at,kind,description,quantity,unit,unit_cost,supply_id,supplier_name,order_item:order_items!procurement_needs_order_item_id_fkey(order_id,snapshot,order:orders!order_items_order_id_fkey(display_number,client:clients!orders_client_id_fkey(name)),budget_item:budget_items!order_items_budget_item_id_fkey(family:item_families!budget_items_family_id_fkey(name,form_key)))').eq('organization_id', access.organizationId).eq('status', 'awaiting_purchase'),
+            supabase.from('procurement_needs').select('id,order_item_id,deadline,created_at,kind,description,quantity,unit,unit_cost,supply_id,supplier_name,supply:supplies(category,supplier_name:import_details->>Fornecedor),order_item:order_items!procurement_needs_order_item_id_fkey(order_id,snapshot,order:orders!order_items_order_id_fkey(display_number,client:clients!orders_client_id_fkey(name)),budget_item:budget_items!order_items_budget_item_id_fkey(family:item_families!budget_items_family_id_fkey(name,form_key)))').eq('organization_id', access.organizationId).eq('status', 'awaiting_purchase'),
             supabase.from('purchases').select('id,display_number,mode,status,total,created_at,supplier_id,external_number,ordered_at,supplier_due_date,payment_terms,supplier:suppliers!purchases_supplier_id_fkey(name),purchase_items:purchase_items!purchase_items_purchase_id_fkey(id,description,order_item:order_items!purchase_items_order_item_id_fkey(order:orders!order_items_order_id_fkey(display_number,promised_date)))').eq('organization_id', access.organizationId).order('number', { ascending: false }),
             supabase.from('suppliers').select('id,name').eq('organization_id', access.organizationId).eq('active', true).order('name')
         ]);
@@ -78,7 +81,9 @@ export function PurchasesConnected() {
     }, [access, show]);
     useEffect(() => { void load(); }, [load]);
     const visibleNeeds = useMemo(() => needs.filter(item => inDateRange(item.created_at, dateRange)).sort((a, b) => {
-        const values = { order: [a.order_item.order?.display_number ?? '', b.order_item.order?.display_number ?? ''], type: [a.kind === 'supply' ? 'Insumo' : a.order_item.budget_item?.family?.name ?? '', b.kind === 'supply' ? 'Insumo' : b.order_item.budget_item?.family?.name ?? ''], description: [a.description, b.description], quantity: [Number(a.quantity), Number(b.quantity)], deadline:[a.deadline??'',b.deadline??''],cost: [Number(a.quantity) * Number(a.unit_cost), Number(b.quantity) * Number(b.unit_cost)] }[needSort.key];
+        const category=(x:Need)=>x.supply?.category || (x.kind==='whole_item'?x.order_item.budget_item?.family?.name ?? '':'Material avulso');
+        const supplier=(x:Need)=>x.supplier_name || x.supply?.supplier_name || '';
+        const values = { order: [a.order_item.order?.display_number ?? '', b.order_item.order?.display_number ?? ''], type: [category(a), category(b)], description: [supplier(a), supplier(b)], quantity: [Number(a.quantity), Number(b.quantity)], deadline:[a.deadline??'',b.deadline??''],cost: [Number(a.quantity) * Number(a.unit_cost), Number(b.quantity) * Number(b.unit_cost)] }[needSort.key];
         return compareValues(values[0], values[1]) * (needSort.direction === 'asc' ? 1 : -1);
     }), [needs, dateRange, needSort]);
     const visibleOrders = useMemo(() => orders.filter(item => inDateRange(item.ordered_at ?? item.created_at, dateRange)).sort((a, b) => {
@@ -125,14 +130,14 @@ export function PurchasesConnected() {
 <button className="button primary" disabled={!selected.length} onClick={() => setCreateOpen(true)}>
 <ShoppingCart />{selected.length ? `Criar pedido de compra (${selected.length})` : 'Selecione os itens'}</button>
 </div></div>{loading ? <p className="panel-message">Carregando…</p> : <div className="table-wrap">
-<table>
+<table className="purchase-needs-table">
 <thead>
 <tr>
 <th>
 </th>
 <SortableHeader label="Pedido / cliente" column="order" sort={needSort} onChange={setNeedSort} />
-<SortableHeader label="Tipo / ambiente" column="type" sort={needSort} onChange={setNeedSort} />
-<SortableHeader label="Descrição" column="description" sort={needSort} onChange={setNeedSort} />
+<SortableHeader label="Categoria" column="type" sort={needSort} onChange={setNeedSort} />
+<SortableHeader label="Fornecedor" column="description" sort={needSort} onChange={setNeedSort} />
 <SortableHeader label="Qtd." column="quantity" sort={needSort} onChange={setNeedSort} />
 <SortableHeader label="Custo" column="cost" sort={needSort} onChange={setNeedSort} />
 <SortableHeader label="Data limite" column="deadline" sort={needSort} onChange={setNeedSort}/>
@@ -142,15 +147,13 @@ export function PurchasesConnected() {
 <td onClick={e=>e.stopPropagation()}>
 <input type="checkbox" aria-label={`Selecionar ${x.description}`} checked={selected.includes(x.id)} onChange={()=>toggle(x)}/>
 </td>
-                <td>
+                <td className="purchase-identity">
 <strong>{x.order_item.order?.display_number}</strong>
-<small>{x.order_item.order?.client?.name}</small>
+<span>{x.order_item.order?.client?.name || 'Cliente não informado'}</span>
+<small>{[x.order_item.budget_item?.family?.name,x.order_item.snapshot.configuration?.confection_subitem].filter(Boolean).join(' - ') || x.order_item.snapshot.description?.split('\n')[0]}</small>
 </td>
-<td>
-<strong>{x.kind === 'supply' ? 'Insumo' : x.order_item.budget_item?.family?.name}</strong>
-<small>{x.order_item.snapshot.environment || 'A definir'}</small>
-</td>
-<td>{x.description}</td>
+<td>{x.supply?.category || (x.kind === 'whole_item' ? x.order_item.budget_item?.family?.name : 'Material avulso')}</td>
+<td>{x.supplier_name || x.supply?.supplier_name || 'A definir'}</td>
 <td>{Number(x.quantity).toLocaleString('pt-BR')} {x.unit}</td>
 <td>
 <strong>{money.format(Number(x.quantity) * Number(x.unit_cost))}</strong>

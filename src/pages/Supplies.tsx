@@ -10,7 +10,7 @@ import { previewSupplyImport, readSupplyWorkbook, type SupplyImportMode, type Su
 import {SortableHeader,type SortState} from '../components/SortableHeader'
 import {supplyImportErrorMessage,supplyImportUpsertOptions} from '../lib/supplyImportPersistence'
 
-type Supply={id:string;code:string;name:string;category:string;purchase_unit:string;usage_unit:string;current_cost:number;active:boolean}
+type Supply={id:string;code:string;name:string;category:string;purchase_unit:string;usage_unit:string;current_cost:number;active:boolean;supplier_name?:string|null}
 type SupplyForm={id?:string;code:string;name:string;category:string;purchase_unit:string;usage_unit:string;current_cost:number}
 type PriceHistory={id:string;value:number;effective_at:string;source:string|null}
 const empty:SupplyForm={code:'',name:'',category:'',purchase_unit:'un',usage_unit:'un',current_cost:0}
@@ -18,7 +18,7 @@ type ImportSource={rowNumber:number;values:Partial<Omit<Supply,'id'>>}
 const chunks=<T,>(items:T[],size:number)=>Array.from({length:Math.ceil(items.length/size)},(_,index)=>items.slice(index*size,index*size+size))
 export function Supplies(){
  const [page,setPage]=useState(0),[query,setQuery]=useState(''),[serverSort,setServerSort]=useState({order:'name',ascending:true})
- const catalog=useCatalog<Supply & {import_details?:Record<string,string|number>}>('supplies','id,code,name,category,purchase_unit,usage_unit,current_cost,active',{page,pageSize:50,search:query,...serverSort})
+ const catalog=useCatalog<Supply & {import_details?:Record<string,string|number>}>('supplies','id,code,name,category,purchase_unit,usage_unit,current_cost,active,supplier_name:import_details->>Fornecedor',{page,pageSize:50,search:query,...serverSort})
  const {items}=catalog
  const access=useAccess(),[search,setSearch]=useState(''),[sort,setSort]=useState<SortState<'code'|'name'|'category'|'purchase'|'usage'|'cost'|'status'>>({key:'name',direction:'asc'}),[open,setOpen]=useState(false),[form,setForm]=useState<SupplyForm>(empty),[changingStatus,setChangingStatus]=useState(''),[history,setHistory]=useState<PriceHistory[]>([]),[historyLoading,setHistoryLoading]=useState(false),[importOpen,setImportOpen]=useState(false),[importMode,setImportMode]=useState<SupplyImportMode>('merge'),[importRows,setImportRows]=useState<ImportSource[]>([]),[importFile,setImportFile]=useState(''),[importSheet,setImportSheet]=useState(''),[importing,setImporting]=useState(false);const {show}=useToast()
  const edit=(item?:Supply)=>{setForm(item?{id:item.id,code:item.code,name:item.name,category:item.category,purchase_unit:item.purchase_unit,usage_unit:item.usage_unit,current_cost:Number(item.current_cost)}:empty);setOpen(true)}
@@ -26,7 +26,7 @@ export function Supplies(){
  const save=async(e:FormEvent)=>{e.preventDefault();try{const{id,...payload}=form;const saved=id?await catalog.update(id,payload):await catalog.save(payload);if(saved){show(id?'Insumo atualizado.':'Insumo salvo.','success');setOpen(false);setForm(empty)}}catch(error){show(error instanceof Error?error.message:'Não foi possível salvar.','error')}}
  const changeStatus=async(item:Supply,active:boolean)=>{if(!supabase||!access||changingStatus||active===item.active)return;setChangingStatus(item.id);const {error}=await supabase.from('supplies').update({active}).eq('organization_id',access.organizationId).eq('id',item.id);if(error)show('Não foi possível alterar o status do insumo.','error');else{catalog.reload();show(`Insumo ${active?'ativado':'inativado'}.`,'success')}setChangingStatus('')}
  useEffect(()=>{const timer=setTimeout(()=>{setQuery(search);setPage(0)},300);return()=>clearTimeout(timer)},[search])
- useEffect(()=>{setServerSort({order:{code:'code',name:'name',category:'category',purchase:'purchase_unit',usage:'usage_unit',cost:'current_cost',status:'active'}[sort.key],ascending:sort.direction==='asc'});setPage(0)},[sort])
+ useEffect(()=>{setServerSort({order:{code:'code',name:'name',category:'category',purchase:'purchase_unit',usage:'import_details->>Fornecedor',cost:'current_cost',status:'active'}[sort.key],ascending:sort.direction==='asc'});setPage(0)},[sort])
  const filtered=items
  const importCatalog=useCatalog<Supply & {import_details?:Record<string,string|number>}>('supplies','id,code,name,category,purchase_unit,usage_unit,current_cost,active,import_details',{enabled:importOpen})
  const [details,setDetails]=useState<Record<string,string|number>|null>(null)
@@ -61,7 +61,7 @@ export function Supplies(){
 <SortableHeader label="Insumo/produto" column="name" sort={sort} onChange={setSort}/>
 <SortableHeader label="Categoria" column="category" sort={sort} onChange={setSort}/>
 <SortableHeader label="Compra" column="purchase" sort={sort} onChange={setSort}/>
-<SortableHeader label="Uso" column="usage" sort={sort} onChange={setSort}/>
+<SortableHeader label="Fornecedor" column="usage" sort={sort} onChange={setSort}/>
 <SortableHeader label="Custo atual" column="cost" sort={sort} onChange={setSort}/>
 <SortableHeader label="Status" column="status" sort={sort} onChange={setSort}/>
 </tr>
@@ -74,7 +74,7 @@ export function Supplies(){
 </td>
 <td>{x.category||'—'}</td>
 <td>{x.purchase_unit}</td>
-<td>{x.usage_unit}</td>
+<td>{x.supplier_name || 'A definir'}</td>
 <td>
 <strong>{money.format(x.current_cost)}</strong>
 </td>
