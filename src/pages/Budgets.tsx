@@ -20,6 +20,8 @@ import { SearchSelect } from '../components/SearchSelect'
 import { budgetDocumentPath } from '../lib/documents'
 import { confectionSubitems } from '../domain'
 import { UpholsteryEstimateCalculator } from '../components/UpholsteryEstimateCalculator'
+import {WallpaperEstimateCalculator} from '../components/WallpaperEstimateCalculator'
+import {blankWallpaperEstimate,type WallpaperEstimate} from '../lib/wallpaperEstimate'
 import { DateRangeFilter, inDateRange, type DateRange } from '../components/DateRangeFilter'
 import { SortableHeader, compareValues, type SortState } from '../components/SortableHeader'
 import { newUpholsteryEstimate, type UpholsteryEstimate } from '../lib/upholsteryEstimate'
@@ -795,6 +797,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <small>O detalhamento comercial continua na descrição do item.</small>
 </label>}<label className="field span-2">Descrição para o cliente<textarea required value={itemForm.description} onChange={e=>setItemForm({...itemForm,description:e.target.value})} placeholder="Descreva modelo, material, medidas e acabamento"/>
 </label>
+{isPreBudget&&selectedFormKey==='wallpaper'&&<WallpaperEstimateCalculator organizationId={budgetOrganizationId} value={(itemForm.initial_configuration.wallpaper_estimate as WallpaperEstimate)??blankWallpaperEstimate} onChange={value=>setItemForm(current=>({...current,initial_configuration:{...current.initial_configuration,wallpaper_estimate:value}}))} onApply={(sale,description)=>setItemForm(current=>({...current,sale_total:sale,description}))}/>}
 {isPreBudget&&supportsUpholsteryCalculator&&<UpholsteryEstimateCalculator
   estimate={upholsteryEstimate}
   onChange={setUpholsteryEstimate}
