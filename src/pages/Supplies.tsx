@@ -7,7 +7,7 @@ import { useToast } from '../components/ToastProvider'
 import {useAccess} from '../components/AuthorizedAccess'
 import {supabase} from '../lib/supabase'
 import { previewSupplyImport, readSupplyWorkbook, type SupplyImportMode, type SupplyImportRow } from '../lib/supplyImport'
-import {SortableHeader,compareValues,type SortState} from '../components/SortableHeader'
+import {SortableHeader,type SortState} from '../components/SortableHeader'
 import {supplyImportErrorMessage,supplyImportUpsertOptions} from '../lib/supplyImportPersistence'
 
 type Supply={id:string;code:string;name:string;category:string;purchase_unit:string;usage_unit:string;current_cost:number;active:boolean}
@@ -17,15 +17,21 @@ const empty:SupplyForm={code:'',name:'',category:'',purchase_unit:'un',usage_uni
 type ImportSource={rowNumber:number;values:Partial<Omit<Supply,'id'>>}
 const chunks=<T,>(items:T[],size:number)=>Array.from({length:Math.ceil(items.length/size)},(_,index)=>items.slice(index*size,index*size+size))
 export function Supplies(){
- const catalog=useCatalog<Supply & {import_details?:Record<string,string|number>}>('supplies','id,code,name,category,purchase_unit,usage_unit,current_cost,active,import_details')
+ const [page,setPage]=useState(0),[query,setQuery]=useState(''),[serverSort,setServerSort]=useState({order:'name',ascending:true})
+ const catalog=useCatalog<Supply & {import_details?:Record<string,string|number>}>('supplies','id,code,name,category,purchase_unit,usage_unit,current_cost,active',{page,pageSize:50,search:query,...serverSort})
  const {items}=catalog
  const access=useAccess(),[search,setSearch]=useState(''),[sort,setSort]=useState<SortState<'code'|'name'|'category'|'purchase'|'usage'|'cost'|'status'>>({key:'name',direction:'asc'}),[open,setOpen]=useState(false),[form,setForm]=useState<SupplyForm>(empty),[changingStatus,setChangingStatus]=useState(''),[history,setHistory]=useState<PriceHistory[]>([]),[historyLoading,setHistoryLoading]=useState(false),[importOpen,setImportOpen]=useState(false),[importMode,setImportMode]=useState<SupplyImportMode>('merge'),[importRows,setImportRows]=useState<ImportSource[]>([]),[importFile,setImportFile]=useState(''),[importSheet,setImportSheet]=useState(''),[importing,setImporting]=useState(false);const {show}=useToast()
  const edit=(item?:Supply)=>{setForm(item?{id:item.id,code:item.code,name:item.name,category:item.category,purchase_unit:item.purchase_unit,usage_unit:item.usage_unit,current_cost:Number(item.current_cost)}:empty);setOpen(true)}
  useEffect(()=>{let cancelled=false;if(!open||!form.id||!supabase||!access){setHistory([]);setHistoryLoading(false);return}setHistoryLoading(true);void supabase.from('supply_price_history').select('id,value,effective_at,source').eq('organization_id',access.organizationId).eq('supply_id',form.id).order('effective_at',{ascending:false}).order('created_at',{ascending:false}).limit(20).then(({data})=>{if(!cancelled){setHistory((data??[]) as PriceHistory[]);setHistoryLoading(false)}},()=>{if(!cancelled)setHistoryLoading(false)});return()=>{cancelled=true}},[open,form.id,access?.organizationId])
  const save=async(e:FormEvent)=>{e.preventDefault();try{const{id,...payload}=form;const saved=id?await catalog.update(id,payload):await catalog.save(payload);if(saved){show(id?'Insumo atualizado.':'Insumo salvo.','success');setOpen(false);setForm(empty)}}catch(error){show(error instanceof Error?error.message:'Não foi possível salvar.','error')}}
  const changeStatus=async(item:Supply,active:boolean)=>{if(!supabase||!access||changingStatus||active===item.active)return;setChangingStatus(item.id);const {error}=await supabase.from('supplies').update({active}).eq('organization_id',access.organizationId).eq('id',item.id);if(error)show('Não foi possível alterar o status do insumo.','error');else{catalog.reload();show(`Insumo ${active?'ativado':'inativado'}.`,'success')}setChangingStatus('')}
- const filtered=items.filter(x=>`${x.code} ${x.name} ${x.category}`.toLowerCase().includes(search.toLowerCase())).sort((a,b)=>{const values={code:[a.code,b.code],name:[a.name,b.name],category:[a.category,b.category],purchase:[a.purchase_unit,b.purchase_unit],usage:[a.usage_unit,b.usage_unit],cost:[Number(a.current_cost),Number(b.current_cost)],status:[a.active?'Ativo':'Inativo',b.active?'Ativo':'Inativo']}[sort.key];return compareValues(values[0],values[1])*(sort.direction==='asc'?1:-1)})
- const importPreview=useMemo<SupplyImportRow[]>(()=>previewSupplyImport(importRows,items,importMode),[importRows,items,importMode])
+ useEffect(()=>{const timer=setTimeout(()=>{setQuery(search);setPage(0)},300);return()=>clearTimeout(timer)},[search])
+ useEffect(()=>{setServerSort({order:{code:'code',name:'name',category:'category',purchase:'purchase_unit',usage:'usage_unit',cost:'current_cost',status:'active'}[sort.key],ascending:sort.direction==='asc'});setPage(0)},[sort])
+ const filtered=items
+ const importCatalog=useCatalog<Supply & {import_details?:Record<string,string|number>}>('supplies','id,code,name,category,purchase_unit,usage_unit,current_cost,active,import_details',{enabled:importOpen})
+ const [details,setDetails]=useState<Record<string,string|number>|null>(null)
+ useEffect(()=>{setDetails(null);if(!open||!form.id||!supabase||!access)return;let active=true;void supabase.from('supplies').select('import_details').eq('organization_id',access.organizationId).eq('id',form.id).single().then(({data,error})=>{if(active){if(error)show('Não foi possível carregar os dados complementares.','error');else setDetails(data?.import_details??null)}});return()=>{active=false}},[open,form.id,access?.organizationId,show])
+ const importPreview=useMemo<SupplyImportRow[]>(()=>previewSupplyImport(importRows,importCatalog.items,importMode),[importRows,importCatalog.items,importMode])
  const importCounts=useMemo(()=>({create:importPreview.filter(row=>row.action==='create').length,update:importPreview.filter(row=>row.action==='update').length,ignore:importPreview.filter(row=>row.action==='ignore').length,invalid:importPreview.filter(row=>row.action==='invalid').length}),[importPreview])
  const closeImport=()=>{if(importing)return;setImportOpen(false);setImportRows([]);setImportFile('');setImportSheet('');setImportMode('merge')}
  const readFile=async(event:ChangeEvent<HTMLInputElement>)=>{const file=event.target.files?.[0];event.target.value='';if(!file)return;try{const parsed=readSupplyWorkbook(await file.arrayBuffer());if(parsed.error){show(parsed.error,'error');return}setImportRows(parsed.rows);setImportFile(file.name);setImportSheet('sheetName' in parsed?parsed.sheetName:'');if(!parsed.rows.length)show('A planilha não possui linhas preenchidas para importar.','error')}catch{show('Não foi possível ler esta planilha. Use um arquivo Excel ou CSV com cabeçalhos.','error')}}
@@ -45,7 +51,7 @@ export function Supplies(){
 <Search/>
 <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar código, nome ou categoria"/>
 </label>
-<span>{filtered.length} item(ns)</span>
+<span>{catalog.total} item(ns)</span>
 </div>
 <div className="table-wrap">
 <table>
@@ -83,6 +89,7 @@ export function Supplies(){
 <Boxes/>
 <strong>Nenhum insumo encontrado</strong>
 </div>}</div>
+<div className="toolbar"><button className="button secondary" disabled={catalog.loading||page===0} onClick={()=>setPage(page-1)}>Anterior</button><span>Página {page+1} de {Math.max(1,Math.ceil(catalog.total/50))}</span><button className="button secondary" disabled={catalog.loading||(page+1)*50>=catalog.total} onClick={()=>setPage(page+1)}>Próxima</button></div>
 </section>
   {open&&<div className="dialog-backdrop">
 <form className="dialog form-dialog" onSubmit={save}>
@@ -97,7 +104,7 @@ export function Supplies(){
 </button>
 </header>
 <div className="form-grid">
-{form.id&&catalog.items.find(item=>item.id===form.id)?.import_details&&<details className="span-2"><summary>Dados complementares da planilha</summary><dl>{Object.entries(catalog.items.find(item=>item.id===form.id)!.import_details!).map(([key,value])=><div key={key}><dt><strong>{key}</strong></dt><dd style={{whiteSpace:'pre-wrap'}}>{String(value)}</dd></div>)}</dl><small>Confecção abrange todos os itens e subitens.</small></details>}
+{form.id&&details&&<details className="span-2"><summary>Dados complementares da planilha</summary><dl>{Object.entries(details).map(([key,value])=><div key={key}><dt><strong>{key}</strong></dt><dd style={{whiteSpace:'pre-wrap'}}>{String(value)}</dd></div>)}</dl><small>Confecção abrange todos os itens e subitens.</small></details>}
 <label className="field">Código<input required value={form.code} onChange={e=>setForm({...form,code:e.target.value})}/>
 </label>
 <label className="field span-2">Nome<input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/>
@@ -134,6 +141,8 @@ export function Supplies(){
 </button>
 </header>
 <div className="import-content">
+{importCatalog.loading&&<p role="status">Carregando cadastros para conferir a importação…</p>}
+{importCatalog.error&&<p role="alert">{importCatalog.error}<button className="button secondary" onClick={importCatalog.reload}>Tentar novamente</button></p>}
 <label className="file-dropzone">
 <Upload/>
 <strong>{importFile||'Selecionar planilha'}</strong>
@@ -181,7 +190,7 @@ export function Supplies(){
 </>}</div>
 <footer>
 <button type="button" className="button secondary" disabled={importing} onClick={closeImport}>Cancelar</button>
-<button type="button" className="button primary" disabled={importing||!importRows.length||importCounts.invalid>0} onClick={()=>void applyImport()}>{importing?'Importando…':`Confirmar importação${importCounts.create+importCounts.update?` (${importCounts.create+importCounts.update})`:''}`}</button>
+<button type="button" className="button primary" disabled={importing||importCatalog.loading||Boolean(importCatalog.error)||!importRows.length||importCounts.invalid>0} onClick={()=>void applyImport()}>{importing?'Importando…':`Confirmar importação${importCounts.create+importCounts.update?` (${importCounts.create+importCounts.update})`:''}`}</button>
 </footer>
 </section>
 </div>}
