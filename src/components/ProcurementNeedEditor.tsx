@@ -7,7 +7,7 @@ import {SearchSelect} from './SearchSelect'
 import {loadAllPages} from '../lib/loadAllPages'
 export type EditableNeed={id:string;order_item_id:string;supply_id:string|null;supplier_name?:string;description:string;quantity:number;unit:string;unit_cost:number;deadline:string|null}
 type Item={id:string;snapshot:{description?:string};order:{display_number:string;client:{name:string}|null}|null}
-type Supply={id:string;code:string;name:string;category:string;usage_unit:string;current_cost:number}
+type Supply={id:string;code:string;name:string;category:string;usage_unit:string;current_cost:number;collection_name:string|null}
 const itemLabel=(item:Item)=>[item.order?.display_number,item.order?.client?.name,item.snapshot.description].filter(Boolean).join(' · ')
 const supplyLabel=(supply:Supply)=>`${supply.name} · ${supply.code}`
 export function ProcurementNeedEditor({organizationId,need,onClose,onSaved}:{organizationId:string;need:EditableNeed|null;onClose:()=>void;onSaved:()=>Promise<void>}){
@@ -26,7 +26,7 @@ export function ProcurementNeedEditor({organizationId,need,onClose,onSaved}:{org
  const filteredSupplies=category?supplies.filter(supply=>supply.category===category):supplies
  useEffect(()=>{if(!supabase)return;let active=true;setLoading(true);void Promise.all([
  loadAllPages<Item>(async(from,to)=>{const r=await supabase!.from('order_items').select('id,snapshot,order:orders!order_items_order_id_fkey!inner(display_number,status,client:clients!orders_client_id_fkey(name))').eq('organization_id',organizationId).not('order.status','in','(cancelled,completed)').order('id').range(from,to);return {data:r.data as unknown as Item[]|null,error:r.error}}),
- loadAllPages<Supply>((from,to)=>supabase!.from('supplies').select('id,code,name,category,usage_unit,current_cost').eq('organization_id',organizationId).eq('active',true).order('name').order('id').range(from,to))
+ loadAllPages<Supply>((from,to)=>supabase!.from('supplies').select('id,code,name,category,usage_unit,current_cost,collection_name:import_details->>"Catálogo"').eq('organization_id',organizationId).eq('active',true).order('name').order('id').range(from,to))
  ]).then(([a,b])=>{if(!active)return;setLoadError(Boolean(a.error||b.error));if(a.error||b.error)show('Não foi possível carregar a lista completa de itens e insumos. Feche e tente novamente.','error');setItems(a.data??[]);setSupplies(b.data??[]);setLoading(false)});return()=>{active=false}},[organizationId,show])
  const save=async(remove=false)=>{
  if(!supabase||saving||loading||loadError||supplierLoading)return;
@@ -42,6 +42,7 @@ export function ProcurementNeedEditor({organizationId,need,onClose,onSaved}:{org
  <label className="field span-2">Categoria<select disabled={loading||saving||loadError} value={category} onChange={e=>setCategory(e.target.value)}><option value="">Todas</option>{categories.map(value=><option key={value} value={value}>{value}</option>)}</select></label>
  <div className="field span-2"><span>Insumo cadastrado</span><SearchSelect ariaLabel="Buscar insumo cadastrado" disabled={loading||saving||loadError} value={supplySearch??(supplies.find(x=>x.id===form.supply_id)?supplyLabel(supplies.find(x=>x.id===form.supply_id)!):'')} options={filteredSupplies.map(supply=>({id:supply.id,label:supplyLabel(supply),detail:supply.category}))} placeholder={loading?'Carregando insumos…':'Digite nome, código ou categoria do insumo'} onChange={value=>{setSupplySearch(value);setForm({...form,supply_id:null})}} onSelect={option=>{void selectSupply(option.id)}}/><button type="button" className="button secondary" disabled={saving||supplierLoading} onClick={()=>{setSupplySearch('');setForm({...form,supply_id:null})}}>Usar produto ou material avulso</button></div>
  <label className="field span-2">Fornecedor<input maxLength={300} disabled={saving||supplierLoading} value={form.supplier_name??''} placeholder={supplierLoading?'Carregando fornecedor…':'Informe o fornecedor'} onChange={e=>{setSupplierError(false);setForm({...form,supplier_name:e.target.value})}}/>{supplierError&&<small>Informe o fornecedor manualmente.</small>}</label>
+ <label className="field span-2">Coleção<input readOnly value={supplies.find(x=>x.id===form.supply_id)?.collection_name??''} placeholder={loading?'Carregando coleção…':'Sem coleção cadastrada'}/></label>
  <label className="field span-2">Descrição<textarea required value={form.description} onChange={e=>setForm({...form,description:e.target.value})}/></label>
  <label className="field">Quantidade<input type="number" required min="0.001" step="any" value={form.quantity} onChange={e=>setForm({...form,quantity:Number(e.target.value)})}/></label>
  <label className="field">Unidade<input required value={form.unit} onChange={e=>setForm({...form,unit:e.target.value})}/></label>
