@@ -31,7 +31,7 @@ export function ProcurementNeedEditor({organizationId,need,onClose,onSaved}:{org
  const save=async(remove=false)=>{
  if(!supabase||saving||loading||loadError||supplierLoading)return;
  if(!remove&&!form.order_item_id){show('Selecione um item do pedido nos resultados da busca.','error');return}
- if(!remove&&supplySearch&&!form.supply_id){show('Selecione um insumo nos resultados ou escolha material avulso.','error');return}
+ // A typed name without a catalog selection is a valid loose material.
  setSaving(true)
  const {error}=await supabase.rpc('save_procurement_need_supplier',{org_id:organizationId,target_need_id:need?.id??null,target_order_item_id:form.order_item_id,new_supply_id:form.supply_id||null,new_description:form.description,new_quantity:Number(form.quantity),new_unit:form.unit,new_unit_cost:Number(form.unit_cost),new_deadline:form.deadline||null,new_supplier_name:form.supplier_name??'',remove_need:remove})
  if(error)show('Não foi possível salvar. Itens já comprados devem ser ajustados no pedido ao fornecedor.','error')
