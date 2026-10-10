@@ -26,7 +26,7 @@ type Need = {
     unit_cost: number;
     supply_id: string | null;
     supplier_name: string;
-    supply: { category: string; supplier_name: string | null; collection_name: string | null } | null;
+    supply: { name: string; code: string; category: string; supplier_name: string | null; collection_name: string | null } | null;
     order_item: {
         order_id: string;
         snapshot: {
@@ -67,7 +67,7 @@ export function PurchasesConnected() {
         setLoading(true);
         await supabase.rpc('refresh_purchase_delays', { org_id: access.organizationId });
         const [a, b, c] = await Promise.all([
-            supabase.from('procurement_needs').select('id,order_item_id,deadline,created_at,kind,description,quantity,unit,unit_cost,supply_id,supplier_name,supply:supplies(category,supplier_name:import_details->>Fornecedor,collection_name:import_details->>"Catálogo"),order_item:order_items!procurement_needs_order_item_id_fkey(order_id,snapshot,order:orders!order_items_order_id_fkey(display_number,client:clients!orders_client_id_fkey(name)),budget_item:budget_items!order_items_budget_item_id_fkey(family:item_families!budget_items_family_id_fkey(name,form_key)))').eq('organization_id', access.organizationId).eq('status', 'awaiting_purchase'),
+            supabase.from('procurement_needs').select('id,order_item_id,deadline,created_at,kind,description,quantity,unit,unit_cost,supply_id,supplier_name,supply:supplies(name,code,category,supplier_name:import_details->>Fornecedor,collection_name:import_details->>"Catálogo"),order_item:order_items!procurement_needs_order_item_id_fkey(order_id,snapshot,order:orders!order_items_order_id_fkey(display_number,client:clients!orders_client_id_fkey(name)),budget_item:budget_items!order_items_budget_item_id_fkey(family:item_families!budget_items_family_id_fkey(name,form_key)))').eq('organization_id', access.organizationId).eq('status', 'awaiting_purchase'),
             supabase.from('purchases').select('id,display_number,mode,status,total,created_at,supplier_id,external_number,ordered_at,supplier_due_date,payment_terms,supplier:suppliers!purchases_supplier_id_fkey(name),purchase_items:purchase_items!purchase_items_purchase_id_fkey(id,description,order_item:order_items!purchase_items_order_item_id_fkey(order:orders!order_items_order_id_fkey(display_number,promised_date)))').eq('organization_id', access.organizationId).order('number', { ascending: false }),
             supabase.from('suppliers').select('id,name').eq('organization_id', access.organizationId).eq('active', true).order('name')
         ]);
@@ -139,6 +139,8 @@ export function PurchasesConnected() {
 <SortableHeader label="Categoria" column="type" sort={needSort} onChange={setNeedSort} />
 <SortableHeader label="Coleção" column="collection" sort={needSort} onChange={setNeedSort} />
 <SortableHeader label="Fornecedor" column="description" sort={needSort} onChange={setNeedSort} />
+<th>Insumo cadastrado</th>
+<th>Descrição</th>
 <SortableHeader label="Qtd." column="quantity" sort={needSort} onChange={setNeedSort} />
 <SortableHeader label="Custo" column="cost" sort={needSort} onChange={setNeedSort} />
 <SortableHeader label="Data limite" column="deadline" sort={needSort} onChange={setNeedSort}/>
@@ -156,6 +158,8 @@ export function PurchasesConnected() {
 <td>{x.supply?.category || (x.kind === 'whole_item' ? x.order_item.budget_item?.family?.name : 'Material avulso')}</td>
 <td>{x.supply?.collection_name || '—'}</td>
 <td>{x.supplier_name || x.supply?.supplier_name || 'A definir'}</td>
+<td>{x.supply ? `${x.supply.name} · ${x.supply.code}` : 'Material avulso'}</td>
+<td style={{whiteSpace:'normal',minWidth:200}}>{x.description}</td>
 <td>{Number(x.quantity).toLocaleString('pt-BR')} {x.unit}</td>
 <td>
 <strong>{money.format(Number(x.quantity) * Number(x.unit_cost))}</strong>
