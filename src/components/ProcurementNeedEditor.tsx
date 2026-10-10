@@ -5,7 +5,7 @@ import { useToast } from './ToastProvider'
 import { readRecovery,useRecoveryDraft,clearRecovery } from '../lib/recoveryDraft'
 import {SearchSelect} from './SearchSelect'
 import {loadAllPages} from '../lib/loadAllPages'
-export type EditableNeed={id:string;order_item_id:string;supply_id:string|null;supplier_name?:string;description:string;quantity:number;unit:string;unit_cost:number;deadline:string|null}
+export type EditableNeed={id:string;order_item_id:string;supply_id:string|null;material_mode?:'catalog'|'loose';supplier_name?:string;description:string;quantity:number;unit:string;unit_cost:number;deadline:string|null}
 type Item={id:string;snapshot:{description?:string};order:{display_number:string;client:{name:string}|null}|null}
 type Supply={id:string;code:string;name:string;category:string;usage_unit:string;current_cost:number;collection_name:string|null}
 const itemLabel=(item:Item)=>[item.order?.display_number,item.order?.client?.name,item.snapshot.description].filter(Boolean).join(' · ')
@@ -17,6 +17,7 @@ export function ProcurementNeedEditor({organizationId,need,onClose,onSaved}:{org
  const [itemSearch,setItemSearch]=useState<string|null>(null),[supplySearch,setSupplySearch]=useState<string|null>(null),[loading,setLoading]=useState(true),[loadError,setLoadError]=useState(false)
  useRecoveryDraft(key,form)
  const [supplierLoading,setSupplierLoading]=useState(false),[supplierError,setSupplierError]=useState(false)
+ const materialMode=form.material_mode??(form.supply_id?'catalog':form.description?'loose':'catalog')
  const selectSupply=async(id:string)=>{
   const supply=supplies.find(x=>x.id===id)!;setSupplySearch(supplyLabel(supply));setForm(current=>({...current,supply_id:id,description:supply.name,unit:supply.usage_unit,unit_cost:Number(supply.current_cost),supplier_name:''}));setSupplierLoading(true);setSupplierError(false)
   try{const {data,error}=await supabase!.from('supplies').select('import_details').eq('organization_id',organizationId).eq('id',id).single();if(error)throw error;const name=String(data?.import_details?.Fornecedor??'');setForm(current=>current.supply_id===id?{...current,supplier_name:name}:current)}catch{setSupplierError(true);show('Não foi possível carregar o fornecedor. Informe o nome manualmente.','error')}finally{setSupplierLoading(false)}
@@ -31,7 +32,7 @@ export function ProcurementNeedEditor({organizationId,need,onClose,onSaved}:{org
  const save=async(remove=false)=>{
  if(!supabase||saving||loading||loadError||supplierLoading)return;
  if(!remove&&!form.order_item_id){show('Selecione um item do pedido nos resultados da busca.','error');return}
- // A typed name without a catalog selection is a valid loose material.
+ if(!remove&&materialMode==='catalog'&&!form.supply_id){show('Selecione um insumo nos resultados ou use material avulso.','error');return}
  setSaving(true)
  const {error}=await supabase.rpc('save_procurement_need_supplier',{org_id:organizationId,target_need_id:need?.id??null,target_order_item_id:form.order_item_id,new_supply_id:form.supply_id||null,new_description:form.description,new_quantity:Number(form.quantity),new_unit:form.unit,new_unit_cost:Number(form.unit_cost),new_deadline:form.deadline||null,new_supplier_name:form.supplier_name??'',remove_need:remove})
  if(error)show('Não foi possível salvar. Itens já comprados devem ser ajustados no pedido ao fornecedor.','error')
@@ -39,10 +40,13 @@ export function ProcurementNeedEditor({organizationId,need,onClose,onSaved}:{org
  }
  return <div className="dialog-backdrop"><form className="dialog" onSubmit={e=>{e.preventDefault();void save()}}><header><div><h2>{need?'Editar item de compra':'Adicionar item de compra'}</h2><p>Defina o material que precisa comprar para o item do pedido.</p></div><button type="button" className="icon-button" onClick={onClose} aria-label="Fechar"><X/></button></header><div className="form-grid">
  <div className="field span-2"><span>Item do pedido</span><SearchSelect ariaLabel="Buscar item do pedido" disabled={loading||saving||loadError} value={itemSearch??(items.find(x=>x.id===form.order_item_id)?itemLabel(items.find(x=>x.id===form.order_item_id)!):'')} options={items.map(item=>({id:item.id,label:itemLabel(item)}))} placeholder={loading?'Carregando pedidos…':'Digite número do pedido, cliente ou descrição'} onChange={value=>{setItemSearch(value);setForm({...form,order_item_id:''})}} onSelect={option=>{setItemSearch(option.label);setForm({...form,order_item_id:option.id})}}/></div>
+ <label className="field span-2">Tipo de material<select disabled={saving||supplierLoading} value={materialMode} onChange={e=>{const mode=e.target.value as 'catalog'|'loose';setSupplySearch('');setSupplierError(false);setForm(current=>({...current,material_mode:mode,supply_id:null}))}}><option value="catalog">Insumo cadastrado</option><option value="loose">Produto ou material avulso</option></select></label>
+ {materialMode==='catalog'&&<>
  <label className="field span-2">Categoria<select disabled={loading||saving||loadError} value={category} onChange={e=>setCategory(e.target.value)}><option value="">Todas</option>{categories.map(value=><option key={value} value={value}>{value}</option>)}</select></label>
- <div className="field span-2"><span>Insumo cadastrado</span><SearchSelect ariaLabel="Buscar insumo cadastrado" disabled={loading||saving||loadError} value={supplySearch??(supplies.find(x=>x.id===form.supply_id)?supplyLabel(supplies.find(x=>x.id===form.supply_id)!):'')} options={filteredSupplies.map(supply=>({id:supply.id,label:supplyLabel(supply),detail:supply.category}))} placeholder={loading?'Carregando insumos…':'Digite nome, código ou categoria do insumo'} onChange={value=>{setSupplySearch(value);setForm({...form,supply_id:null})}} onSelect={option=>{void selectSupply(option.id)}}/><button type="button" className="button secondary" disabled={saving||supplierLoading} onClick={()=>{setSupplySearch('');setForm({...form,supply_id:null})}}>Usar produto ou material avulso</button></div>
+ <div className="field span-2"><span>Insumo cadastrado</span><SearchSelect ariaLabel="Buscar insumo cadastrado" disabled={loading||saving||loadError} value={supplySearch??(supplies.find(x=>x.id===form.supply_id)?supplyLabel(supplies.find(x=>x.id===form.supply_id)!):'')} options={filteredSupplies.map(supply=>({id:supply.id,label:supplyLabel(supply),detail:supply.category}))} placeholder={loading?'Carregando insumos…':'Digite nome, código ou categoria do insumo'} onChange={value=>{setSupplySearch(value);setForm({...form,supply_id:null,material_mode:'catalog'})}} onSelect={option=>{void selectSupply(option.id)}}/><button type="button" className="button secondary" disabled={saving||supplierLoading} onClick={()=>{setSupplySearch('');setSupplierError(false);setForm(current=>({...current,supply_id:null,material_mode:'loose'}))}}>Usar produto ou material avulso</button></div>
+ </>}
  <label className="field span-2">Fornecedor<input maxLength={300} disabled={saving||supplierLoading} value={form.supplier_name??''} placeholder={supplierLoading?'Carregando fornecedor…':'Informe o fornecedor'} onChange={e=>{setSupplierError(false);setForm({...form,supplier_name:e.target.value})}}/>{supplierError&&<small>Informe o fornecedor manualmente.</small>}</label>
- <label className="field span-2">Coleção<input readOnly value={supplies.find(x=>x.id===form.supply_id)?.collection_name??''} placeholder={loading?'Carregando coleção…':'Sem coleção cadastrada'}/></label>
+ {materialMode==='catalog'&&<label className="field span-2">Coleção<input readOnly value={supplies.find(x=>x.id===form.supply_id)?.collection_name??''} placeholder={loading?'Carregando coleção…':'Sem coleção cadastrada'}/></label>}
  <label className="field span-2">Descrição<textarea required value={form.description} onChange={e=>setForm({...form,description:e.target.value})}/></label>
  <label className="field">Quantidade<input type="number" required min="0.001" step="any" value={form.quantity} onChange={e=>setForm({...form,quantity:Number(e.target.value)})}/></label>
  <label className="field">Unidade<input required value={form.unit} onChange={e=>setForm({...form,unit:e.target.value})}/></label>
