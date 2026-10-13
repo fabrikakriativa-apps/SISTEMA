@@ -24,6 +24,20 @@ const decimal=(raw:string)=>Number(raw.replace(/\./g,'').replace(',','.'))
 const money=(raw:string)=>Number(decimal(raw).toFixed(2))
 const isoDate=(raw:string)=>{const [day,month,year]=raw.split('/');return `${year}-${month}-${day}`}
 const clean=(value:string)=>value.replace(/\s+/g,' ').trim()
+const fabricText=(block:string)=>{
+  const lines=block.split('\n'),start=lines.findIndex(line=>/\bTecido:/i.test(line))
+  if(start<0)return ''
+  const parts:string[]=[]
+  const nextField=/^\s*(?:Posi[çc][ãa]o|Barra|Altura da barra|Abertura|Instala[çc][ãa]o|Estilo|Validade|Total|Trilho|Acionamento|Ambiente|Medidas|Qtd|Empresa|Valor)\b/i
+  const rightField=/(?:^|\s+)(?:Prega\/Fita wave|Propor[çc][ãa]o|Ponteira|Abra[çc]adeira|Valor (?:da Cortina|do Trilho)|Acionamento|Trilho)\s*:/i
+  for(let index=start;index<lines.length;index++){
+    let line=index===start?lines[index].replace(/^.*?\bTecido:\s*/i,''):lines[index]
+    if(index>start&&nextField.test(line))break
+    line=line.split(rightField)[0].trim()
+    if(line)parts.push(line)
+  }
+  return clean(parts.join(' '))
+}
 
 export function parseManufacturerText(text:string):ParsedManufacturerDocument {
   const normalized=text.replace(/\r/g,'')
@@ -82,7 +96,7 @@ export function parseManufacturerText(text:string):ParsedManufacturerDocument {
     const price=block.match(/\bTotal\s+([\d.]+,\d{2,3})/i)?.[1]??block.match(/Valor\s+(?:da\s+)?(?:Cortina|Persiana)\s+([\d.]+,\d{2,3})/i)?.[1]
     if(!dimensions||!price)continue
     const environment=clean(dimensions[1])
-    const fabric=clean(block.match(/Tecido:\s*([^\n]+)/i)?.[1]??'')
+    const fabric=fabricText(block)
     const position=clean(block.match(/Posi[çc][ãa]o:\s*([^\n]+)/i)?.[1]??'')
     const rail=clean(block.match(/Trilho:\s*([^\n]+)/i)?.[1]??'')
     const description=(position?`Posição ${position}: `:'')+[kind,environment&&`Ambiente ${environment}`,fabric&&`Tecido ${fabric}`,rail&&`Trilho ${rail}`].filter(Boolean).join(' · ')
@@ -94,7 +108,7 @@ export function parseManufacturerText(text:string):ParsedManufacturerDocument {
     const block=match[4], dimensions=block.match(/Medidas:\s*(\d+(?:[,.]\d+)?)\s*[x×]\s*(\d+(?:[,.]\d+)?)/i)
     if(!dimensions)continue
     const field=(label:string)=>clean(block.match(new RegExp(`${label}:\\s*([^\\n]+)`,'i'))?.[1]??'')
-    const fabric=[field('Tecido').split(/Prega\/Fita wave:/i)[0].trim(),block.match(/\n(\d[^\n]+?)\s+Proporção:/i)?.[1]??''].filter(Boolean).join(' ')
+    const fabric=fabricText(block)
     const rail=field('Trilho'),position=field('Posição').split(/Proporção:|Ponteira:/i)[0].trim()
     const environment=match[2].match(/\bAmbiente:\s*(.*)$/i)?.[1]
     items.push({description:(position?`Posição ${position}: `:'')+[match[1],fabric&&`Tecido ${fabric}`,rail&&`Trilho ${rail}`].filter(Boolean).join(' · '),environment:environment?clean(environment):null,unit:'UN',quantity:decimal(block.match(/Qtd:\s*(\d+(?:[,.]\d+)?)/i)?.[1]??'1'),width:decimal(dimensions[1]),height:decimal(dimensions[2]),value:money(match[3]),operation:/MOTOR|WIFI/i.test(block)?'motorized':/MANUAL|SEM CORDA/i.test(block)?'manual':'unspecified',confidence:.98})

@@ -5,6 +5,14 @@ const header=`Data: 02/06/2026 Nro Pedido: #11013707-1 Cód . Interno: 260780 P�
 Condição de Pagamento: 30/60/90 DIAS Forma de Pagamento: BOLETO`
 
 describe('manufacturer PDF semantic parser',()=>{
+  it.each(['NERO','NERO Proporção: 3,00','NERO\nCINZA CLARO Proporção: 3,00'])('preserves alphabetic fabric continuation: %s',continuation=>{
+    const result=parseManufacturerText(`Cortina 4 - José Carlos - Ambiente: Sala Valor do item: R$ 511,33\nMedidas: 2,37 x 2,38 m Trilho: Trilho Max Reforçado Branco\nQtd: 1 Acionamento: Sem Corda\nTecido: ALBUM 02 CORTINAS - BLACKOUT FOSCO - 11802 BRANCO Prega/Fita wave: Regular\n${continuation}\nPosição: Forro Ponteira: Sem ponteira\nBarra: Padrão\nEmpresa FABRIKA`)
+    expect(result.items).toHaveLength(1)
+    expect(result.items[0].description).toContain('11802 BRANCO NERO')
+    expect(result.items[0].description).toMatch(/^Posição Forro: Cortina/)
+    expect(result.items[0].description).not.toMatch(/Proporção|Prega\/Fita|Ponteira/)
+    if(continuation.includes('CINZA CLARO'))expect(result.items[0].description).toContain('NERO CINZA CLARO')
+  })
   it('keeps all eight options including missing environments and puts position first',()=>{
     const prices=['380,23','301,25','571,06','843,89','390,59','721,77','755,65','746,17']
     const text=prices.map((price,i)=>`Cortina ${i+1} - ${i===1||i===6?'Sem ambiente informado':'Ambiente: quarto'} Valor do item: R$ ${price}\nMedidas: 1,9 x 2,75 m Trilho: Trilho Max Reforçado Branco\nQtd: 1 Acionamento: Sem Corda\nTecido: TECIDO ${i+1} Prega/Fita wave: Regular\nPosição: Voil Proporção: 2,50\nEmpresa FABRIKA`).join('\n')
