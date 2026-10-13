@@ -5,6 +5,16 @@ const header=`Data: 02/06/2026 Nro Pedido: #11013707-1 Cód . Interno: 260780 P�
 Condição de Pagamento: 30/60/90 DIAS Forma de Pagamento: BOLETO`
 
 describe('manufacturer PDF semantic parser',()=>{
+  it('keeps all eight options including missing environments and puts position first',()=>{
+    const prices=['380,23','301,25','571,06','843,89','390,59','721,77','755,65','746,17']
+    const text=prices.map((price,i)=>`Cortina ${i+1} - ${i===1||i===6?'Sem ambiente informado':'Ambiente: quarto'} Valor do item: R$ ${price}\nMedidas: 1,9 x 2,75 m Trilho: Trilho Max Reforçado Branco\nQtd: 1 Acionamento: Sem Corda\nTecido: TECIDO ${i+1} Prega/Fita wave: Regular\nPosição: Voil Proporção: 2,50\nEmpresa FABRIKA`).join('\n')
+    const result=parseManufacturerText(text)
+    expect(result.items).toHaveLength(8)
+    expect(result.items.map(x=>x.value)).toEqual([380.23,301.25,571.06,843.89,390.59,721.77,755.65,746.17])
+    expect(result.items[1].environment).toBeNull()
+    expect(result.items[6].environment).toBeNull()
+    expect(result.items[0].description).toBe('Posição Voil: Cortina · Tecido TECIDO 1 · Trilho Trilho Max Reforçado Branco')
+  })
   it.each(['OBS: sala','OBS.: sala','OBS sala','OBS:\nsala','Ambiente: sala','Ambiente:\nsala'])('reads environment from %s',field=>{
     const parsed=parseManufacturerText(`ROLLUX MANUAL UN 1,00 1,850 1,350 970,10\n${field}`)
     expect(parsed.items[0].environment).toBe('sala')
@@ -92,4 +102,3 @@ Cotação válida até 05/08/2026.`)
     expect(parsed.items[0].description).toContain('LINHO MOOREA')
   })
 })
-
