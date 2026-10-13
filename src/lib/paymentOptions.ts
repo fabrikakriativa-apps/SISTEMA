@@ -8,5 +8,6 @@ export const optionFinalValue=(saleTotal:number,option:Pick<ItemPaymentOption,'a
 
 export const standardItemPaymentOptions=():ItemPaymentOption[]=>[
   {position:1,description:'À vista (PIX)',adjustment_percent:-6,final_value:null,observation:'No ato da aprovação do orçamento'},
-  {position:2,description:'Em até 3x no cartão de crédito',adjustment_percent:0,final_value:null,observation:'No ato da aprovação do orçamento'}
+  {position:2,description:'Em até 3x no cartão de crédito',adjustment_percent:-3,final_value:null,observation:'No ato da aprovação do orçamento'},
+  {position:3,description:'Em até 6x no cartão de crédito',adjustment_percent:0,final_value:null,observation:'No ato da aprovação do orçamento'}
 ]

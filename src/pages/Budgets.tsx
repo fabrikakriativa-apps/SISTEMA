@@ -234,7 +234,17 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   const [itemPendingDelete,setItemPendingDelete]=useState<BudgetItem|null>(null)
   const [upholsteryEstimate,setUpholsteryEstimate]=useState<UpholsteryEstimate>(newUpholsteryEstimate)
   const [previewOpen,setPreviewOpen]=useState(false)
-  const [workflowBusy,setWorkflowBusy]=useState(false),[confirmApproval,setConfirmApproval]=useState(false),[confirmReplacementRevision,setConfirmReplacementRevision]=useState(false)
+  const [workflowBusy,setWorkflowBusy]=useState(false),[confirmApproval,setConfirmApproval]=useState(false),[confirmReplacementRevision,setConfirmReplacementRevision]=useState(false),[confirmDuplicate,setConfirmDuplicate]=useState(false)
+  const duplicateBudget=async()=>{
+    if(!supabase||workflowBusy||saveState!=='saved')return
+    setWorkflowBusy(true)
+    try{
+      const {data,error}=await supabase.rpc('duplicate_commercial_budget',{org_id:access.organizationId,source_budget_id:budget.id})
+      if(error)throw error
+      show(`Cópia criada: ${data.display_number}.`,'success')
+      navigateTo('orcamentos',data.id);window.location.reload()
+    }catch(error){show(errorMessage(error,'Não foi possível duplicar o orçamento. Nenhuma cópia foi concluída.'),'error');setWorkflowBusy(false)}
+  }
   const [hasCancelledOrder,setHasCancelledOrder]=useState(false)
   const [specOpen,setSpecOpen]=useState(false),[specNotes,setSpecNotes]=useState(''),[specItems,setSpecItems]=useState<{id:string;description:string}[]>([])
   const itemDraftKey=`${budgetOrganizationId}:budget-item:${budget.id}:${budget.current_revision}:${itemForm.id??'new'}`
@@ -562,6 +572,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     return failed
   }
   return <Page title={isPreBudget?'Construção do pré-orçamento':'Construção do orçamento'} description={isPreBudget?'Registre a estimativa e as referências. Valor, medidas e materiais serão confirmados depois.':'Monte os dados comerciais e os itens que o cliente receberá.'} action={<div className="page-actions">
+{['admin','comercial'].includes(access.role)&&<button className="button secondary" disabled={workflowBusy||saveState!=='saved'} onClick={()=>setConfirmDuplicate(true)}><Copy/>Duplicar orçamento</button>}
 <button className="button secondary" onClick={()=>setPreviewOpen(true)}>Prévia do cliente</button>
 {canStartRevision&&<button className="button secondary" disabled={workflowBusy} onClick={()=>void startRevision()}><GitBranch/>{workflowBusy?'Criando revisão…':'Criar revisão'}</button>}
 {budget.status==='approved'&&(access.role==='admin'||access.role==='comercial')&&<button className="button secondary" onClick={()=>{setSpecNotes(budget.notes??'');setSpecItems(items.map(item=>({id:item.id,description:item.description})));setSpecOpen(true)}}><GitBranch/>Revisar especificações</button>}
@@ -573,6 +584,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 </div>}>
     {previewOpen&&<BudgetPreview budget={{...budget,valid_until:form.valid_until,payment_terms:form.payment_terms,delivery_terms:form.delivery_terms,notes:form.notes,discount:Number(form.discount||0),total:Math.max(0,Number(budget.subtotal)-Number(form.discount||0))}} items={sortedBudgetItems} paymentOptions={itemPaymentOptions} clientName={client?.name??'Cliente não informado'} clientAddress={form.client_address??''} onClose={()=>setPreviewOpen(false)}/>}
     {specOpen&&<div className="dialog-backdrop"><form className="dialog" onSubmit={e=>{e.preventDefault();void saveSpecifications()}}><header><div><h2>Revisar especificações</h2><p>Complemente tecido, descrições e observações. Esta revisão mantém os valores aprovados e o pedido vinculado.</p></div><button type="button" className="icon-button" aria-label="Fechar" onClick={()=>setSpecOpen(false)}><X/></button></header><div className="form-grid">{specItems.map((item,index)=><label className="field span-2" key={item.id}>Descrição do item {index+1}<textarea required value={item.description} onChange={e=>setSpecItems(current=>current.map(x=>x.id===item.id?{...x,description:e.target.value}:x))}/></label>)}<label className="field span-2">Observações<textarea value={specNotes} onChange={e=>setSpecNotes(e.target.value)}/></label></div><footer><button type="button" className="button secondary" onClick={()=>setSpecOpen(false)}>Cancelar</button><button className="button primary" disabled={workflowBusy}>{workflowBusy?'Salvando…':'Salvar revisão'}</button></footer></form></div>}
+    {confirmDuplicate&&<div className="dialog-backdrop"><div className="dialog"><header><div><h2>Duplicar orçamento</h2><p>Uma cópia em rascunho receberá um novo número da sequência atual. Cliente, itens, custos e condições serão copiados. Pedidos, financeiro e arquivos anexados não serão duplicados.</p></div></header><footer><button className="button secondary" disabled={workflowBusy} onClick={()=>setConfirmDuplicate(false)}>Cancelar</button><button className="button primary" disabled={workflowBusy} onClick={()=>void duplicateBudget()}>{workflowBusy?'Duplicando…':'Confirmar duplicação'}</button></footer></div></div>}
     {newClientOpen&&<div className="dialog-backdrop">
 <form className="dialog" onSubmit={saveNewClient}>
 <header>
