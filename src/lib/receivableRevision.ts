@@ -1,5 +1,12 @@
 export type RevisionReceivable = {id:string;installment:number;installment_count:number;amount:number;paid_amount:number;status:string;due_date:string|null;payment_method:string|null}
 export type RevisionPart = {amount:number;due_date:string}
+export function updateRevisionAmount(parts:RevisionPart[],total:number,index:number,amount:number):RevisionPart[]{
+ const cents=Math.round(amount*100),totalCents=Math.round(total*100)
+ const updated=parts.map((part,i)=>i===index?{...part,amount:cents/100}:part)
+ if(index!==0||parts.length<2||!Number.isFinite(cents)||cents<0||cents>totalCents)return updated
+ const remaining=totalCents-cents,count=parts.length-1,base=Math.floor(remaining/count)
+ return updated.map((part,i)=>i===0?part:{...part,amount:(base+(i===parts.length-1?remaining-base*count:0))/100})
+}
 export const editableReceivable = (row:RevisionReceivable) => ['open','overdue'].includes(row.status) && Number(row.paid_amount)===0
 export const revisionSnapshot = (rows:RevisionReceivable[]) => rows.filter(row=>row.status!=='cancelled').map(row=>({id:row.id,amount:Number(row.amount),paid_amount:Number(row.paid_amount),status:row.status,due_date:row.due_date,payment_method:row.payment_method,installment:row.installment,installment_count:row.installment_count})).sort((a,b)=>a.id.localeCompare(b.id))
 export function distributeRevision(total:number,count:number,firstDue:string):RevisionPart[]{

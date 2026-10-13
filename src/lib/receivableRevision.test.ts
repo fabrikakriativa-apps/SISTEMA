@@ -1,6 +1,20 @@
 import {describe,it,expect} from 'vitest'
-import {distributeRevision,editableReceivable,revisionSnapshot} from './receivableRevision'
+import {distributeRevision,editableReceivable,revisionSnapshot,updateRevisionAmount} from './receivableRevision'
 describe('receivable revision',()=>{
+ it('distributes the remaining balance after changing the first amount and preserves dates',()=>{
+  const parts=distributeRevision(3060,2,'2026-10-08')
+  expect(updateRevisionAmount(parts,3060,0,2000).map(x=>x.amount)).toEqual([2000,1060])
+  const four=distributeRevision(3060,4,'2026-10-08')
+  const updated=updateRevisionAmount(four,3060,0,2000)
+  expect(updated.map(x=>x.amount)).toEqual([2000,353.33,353.33,353.34])
+  expect(updated.map(x=>x.due_date)).toEqual(four.map(x=>x.due_date))
+ })
+ it('keeps later manual changes and invalid first amounts visible for validation',()=>{
+  const parts=distributeRevision(3060,2,'2026-10-08')
+  expect(updateRevisionAmount(parts,3060,1,1000).map(x=>x.amount)).toEqual([1530,1000])
+  expect(updateRevisionAmount(parts,3060,0,4000).map(x=>x.amount)).toEqual([4000,1530])
+  expect(updateRevisionAmount(distributeRevision(3060,1,'2026-10-08'),3060,0,2000)[0].amount).toBe(2000)
+ })
  it('changes count without changing total, handling cents and month end',()=>{
   const parts=distributeRevision(500,3,'2026-01-31')
   expect(parts.map(x=>x.amount)).toEqual([166.66,166.66,166.68])
