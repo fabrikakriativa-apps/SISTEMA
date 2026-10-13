@@ -9,14 +9,16 @@ import {orderStatusLabels,type OrderStatus} from '../lib/orderStatus'
 import { ReceiptPreview } from './ReceiptPreview'
 import { readRecovery, writeRecovery, clearRecovery } from '../lib/recoveryDraft'
 import { DecimalInput } from './DecimalInput'
+import {OrderPaymentPlanEditor} from './OrderPaymentPlanEditor'
+import type {PaymentGroup} from '../lib/orderPaymentPlan'
 import { ReviseOrderReceivables } from './ReviseOrderReceivables'
 
 export type DetailOrder = {
   id:string; display_number:string; status:string; payment_terms:string|null; promised_date:string|null; client_address:string|null; notes:string|null; total:number; created_at:string
-  commercial_terms?:{condition:string;additional_discount:number;subtotal:number;total:number}|null
+  commercial_terms?:{condition:string;additional_discount:number;subtotal:number;total:number;payment_plan?:PaymentGroup[]}|null
   client:{name:string; document:string|null; address:string|null; city:string|null}|null; budget:{id:string;display_number:string}|null
   order_items:{id:string; status:string; snapshot:{environment?:string|null; description?:string; quantity?:number; sale_total?:number}}[]
-  receivables:{id:string; installment:number; installment_count:number; due_date:string|null; amount:number; paid_amount:number; paid_at:string|null; payment_method:string|null; status:string}[]
+  receivables:{id:string; installment:number; installment_count:number; due_date:string|null; amount:number; gross_amount?:number|null; fee_amount?:number; paid_amount:number; paid_at:string|null; payment_method:string|null; status:string}[]
 }
 const today = () => new Date().toISOString().slice(0,10)
 const date = (value:string|null) => value ? new Date(`${value.slice(0,10)}T12:00:00`).toLocaleDateString('pt-BR') : 'A confirmar'
@@ -55,15 +57,10 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
   const [promisedDate,setPromisedDate] = useState(order.promised_date ?? '')
   const [notes,setNotes] = useState(order.notes ?? '')
   const [deliverySaving,setDeliverySaving] = useState(false),[notesSaving,setNotesSaving] = useState(false)
-  const [method,setMethod] = useState('PIX'),[installments,setInstallments] = useState(1),[firstDue,setFirstDue] = useState(today()),[financeSaving,setFinanceSaving] = useState(false),[preview,setPreview] = useState(false),[receipt,setReceipt] = useState(false),[actionsOpen,setActionsOpen] = useState(false),[revisionSaving,setRevisionSaving] = useState(false)
+  const [preview,setPreview] = useState(false),[receipt,setReceipt] = useState(false),[actionsOpen,setActionsOpen] = useState(false),[revisionSaving,setRevisionSaving] = useState(false)
   const [itemSort,setItemSort]=useState<SortState<'item'|'quantity'|'value'|'operation'>>({key:'item',direction:'asc'})
-  const [customParts,setCustomParts]=useState<{amount:number;due_date:string;on_delivery:boolean}[]|null>(null)
   const [editingReceivable,setEditingReceivable]=useState<DetailOrder['receivables'][number]|null>(null)
-  const openReceivable=(item:DetailOrder['receivables'][number])=>{setActionsOpen(false);setEditingReceivable(item)}
-  const equalParts=useMemo(()=>{const cents=Math.round(Number(order.total)*100),base=Math.floor(cents/installments);return Array.from({length:installments},(_,index)=>{const due=new Date(`${firstDue}T12:00:00`);const day=due.getDate();due.setDate(1);due.setMonth(due.getMonth()+index);due.setDate(Math.min(day,new Date(due.getFullYear(),due.getMonth()+1,0).getDate()));return {amount:(base+(index===installments-1?cents-base*installments:0))/100,due_date:firstDue?`${due.getFullYear()}-${String(due.getMonth()+1).padStart(2,'0')}-${String(due.getDate()).padStart(2,'0')}`:'',on_delivery:false}})},[order.total,installments,firstDue])
-  const parts=customParts??equalParts
-  useEffect(()=>setCustomParts(null),[order.id,installments,firstDue])
-  const partsMatch=parts.every(p=>p.amount>0)&&Math.round(parts.reduce((s,p)=>s+p.amount,0)*100)===Math.round(Number(order.total)*100)
+  const openReceivable=(item:DetailOrder['receivables'][number])=>{if(order.commercial_terms?.payment_plan&&order.receivables.some(r=>Number(r.paid_amount)>0)){show('Pagamentos já recebidos estão preservados. Ajustes devem ser conferidos no financeiro.','info');return}setActionsOpen(false);setEditingReceivable(item)}
   const recoveryKey=`${organizationId}:order:${order.id}`
   const [autoState,setAutoState]=useState('saved')
   const latest=useRef({address,promisedDate,notes}), savingAuto=useRef(false)
@@ -96,7 +93,7 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
     return()=>window.clearTimeout(timer)
   },[address,promisedDate,notes,order.id,order.status])
   const receivables = useMemo(() => order.receivables.filter(item => item.status !== 'cancelled').sort((a,b) => a.installment-b.installment),[order.receivables])
-  const receivedTotal = receivables.reduce((sum,item)=>sum+Number(item.paid_amount||0),0)
+  const receivedTotal = receivables.reduce((sum,item)=>sum+Number(item.paid_amount||0)*(Number(item.gross_amount??item.amount)/Number(item.amount||1)),0)
   const sortedItems=useMemo(()=>[...order.order_items].sort((a,b)=>{const values={item:[`${a.snapshot.environment??''} ${a.snapshot.description??''}`,`${b.snapshot.environment??''} ${b.snapshot.description??''}`],quantity:[Number(a.snapshot.quantity??0),Number(b.snapshot.quantity??0)],value:[Number(a.snapshot.sale_total??0),Number(b.snapshot.sale_total??0)],operation:[a.status,b.status]}[itemSort.key];return compareValues(values[0],values[1])*(itemSort.direction==='asc'?1:-1)}),[order.order_items,itemSort])
   const saveDelivery = async () => {
     if(!supabase || deliverySaving) return
@@ -113,14 +110,6 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
     if(error) show('Não foi possível salvar as observações do pedido.','error')
     else { await onSaved(); show('Observações do pedido atualizadas.','success') }
     setNotesSaving(false)
-  }
-  const configureReceivables = async () => {
-    if(!supabase || financeSaving || commercialSaving || commercialDirty || !partsMatch) return
-    setFinanceSaving(true)
-    const {error} = customParts?await supabase.rpc('configure_order_custom_receivables',{org_id:organizationId,target_order_id:order.id,payment_method:method,installments_json:customParts}):await supabase.rpc('configure_order_receivables',{org_id:organizationId,target_order_id:order.id,installment_count:installments,first_due_date:firstDue,payment_method:method})
-    if(error) show(error.message.includes('Receivables already configured')?'Este pedido já possui parcelas no financeiro. Os valores digitados foram mantidos.':error.message.includes('Installments must equal')?'A soma das parcelas deve corresponder ao total salvo do pedido.':error.message.includes('not awaiting finance')?'O pedido precisa estar aguardando financeiro para gerar as parcelas.':error.message.includes('Due date')?'Informe o vencimento de todas as parcelas.':'Não foi possível gerar as parcelas. Os valores digitados foram mantidos.','error')
-    else { await onSaved(); show('Contas a receber geradas. O status do pedido pode ser definido por você.','success') }
-    setFinanceSaving(false)
   }
   const startRevision = async () => {
     if(!supabase || !order.budget?.id || revisionSaving) return
@@ -147,7 +136,7 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
 </div>
 </section>
     {preview && <OrderPreview order={{...order,client_address:address,promised_date:promisedDate||null,notes}} onClose={() => setPreview(false)}/>}
-    {receipt && <ReceiptPreview order={order} onClose={() => setReceipt(false)}/>}
+    {receipt && <ReceiptPreview order={{...order,receivables:order.receivables.map(r=>({...r,amount:Number(r.gross_amount??r.amount),paid_amount:Number(r.paid_amount)*(Number(r.gross_amount??r.amount)/Number(r.amount||1))}))}} onClose={() => setReceipt(false)}/>}
     {actionsOpen&&<div className="dialog-backdrop">
 <section className="dialog order-actions-dialog" role="dialog" aria-modal="true" aria-labelledby="order-actions-title">
 <header>
@@ -242,42 +231,16 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
 <label className="field">Desconto adicional (R$)<DecimalInput value={discount} decimalScale={2} disabled={receivables.length>0} onValueChange={setDiscount}/></label>
 <label className="field">Total após desconto<input readOnly value={money.format(commercialTotal)}/></label>
 <div className="field" role="status"><span>{commercialError?'Condição não salva. Confira o desconto e as parcelas existentes.':commercialSaving?'Salvando condição e desconto…':commercialDirty?'Aguardando salvamento automático…':'Condição e desconto salvos automaticamente'}</span></div>
-<label className="field">Forma de recebimento<select value={method} onChange={event => setMethod(event.target.value)}>
-<option>PIX</option>
-<option>Transferência bancária</option>
-<option>Boleto</option>
-<option>Cartão de crédito</option>
-<option>Cartão de débito</option>
-<option>Dinheiro</option>
-<option>A combinar</option>
-</select>
-</label>
-<label className="field">Quantidade de parcelas<input type="number" min="1" max="60" value={installments} onChange={event => setInstallments(Math.max(1,Math.min(60,Number(event.target.value)||1)))}/>
-</label>
-<label className="field">Primeiro vencimento<input required type="date" value={firstDue} onChange={event => setFirstDue(event.target.value)}/>
-</label>
-<div className="field"><span>{installments>1?'Total das parcelas':'Total a receber'}</span><input readOnly value={money.format(parts.reduce((sum,p)=>sum+p.amount,0))}/>{installments>1&&<button type="button" className="text-button" onClick={()=>setCustomParts(null)}>Distribuir igualmente</button>}</div>
-{installments>1&&<div className="order-payment-parts span-2">
-{parts.map((part,index)=><section className="order-payment-part" key={index} aria-label={`Parcela ${index+1}`}>
-<strong className="order-payment-part-title">Parcela {index+1} de {parts.length}</strong>
-<label className="field">Percentual (%)<DecimalInput ariaLabel={`Percentual da parcela ${index+1}`} value={Number(order.total)>0?Number((part.amount/Number(order.total)*100).toFixed(2)):0} decimalScale={2} onValueChange={percent=>setCustomParts(current=>(current??equalParts).map((p,i)=>i===index?{...p,amount:Math.round(Number(order.total)*percent)/100}:p))}/></label>
-<label className="field">Valor (R$)<DecimalInput ariaLabel={`Valor da parcela ${index+1}`} value={part.amount} decimalScale={2} onValueChange={amount=>setCustomParts(current=>(current??equalParts).map((p,i)=>i===index?{...p,amount}:p))}/></label>
-<label className="field">Vencimento<input aria-label={`Vencimento da parcela ${index+1}`} type="date" value={part.due_date} onChange={e=>setCustomParts(current=>(current??equalParts).map((p,i)=>i===index?{...p,due_date:e.target.value}:p))}/></label>
-</section>)}
-</div>}
-{!partsMatch&&<p role="alert">A soma das parcelas deve corresponder ao total do pedido.</p>}
+<div className="span-2"><OrderPaymentPlanEditor key={`${order.id}:${order.total}`} organizationId={organizationId} orderId={order.id} total={Number(order.total)} initial={order.commercial_terms?.payment_plan} onSaved={onSaved} disabled={commercialSaving||commercialDirty}/></div>
 </div>
-<footer>
-<button className="button primary" disabled={financeSaving||commercialSaving||commercialDirty||!partsMatch} onClick={() => void configureReceivables()}>{financeSaving ? 'Gerando…' : 'Gerar contas a receber'}</button>
-</footer>
 </> : <div className="order-receivable-list">{receivables.length ? receivables.map(item => <div key={item.id} role={['open','overdue'].includes(item.status)&&Number(item.paid_amount)===0?'button':undefined} tabIndex={['open','overdue'].includes(item.status)&&Number(item.paid_amount)===0?0:undefined} aria-label={`Revisar parcela ${item.installment}`} onClick={()=>{if(['open','overdue'].includes(item.status)&&Number(item.paid_amount)===0)openReceivable(item)}} onKeyDown={e=>{if((e.key==='Enter'||e.key===' ')&&['open','overdue'].includes(item.status)&&Number(item.paid_amount)===0){e.preventDefault();openReceivable(item)}}}>
-<span>Parcela {item.installment}/{item.installment_count}</span>
+<span>{item.gross_amount!=null&&item.payment_method==='Cartão de crédito'?'Crédito antecipado':`Parcela ${item.installment}/${item.installment_count}`}</span>
 <span>{item.payment_method || 'A combinar'}</span>
 <span>{date(item.due_date)}</span>
-<strong>{money.format(Number(item.amount))}</strong>
+<strong>{money.format(Number(item.amount))}{Number(item.fee_amount)>0&&<small style={{display:'block'}}>Bruto {money.format(Number(item.gross_amount))} · Taxa {money.format(Number(item.fee_amount))}</small>}</strong>
 </div>) : <p>Nenhuma parcela registrada neste pedido.</p>}</div>}</section>
     </section>
-    {editingReceivable&&<ReviseOrderReceivables organizationId={organizationId} orderId={order.id} rows={receivables} onClose={()=>setEditingReceivable(null)} onSaved={onSaved}/>}
+    {editingReceivable&&receivables.every(r=>Number(r.paid_amount)===0&&['open','overdue'].includes(r.status))?<div className="dialog-backdrop"><section className="dialog order-receivable-revision"><header><h2>Revisar pagamentos do pedido</h2></header><OrderPaymentPlanEditor organizationId={organizationId} orderId={order.id} total={Number(order.total)} initial={order.commercial_terms?.payment_plan} rows={receivables} onSaved={onSaved} onClose={()=>setEditingReceivable(null)}/></section></div>:editingReceivable&&<ReviseOrderReceivables organizationId={organizationId} orderId={order.id} rows={receivables} onClose={()=>setEditingReceivable(null)} onSaved={onSaved}/>}
     <section className="panel order-notes-card">
 <header>
 <div>

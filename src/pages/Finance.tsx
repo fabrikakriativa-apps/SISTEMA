@@ -19,6 +19,8 @@ type Receivable = {
     due_date: string | null;
     amount: number;
     paid_amount: number;
+    gross_amount?:number|null;
+    fee_amount?:number;
     status: FinancialStatus;
     payment_method: string | null;
     order: {
@@ -44,7 +46,7 @@ function ReceivablesPanel({ period }: {
 }) {
     const access = useAccess(), { show } = useToast(), [items, setItems] = useState<Receivable[]>([]), [loading, setLoading] = useState(true), [error, setError] = useState(''), [search, setSearch] = useState(''), [dateRange, setDateRange] = useState<DateRange>({ from: '', to: '' }), [sort, setSort] = useState<SortState<'installment' | 'order' | 'due' | 'amount' | 'method' | 'status'>>({ key: 'due', direction: 'asc' }), [summaryFilter, setSummaryFilter] = useState<'all' | 'received' | 'open' | 'groups' | 'history'>('all'), [selected, setSelected] = useState<Receivable | null>(null), [scope, setScope] = useState<'single' | 'group'>('single'), [dueDate, setDueDate] = useState(''), [amount, setAmount] = useState(0), [method, setMethod] = useState(''), [saving, setSaving] = useState(false), [payment, setPayment] = useState<Receivable | null>(null), [paymentScope, setPaymentScope] = useState<'single' | 'group'>('single'), [paymentAmount, setPaymentAmount] = useState(0), [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10)), [reversal, setReversal] = useState<Receivable | null>(null), [reversalScope, setReversalScope] = useState<'single' | 'group'>('single'), [reversalReason, setReversalReason] = useState('');
     const load = useCallback(async () => { if (!supabase || !access)
-        return; setLoading(true); setError(''); await supabase.rpc('refresh_financial_overdues', { org_id: access.organizationId }); const { data, error } = await supabase.from('receivables').select('id,group_id,installment,installment_count,description,due_date,amount,paid_amount,status,payment_method,order:orders!receivables_order_id_fkey(display_number,client:clients!orders_client_id_fkey(name))').eq('organization_id', access.organizationId).order('due_date', { ascending: true }).order('installment', { ascending: true }).abortSignal(AbortSignal.timeout(15000)); if (error)
+        return; setLoading(true); setError(''); await supabase.rpc('refresh_financial_overdues', { org_id: access.organizationId }); const { data, error } = await supabase.from('receivables').select('id,group_id,installment,installment_count,description,due_date,amount,gross_amount,fee_amount,paid_amount,status,payment_method,order:orders!receivables_order_id_fkey(display_number,client:clients!orders_client_id_fkey(name))').eq('organization_id', access.organizationId).order('due_date', { ascending: true }).order('installment', { ascending: true }).abortSignal(AbortSignal.timeout(15000)); if (error)
         setError('Não foi possível carregar as contas a receber.');
     else
         setItems((data ?? []) as unknown as Receivable[]); setLoading(false); }, [access]);
@@ -59,7 +61,7 @@ function ReceivablesPanel({ period }: {
             return compareValues(values[0], values[1]) * (sort.direction === 'asc' ? 1 : -1);
         });
     }, [matching, summaryFilter, sort]);
-    const openEditor = (item: Receivable) => { setSelected(item); setScope('single'); setDueDate(item.due_date ?? ''); setAmount(Number(item.amount)); setMethod(item.payment_method ?? 'A combinar'); };
+    const openEditor = (item: Receivable) => { if(item.gross_amount!=null){show('Altere valores, taxas e formas de pagamento na revisão de pagamentos do pedido. Aqui você registra o recebimento líquido.','info');return} setSelected(item); setScope('single'); setDueDate(item.due_date ?? ''); setAmount(Number(item.amount)); setMethod(item.payment_method ?? 'A combinar'); };
     const save = async (e: FormEvent) => { e.preventDefault(); if (!supabase || !access || !selected || saving)
         return; setSaving(true); const { error } = await supabase.rpc('update_receivable', { org_id: access.organizationId, target_receivable_id: selected.id, edit_scope: scope, new_due_date: dueDate, new_amount: amount, new_payment_method: method }); if (error)
         show(error.code === '42501' ? 'Somente usuários do Financeiro ou administradores podem editar parcelas.' : 'Não foi possível atualizar a parcela.', 'error');
@@ -138,7 +140,7 @@ function ReceivablesPanel({ period }: {
 </thead>
 <tbody>{filtered.map(item => <tr className="clickable-row" key={item.id} onClick={() => openEditor(item)}>
 <td>
-<strong>Parcela {item.installment}/{item.installment_count}</strong>
+<strong>{item.gross_amount!=null?item.description:`Parcela ${item.installment}/${item.installment_count}`}</strong>
 <small className="table-subline">{groupLabel(item)}</small>
 </td>
 <td>
@@ -147,7 +149,7 @@ function ReceivablesPanel({ period }: {
 </td>
 <td>{item.due_date ? new Date(`${item.due_date}T12:00:00`).toLocaleDateString('pt-BR') : 'Sem vencimento'}</td>
 <td>
-<strong>{money.format(Number(item.amount))}</strong>
+<strong>{money.format(Number(item.amount))}</strong>{Number(item.fee_amount)>0&&<small className="table-subline">Bruto: {money.format(Number(item.gross_amount))} · Taxa: {money.format(Number(item.fee_amount))} · Líquido acima</small>}
 <small className="table-subline">Recebido: {money.format(Number(item.paid_amount))}</small>
 </td>
 <td>{item.payment_method ?? 'A combinar'}</td>

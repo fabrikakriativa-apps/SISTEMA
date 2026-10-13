@@ -1,11 +1,12 @@
 import { Printer, X } from 'lucide-react'
+import {customerPaymentLabel,type PaymentGroup} from '../lib/orderPaymentPlan'
 import { money } from '../lib/format'
 import { SaveDocumentImage } from './SaveDocumentImage'
 
 type OrderItem = { id:string; snapshot:{ environment?:string|null; description?:string; quantity?:number; sale_total?:number } }
 type Receivable = { id:string; installment:number; installment_count:number; due_date:string|null; amount:number; payment_method:string|null; status:string }
 type PreviewOrder = {
-  commercial_terms?:{subtotal:number;additional_discount:number}|null
+  commercial_terms?:{subtotal:number;additional_discount:number;payment_plan?:PaymentGroup[]}|null
   display_number:string; created_at:string; payment_terms:string|null; promised_date:string|null; client_address:string|null; notes:string|null; total:number
   client:{ name:string; document:string|null; address:string|null; city:string|null }|null; order_items:OrderItem[]; receivables?:Receivable[]
 }
@@ -16,7 +17,7 @@ export function OrderPreview({order,onClose}:{order:PreviewOrder;onClose:()=>voi
   const installments = (order.receivables ?? []).filter(item => item.status !== 'cancelled').sort((a,b) => a.installment-b.installment)
   const paymentParts = (order.payment_terms || 'A combinar').split(' · ').map(part => part.trim()).filter(part => part && !/^desconto adicional\b/i.test(part) && !/^Valor original do orçamento$/i.test(part))
   const paymentLabel = paymentParts.find(part => !/^\d+x$/i.test(part)) || installments[0]?.payment_method || 'A combinar'
-  const paymentTerms = [paymentLabel, ...paymentParts.filter(part => part !== paymentLabel && !paymentLabel.toLocaleLowerCase().includes(`(${part.toLocaleLowerCase()})`))].join(' · ')
+  const paymentTerms = order.commercial_terms?.payment_plan?.length?order.commercial_terms.payment_plan.map(g=>customerPaymentLabel(g)+(order.commercial_terms!.payment_plan!.length>1?` — ${money.format(g.amount)}`:'')).join(' + '):[paymentLabel, ...paymentParts.filter(part => part !== paymentLabel && !paymentLabel.toLocaleLowerCase().includes(`(${part.toLocaleLowerCase()})`))].join(' · ')
   return <div className="preview-backdrop">
     <div className="client-preview-shell">
       <div className="preview-toolbar">
@@ -42,7 +43,7 @@ export function OrderPreview({order,onClose}:{order:PreviewOrder;onClose:()=>voi
             <strong>{money.format(Number(item.snapshot.sale_total || 0))}</strong>
           </div>)}
         </section>
-        {installments.length > 0 && <section className="order-installments"><strong>PARCELAS</strong>{installments.map(item => <div key={item.id}><span>Parcela {item.installment}/{item.installment_count}</span><span>{item.payment_method || 'A combinar'}</span><span>{displayDate(item.due_date)}</span><b>{money.format(Number(item.amount))}</b></div>)}</section>}
+        {order.commercial_terms?.payment_plan?.length ? <section className="order-installments"><strong>PAGAMENTO</strong>{order.commercial_terms.payment_plan.map((group,index)=><div key={index}><span>{customerPaymentLabel(group)}</span><b>{money.format(group.amount)}</b></div>)}{order.commercial_terms.payment_plan.flatMap((group,groupIndex)=>group.method==='Cartão de crédito'?[]:group.parts.map((part,index)=><div key={`${groupIndex}-${index}`}><span>{group.method} · parcela {index+1}/{group.parts.length}</span><span>{displayDate(part.due_date)}</span><b>{money.format(part.amount)}</b></div>))}</section> : installments.length > 0 && <section className="order-installments"><strong>PARCELAS</strong>{installments.map(item => <div key={item.id}><span>Parcela {item.installment}/{item.installment_count}</span><span>{item.payment_method || 'A combinar'}</span><span>{displayDate(item.due_date)}</span><b>{money.format(Number(item.amount))}</b></div>)}</section>}
         <section className="document-total"><div><span>Subtotal</span><strong>{money.format(Number(order.commercial_terms?.subtotal??order.total))}</strong></div>{order.commercial_terms&&Number(order.commercial_terms.subtotal)>Number(order.total)&&<div><span>Descontos</span><strong>{money.format(Number(order.commercial_terms.subtotal)-Number(order.total))}</strong></div>}<div className="grand-total"><span>Total do pedido</span><strong>{money.format(Number(order.total))}</strong></div></section>
         {order.notes && <footer><p><strong>Observações:</strong> {order.notes}</p></footer>}
       </article>
