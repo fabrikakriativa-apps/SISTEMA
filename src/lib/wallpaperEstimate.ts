@@ -12,3 +12,17 @@ export function calculateWallpaperEstimate(v:WallpaperEstimate){
  return {strip,strips,yieldPerRoll,rolls,suggested,labor,cost,sale:Math.round(cost*(1+positive(v.margin)/100)*100)/100,invalid:strips>0&&yieldPerRoll===0}
 }
 export function wallpaperEstimateDescription(v:WallpaperEstimate){const r=calculateWallpaperEstimate(v);const n=(x:number)=>x.toLocaleString('pt-BR',{maximumFractionDigits:3});return `Papel de parede ${[v.name,v.code].filter(Boolean).join(' - ')}. Parede medindo ${n(v.wall_width)} × ${n(v.wall_height)} m. ${r.rolls} rolo(s), rolo de ${n(v.roll_width)} × ${n(v.roll_length)} m.`}
+
+export function wallpaperItemCosts(value:WallpaperEstimate){
+ const result=calculateWallpaperEstimate(value)
+ return {manufacturer_cost:Math.round(result.rolls*Math.max(0,Number(value.roll_cost)||0)*100)/100,additional_cost:Math.round((result.labor+Math.max(0,Number(value.additional)||0))*100)/100}
+}
+
+// Recover only known estimates. Never infer costs from the selling price/description.
+export function recoverWallpaperItemCosts(value:unknown){
+ if(!value||typeof value!=='object')return null
+ const v={...blankWallpaperEstimate,...value} as WallpaperEstimate
+ const result=calculateWallpaperEstimate(v)
+ if(!Number.isFinite(Number(v.roll_cost))||Number(v.roll_cost)<=0||!result.rolls||result.invalid)return null
+ return wallpaperItemCosts(v)
+}

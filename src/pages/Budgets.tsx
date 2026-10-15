@@ -21,7 +21,7 @@ import { budgetDocumentPath } from '../lib/documents'
 import { confectionSubitems } from '../domain'
 import { UpholsteryEstimateCalculator } from '../components/UpholsteryEstimateCalculator'
 import {WallpaperEstimateCalculator} from '../components/WallpaperEstimateCalculator'
-import {blankWallpaperEstimate,type WallpaperEstimate} from '../lib/wallpaperEstimate'
+import {blankWallpaperEstimate,wallpaperItemCosts,recoverWallpaperItemCosts,type WallpaperEstimate} from '../lib/wallpaperEstimate'
 import { DateRangeFilter, inDateRange, type DateRange } from '../components/DateRangeFilter'
 import { SortableHeader, compareValues, type SortState } from '../components/SortableHeader'
 import { newUpholsteryEstimate, type UpholsteryEstimate } from '../lib/upholsteryEstimate'
@@ -336,6 +336,10 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
       supabase.from('item_cost_lines').select('kind,supply_id,supplier_id,description,quantity,unit,unit_cost,labor_days,labor_start_date').eq('organization_id',budgetOrganizationId).eq('budget_item_id',item.id),
       supabase.from('attachments').select('id,original_name,storage_path,created_at').eq('organization_id',budgetOrganizationId).is('deleted_at',null).eq('entity_type','budget_item').eq('entity_id',item.id).eq('purpose','item_reference_photo').order('created_at',{ascending:false})
     ]);setSupplyLines((costResult.data??[]).filter(line=>line.kind==='supply').map(line=>({...line,supply_id:line.supply_id??'',quantity:Number(line.quantity),unit_cost:Number(line.unit_cost)})) as SupplyLine[]);setLaborLines((costResult.data??[]).filter(line=>line.kind==='service').map(line=>({supplier_id:line.supplier_id??'',description:line.description,days:Number(line.labor_days??1),amount:Number(line.unit_cost),start_date:line.labor_start_date??''})) as LaborLine[]);setItemPhotos((photoResult.data??[]) as ItemPhoto[]);restoreItemDraft(item.id)}
+    if(isPreBudget&&families.find(f=>f.id===item.family_id)?.form_key==='wallpaper'&&Number(item.cost_total)===0){
+      const recovered=recoverWallpaperItemCosts(c.wallpaper_estimate)
+      if(recovered)setItemForm(current=>({...current,...recovered}))
+    }
     setItemOpen(true)
   }
   const applyPdfCandidate=(document:ParsedManufacturerDocument,index:number)=>{
@@ -809,7 +813,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <small>O detalhamento comercial continua na descrição do item.</small>
 </label>}<label className="field span-2">Descrição para o cliente<textarea required value={itemForm.description} onChange={e=>setItemForm({...itemForm,description:e.target.value})} placeholder="Descreva modelo, material, medidas e acabamento"/>
 </label>
-{isPreBudget&&selectedFormKey==='wallpaper'&&<WallpaperEstimateCalculator organizationId={budgetOrganizationId} value={(itemForm.initial_configuration.wallpaper_estimate as WallpaperEstimate)??blankWallpaperEstimate} onChange={value=>setItemForm(current=>({...current,initial_configuration:{...current.initial_configuration,wallpaper_estimate:value}}))} onApply={(sale,description)=>setItemForm(current=>({...current,sale_total:sale,description}))}/>}
+{isPreBudget&&selectedFormKey==='wallpaper'&&<WallpaperEstimateCalculator organizationId={budgetOrganizationId} value={(itemForm.initial_configuration.wallpaper_estimate as WallpaperEstimate)??blankWallpaperEstimate} onChange={value=>setItemForm(current=>({...current,...wallpaperItemCosts(value),initial_configuration:{...current.initial_configuration,wallpaper_estimate:value}}))} onApply={(sale,description)=>setItemForm(current=>({...current,...wallpaperItemCosts((current.initial_configuration.wallpaper_estimate as WallpaperEstimate)??blankWallpaperEstimate),sale_total:sale,description}))}/>}
 {isPreBudget&&supportsUpholsteryCalculator&&<UpholsteryEstimateCalculator
   estimate={upholsteryEstimate}
   onChange={setUpholsteryEstimate}
