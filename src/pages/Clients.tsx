@@ -6,6 +6,7 @@ import { useToast } from '../components/ToastProvider'
 import { useAccess } from '../components/AuthorizedAccess'
 import { supabase } from '../lib/supabase'
 import {SortableHeader,compareValues,type SortState} from '../components/SortableHeader'
+import {ClientPartnerSelect} from '../components/ClientPartnerSelect'
 
 type Client={id:string;name:string;document:string|null;phone:string|null;address:string|null;city:string|null;origin:string|null;notes:string|null;client_type:string;master_client_id:string|null;archived_at:string|null}
 type ClientForm={id?:string;name:string;document:string;phone:string;address:string;city:string;origin:string;origin_notes:string;client_type:string;master_client_id:string}
@@ -15,7 +16,6 @@ const originOptions=['Porta de loja','Instagram','Google','Indicação']
 export function Clients(){
  const access=useAccess(),catalog=useCatalog<Client>('clients','id,name,document,phone,address,city,origin,notes,client_type,master_client_id,archived_at'),{items}=catalog,{show}=useToast()
  const [search,setSearch]=useState(''),[sort,setSort]=useState<SortState<'name'|'type'|'phone'|'city'|'origin'|'budgets'|'master'|'status'>>({key:'name',direction:'asc'}),[open,setOpen]=useState(false),[form,setForm]=useState<ClientForm>(empty),[changingStatus,setChangingStatus]=useState(''),[budgetCounts,setBudgetCounts]=useState<Record<string,number>>({})
- const masters=useMemo(()=>items.filter(item=>item.client_type==='Parceiro/master'&&!item.archived_at&&item.id!==form.id),[items,form.id])
  const masterNames=useMemo(()=>Object.fromEntries(items.map(item=>[item.id,item.name])),[items])
  useEffect(()=>{if(!supabase||!access)return;void supabase.from('budgets').select('client_id').eq('organization_id',access.organizationId).not('client_id','is',null).then(({data})=>setBudgetCounts((data??[]).reduce<Record<string,number>>((counts,row)=>{if(row.client_id)counts[row.client_id]=(counts[row.client_id]??0)+1;return counts},{})))},[access])
  const save=async(event:FormEvent)=>{event.preventDefault();try{const payload={name:form.name.trim(),document:form.document.trim()||null,phone:form.phone.trim()||null,address:form.address.trim()||null,city:form.city.trim()||null,origin:form.origin||null,notes:form.origin_notes.trim()||null,client_type:form.client_type,master_client_id:form.client_type==='Cliente final'?(form.master_client_id||null):null};const saved=form.id?await catalog.update(form.id,payload):await catalog.save(payload);if(saved){show(form.id?'Cliente atualizado.':'Cliente salvo.','success');setForm(empty);setOpen(false)}}catch(error){show(error instanceof Error?error.message:'Não foi possível salvar.','error')}}
@@ -99,11 +99,7 @@ export function Clients(){
 </select>
 </label>
 <label className="field">Telefone<input value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})}/>
-</label>{form.client_type==='Cliente final'&&<label className="field span-2">Parceiro/master vinculado<select value={form.master_client_id} onChange={e=>setForm({...form,master_client_id:e.target.value})}>
-<option value="">Nenhum parceiro vinculado</option>{masters.map(master=>
-<option key={master.id} value={master.id}>{master.name}</option>)}</select>
-<small>Somente parceiros ativos aparecem nesta lista.</small>
-</label>}<label className="field span-2">Endereço<input value={form.address} onChange={e=>setForm({...form,address:e.target.value})} placeholder="Rua, número e complemento"/>
+</label>{form.client_type==='Cliente final'&&<ClientPartnerSelect key={form.id??'new'} value={form.master_client_id} clientId={form.id} onChange={master_client_id=>setForm(current=>({...current,master_client_id}))}/>}<label className="field span-2">Endereço<input value={form.address} onChange={e=>setForm({...form,address:e.target.value})} placeholder="Rua, número e complemento"/>
 </label>
 <label className="field span-2">Cidade/UF<input value={form.city} onChange={e=>setForm({...form,city:e.target.value})}/>
 </label>
