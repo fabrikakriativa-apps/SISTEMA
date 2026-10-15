@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Plus, Search, Trash2, X } from 'lucide-react'
 import { DecimalInput } from './DecimalInput'
+import { SearchSelect } from './SearchSelect'
+import { adjustPayableAmount, payableItemLabel } from '../lib/payableEditor'
 import { useToast } from './ToastProvider'
 import { money } from '../lib/format'
 import { supabase } from '../lib/supabase'
@@ -37,7 +39,7 @@ const matchesPeriod = (dueDate: string | null, period: string | null) => {
   if (period === 'month') { const start = dateKey(new Date(now.getFullYear(), now.getMonth(), 1)), end = dateKey(new Date(now.getFullYear(), now.getMonth() + 1, 0)); return dueDate >= start && dueDate <= end }
   return true
 }
-const itemLabel = (item: { description?: string; environment?: string | null }) => item.environment?.trim() || item.description || 'Item sem descrição'
+const itemLabel = payableItemLabel
 const createInstallments = (total: number, count: number, firstDue: string): Installment[] => {
   const safeCount = Math.max(1, Math.trunc(count) || 1)
   const commonValue = rounded(total / safeCount)
@@ -73,6 +75,11 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({ description: '', supplierId: '', orderId: '', budgetItemId: '', method: 'A combinar', total: 0, count: 1, firstDue: today() })
   const [installments, setInstallments] = useState<Installment[]>([])
+  const [orderSearch,setOrderSearch]=useState('')
+  const [paymentAction,setPaymentAction]=useState<'pay'|'reverse'|null>(null)
+  const [paymentAmount,setPaymentAmount]=useState(0)
+  const [paymentDate,setPaymentDate]=useState(today())
+  const [paymentReason,setPaymentReason]=useState('')
 
   const load = useCallback(async () => {
     if (!supabase) return
@@ -102,11 +109,12 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
   const totalsMatch = installments.length > 0 && installmentsTotal === rounded(form.total)
   const lockedInstallments = installments.filter(installment => installment.locked)
   const lockedTotal = rounded(lockedInstallments.reduce((sum, installment) => sum + installment.amount, 0))
-  const updateInstallment = (index: number, patch: Partial<Installment>) => setInstallments(current => current.map((item, itemIndex) => itemIndex === index && !item.locked ? { ...item, ...patch } : item))
+  const updateInstallment = (index: number, patch: Partial<Installment>) => setInstallments(current => patch.amount!==undefined?adjustPayableAmount(current,form.total,index,patch.amount):current.map((item, itemIndex) => itemIndex === index && !item.locked ? { ...item, ...patch } : item))
 
   const beginCreate = () => {
     const fresh = { description: '', supplierId: '', orderId: '', budgetItemId: '', method: 'A combinar', total: 0, count: 1, firstDue: today() }
     setForm(fresh)
+    setOrderSearch('')
     setInstallments(createInstallments(fresh.total, fresh.count, fresh.firstDue))
     setEditingGroupId(null)
     setOpen(true)
@@ -117,6 +125,8 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
     const group = items.filter(item => item.group_id === selected.group_id).sort((a, b) => a.installment - b.installment)
     const first = group[0]
     if (!first) return
+    const linked=orders.find(order=>order.id===first.order_id)
+    setOrderSearch(linked?`${linked.display_number} · ${linked.client?.name??'Cliente não informado'}`:'')
     setForm({ description: first.description, supplierId: first.supplier?.id ?? '', orderId: first.order_id ?? '', budgetItemId: first.budget_item_id ?? '', method: first.payment_method ?? 'A combinar', total: rounded(group.reduce((sum, item) => sum + Number(item.amount), 0)), count: group.length, firstDue: first.due_date ?? today() })
     setInstallments(group.map(item => {
       const locked = Number(item.paid_amount) > 0 || !['open', 'overdue'].includes(item.status)
@@ -130,6 +140,7 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
   const save = async (event: FormEvent) => {
     event.preventDefault()
     if (!supabase || saving) return
+    if(orderSearch.trim()&&!form.orderId){show('Selecione o pedido nos resultados da busca ou remova o texto para salvar sem vínculo.','error');return}
     if (installments.length !== form.count) { show('Clique em “Redistribuir parcelas” para aplicar a nova quantidade.', 'error'); return }
     if (!totalsMatch) { show('A soma das parcelas deve ser igual ao valor total.', 'error'); return }
     setSaving(true)
@@ -155,6 +166,22 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
   }
 
   const canDelete = Boolean(selected && !selected.purchase_id && Number(selected.paid_amount) === 0 && ['open', 'overdue'].includes(selected.status))
+  const beginPaymentAction=(item:Payable,action:'pay'|'reverse')=>{
+    setSelected(item);setPaymentAction(action);setPaymentAmount(rounded(Number(item.amount)-Number(item.paid_amount)));setPaymentDate(today());setPaymentReason('')
+  }
+  const savePaymentAction=async(event:FormEvent)=>{
+    event.preventDefault()
+    if(!supabase||!selected||!paymentAction||saving)return
+    if(paymentAction==='pay'&&(paymentAmount<=0||paymentAmount>rounded(Number(selected.amount)-Number(selected.paid_amount)))){show('Informe um valor maior que zero e dentro do saldo da parcela.','error');return}
+    if(paymentAction==='reverse'&&paymentReason.trim().length<5)return
+    setSaving(true)
+    const {error}=paymentAction==='pay'
+      ?await supabase.rpc('register_payable_payment',{org_id:organizationId,target_payable_id:selected.id,payment_scope:'single',payment_amount:paymentAmount,payment_date:paymentDate})
+      :await supabase.rpc('reverse_payable_payment',{org_id:organizationId,target_payable_id:selected.id,reversal_scope:'single',reversal_reason:paymentReason})
+    setSaving(false)
+    if(error){show(error.code==='42501'?'Seu perfil não tem permissão para registrar pagamentos.':'Não foi possível atualizar o pagamento. Confira os dados e tente novamente.','error');return}
+    show(paymentAction==='pay'?'Pagamento registrado.':'Pagamento estornado e saldo reaberto.','success');setPaymentAction(null);setSelected(null);await load()
+  }
   const selectedOrder = orders.find(order => order.id === form.orderId)
 
   return <>
@@ -166,11 +193,11 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
       </div>
       <div className="table-wrap"><table><thead><tr><SortableHeader label="Parcelas" column="installment" sort={sort} onChange={setSort} /><SortableHeader label="Pedido / fornecedor" column="order" sort={sort} onChange={setSort} /><SortableHeader label="Vencimento" column="due" sort={sort} onChange={setSort} /><SortableHeader label="Valor / saldo" column="amount" sort={sort} onChange={setSort} /><SortableHeader label="Status" column="status" sort={sort} onChange={setSort} /></tr></thead><tbody>
         {visible.map(item => <tr className="clickable-row" key={item.id} onClick={() => setSelected(item)}>
-          <td><strong>Parcela {item.installment}/{item.installment_count}</strong><small>{item.installment_count > 1 ? `${item.installment_count} parcelas vinculadas` : 'Lançamento único'}</small></td>
-          <td>{item.purchase?.display_number ? <><strong>{item.purchase.display_number}</strong><small>{item.purchase.supplier?.name ?? item.supplier?.name ?? 'Fornecedor não informado'}</small></> : item.order?.display_number ? <><strong>{item.order.display_number}{item.budget_item ? ` · ${itemLabel(item.budget_item)}` : ''}</strong><small>{item.supplier?.name ?? 'Fornecedor não informado'}</small></> : <>{item.supplier?.name ?? 'Fornecedor não informado'}</>}</td>
+          <td><strong>Parcela {item.installment}/{item.installment_count}</strong><small className="table-subline">{item.installment_count > 1 ? `${item.installment_count} parcelas vinculadas` : 'Lançamento único'}</small></td>
+          <td style={{whiteSpace:'normal',minWidth:240,maxWidth:520}}><strong style={{display:'block'}}>{item.order?.display_number ?? item.purchase?.display_number ?? 'Sem pedido vinculado'}</strong>{item.order?.client?.name&&<span className="table-subline">{item.order.client.name}</span>}{item.budget_item&&<span className="table-subline">{itemLabel(item.budget_item)}</span>}<small className="table-subline">Fornecedor: {item.supplier?.name ?? item.purchase?.supplier?.name ?? 'Não informado'}</small></td>
           <td>{formatDate(item.due_date)}</td>
           <td className="payable-value"><strong>{money.format(Number(item.amount))}</strong><small><span>Pago: {money.format(Number(item.paid_amount))}</span><span>Saldo: {money.format(Math.max(0, Number(item.amount) - Number(item.paid_amount)))}</span></small></td>
-          <td>{statusLabel[item.status] ?? item.status}</td>
+          <td><select className="status-select" aria-label={`Status parcela ${item.installment} de ${item.description}`} value={item.status} onClick={event=>event.stopPropagation()} onChange={event=>{if(event.target.value==='pay')beginPaymentAction(item,'pay');if(event.target.value==='reverse')beginPaymentAction(item,'reverse')}}><option value={item.status}>{statusLabel[item.status]??item.status}</option>{['open','overdue','partial'].includes(item.status)&&<option value="pay">Registrar pagamento…</option>}{Number(item.paid_amount)>0&&['partial','settled'].includes(item.status)&&<option value="reverse">Estornar / reabrir…</option>}</select></td>
         </tr>)}
         {!visible.length && <tr><td colSpan={5} className="empty">Nenhuma conta a pagar encontrada.</td></tr>}
       </tbody></table></div>
@@ -181,7 +208,7 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
       <div className="form-grid">
         <label className="field span-2">Descrição<input required value={form.description} onChange={event => setForm({ ...form, description: event.target.value })} placeholder="Ex.: Tecidos para cabeceira" /></label>
         <label className="field span-2">Fornecedor<select required value={form.supplierId} onChange={event => setForm({ ...form, supplierId: event.target.value })}><option value="">Selecione o fornecedor</option>{suppliers.map(supplier => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}</select></label>
-        <label className="field span-2">Vincular a pedido (opcional)<select value={form.orderId} onChange={event => setForm({ ...form, orderId: event.target.value, budgetItemId: '' })}><option value="">Sem vínculo com pedido</option>{orders.map(order => <option key={order.id} value={order.id}>{order.display_number} · {order.client?.name ?? 'Cliente não informado'}</option>)}</select><small>O vínculo permite acompanhar o custo real e o resultado da venda.</small></label>
+        <div className="field span-2"><span>Vincular a pedido (opcional)</span><SearchSelect ariaLabel="Buscar pedido da conta a pagar" value={orderSearch} placeholder="Digite o número do pedido ou nome do cliente" options={orders.map(order=>({id:order.id,label:`${order.display_number} · ${order.client?.name??'Cliente não informado'}`}))} onChange={value=>{setOrderSearch(value);setForm(current=>({...current,orderId:'',budgetItemId:''}))}} onSelect={option=>{setOrderSearch(option.label);setForm(current=>({...current,orderId:option.id,budgetItemId:''}))}}/>{orderSearch&&<button type="button" className="button secondary" onClick={()=>{setOrderSearch('');setForm(current=>({...current,orderId:'',budgetItemId:''}))}}>Remover vínculo com pedido</button>}<small>O vínculo permite acompanhar o custo real e o resultado da venda.</small></div>
         {selectedOrder && <label className="field span-2">Item do pedido<select required value={form.budgetItemId} onChange={event => setForm({ ...form, budgetItemId: event.target.value })}><option value="">Selecione o item</option>{selectedOrder.order_items.map(item => <option key={item.id} value={item.budget_item_id}>{itemLabel(item.snapshot)}</option>)}</select></label>}
         <label className="field">Forma de pagamento<input required value={form.method} onChange={event => setForm({ ...form, method: event.target.value })} /></label>
         <label className="field">Valor total<DecimalInput value={form.total} decimalScale={2} onValueChange={value => setForm({ ...form, total: value })} /></label>
@@ -196,14 +223,21 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
           {installments.map((installment, index) => <div key={index}>
             <b>{index + 1}/{installments.length}{installment.locked ? ' · pago' : ''}</b>
             <input aria-label={`Vencimento parcela ${index + 1}`} type="date" disabled={installment.locked} value={installment.due_date} onChange={event => updateInstallment(index, { due_date: event.target.value })} />
-            <DecimalInput value={installment.amount} decimalScale={2} disabled={installment.locked} onValueChange={value => updateInstallment(index, { amount: value })} />
+            <DecimalInput ariaLabel={`Valor parcela ${index+1}`} value={installment.amount} decimalScale={2} disabled={installment.locked} onValueChange={value => updateInstallment(index, { amount: value })} />
           </div>)}
           <div className="installments-total"><span>Total das parcelas</span><strong>{money.format(installmentsTotal)}</strong>{!totalsMatch && <small>Precisa somar {money.format(rounded(form.total))}.</small>}</div>
         </div>
+        <small className="span-2">Ao alterar um valor, o saldo é dividido entre as outras parcelas abertas. Parcelas com pagamento registrado permanecem inalteradas.</small>
       </div>
       <footer><button type="button" className="button secondary" onClick={() => { setOpen(false); setEditingGroupId(null) }}>Cancelar</button><button className="button primary" disabled={saving || form.total <= 0 || !totalsMatch}>{saving ? 'Salvando...' : editingGroupId ? 'Salvar alterações' : 'Salvar conta e parcelas'}</button></footer>
     </form></div>}
 
     {selected && <div className="dialog-backdrop"><div className="dialog"><header><div><span className="eyebrow">Parcela {selected.installment}/{selected.installment_count}</span><h2>{selected.description}</h2><p>{selected.supplier?.name ?? selected.purchase?.supplier?.name ?? 'Fornecedor não informado'} · Vencimento: {formatDate(selected.due_date)} · {money.format(Number(selected.amount))}{selected.order ? ` · ${selected.order.display_number}${selected.budget_item ? ` · ${itemLabel(selected.budget_item)}` : ''}` : ''}</p></div><button className="icon-button" onClick={() => { setConfirmingDelete(false); setSelected(null) }}><X /></button></header>{confirmingDelete && <div className="inline-confirm"><div><strong>Excluir esta parcela definitivamente?</strong><span>Ela será removida do grupo; as demais serão renumeradas.</span></div><button className="button danger" onClick={() => void removeInstallment()}>Confirmar exclusão</button></div>}<footer><button className="button primary" disabled={selected.status === 'cancelled'} onClick={beginEdit}>Editar conta e parcelas</button>{canDelete && !confirmingDelete && <button className="button danger" onClick={() => setConfirmingDelete(true)}><Trash2 /> Excluir parcela</button>}<button className="button secondary" onClick={() => { setConfirmingDelete(false); setSelected(null) }}>Fechar</button></footer></div></div>}
+    {selected&&paymentAction&&<div className="dialog-backdrop"><form className="dialog" role="dialog" aria-modal="true" aria-label={paymentAction==='pay'?'Registrar pagamento':'Estornar pagamento'} onSubmit={savePaymentAction}>
+      <header><div><span className="eyebrow">Parcela {selected.installment}/{selected.installment_count}</span><h2>{paymentAction==='pay'?'Registrar pagamento':'Estornar pagamento'}</h2><p>{selected.description} · {selected.supplier?.name??selected.purchase?.supplier?.name}</p></div><button type="button" className="icon-button" aria-label="Fechar pagamento" disabled={saving} onClick={()=>setPaymentAction(null)}><X/></button></header>
+      <div className="form-grid">{paymentAction==='pay'?<><p className="span-2">Saldo: {money.format(rounded(Number(selected.amount)-Number(selected.paid_amount)))}. Um valor menor registra pagamento parcial; o saldo integral marca como Pago.</p><label className="field">Data do pagamento<input required type="date" value={paymentDate} onChange={event=>setPaymentDate(event.target.value)}/></label><label className="field">Valor pago<DecimalInput ariaLabel="Valor pago" value={paymentAmount} decimalScale={2} onValueChange={setPaymentAmount}/></label></>:<label className="field span-2">Motivo do estorno<textarea required minLength={5} value={paymentReason} onChange={event=>setPaymentReason(event.target.value)}/><small>Remove a baixa registrada nesta parcela e reabre o saldo, mantendo o histórico.</small></label>}</div>
+      <footer><button type="button" className="button secondary" disabled={saving} onClick={()=>setPaymentAction(null)}>Voltar</button><button className="button primary" disabled={saving}>{saving?'Salvando…':paymentAction==='pay'?'Confirmar pagamento':'Confirmar estorno'}</button></footer>
+    </form></div>}
   </>
 }
+
