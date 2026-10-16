@@ -1,4 +1,13 @@
 type Entry = { amount: number | string; paid_amount: number | string; status: string; due_date: string | null }
+export type FinancialCardFilter = 'all' | 'received' | 'open' | 'overdue'
+export function matchesFinancialCard(entry: Entry, filter: FinancialCardFilter, today: string) {
+  if (['cancelled', 'reversed'].includes(entry.status)) return false
+  if (filter === 'received') return Number(entry.paid_amount) > 0
+  const open = ['open', 'partial', 'overdue'].includes(entry.status) && Number(entry.amount) > Number(entry.paid_amount)
+  if (filter === 'open') return open
+  if (filter === 'overdue') return open && !!entry.due_date && entry.due_date < today
+  return true
+}
 const cents = (value: number | string) => Number.isFinite(Number(value)) ? Math.round(Number(value) * 100) : 0
 export function financialSummary(entries: Entry[], today: string) {
   const result = { count: 0, total: 0, paid: 0, open: 0, overdue: 0 }
