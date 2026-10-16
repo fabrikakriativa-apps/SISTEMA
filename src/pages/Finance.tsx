@@ -9,6 +9,8 @@ import { supabase } from '../lib/supabase';
 import { PayablesPanel } from '../components/PayablesPanel';
 import { FinancialFilterTotals } from '../components/FinancialFilterTotals';
 import { financialSummary, matchesFinancialCard, type FinancialCardFilter } from '../lib/financialSummary';
+import { DashboardFocusNotice, useDashboardFocus } from '../components/DashboardFocusNotice';
+import { matchesDashboardFocus } from '../lib/dashboardFocus';
 import { DateRangeFilter, inDateRange, type DateRange } from '../components/DateRangeFilter';
 import { SortableHeader, compareValues, type SortState } from '../components/SortableHeader';
 type FinancialStatus = 'open' | 'partial' | 'settled' | 'overdue' | 'cancelled' | 'reversed';
@@ -46,6 +48,7 @@ const matchesPeriod = (dueDate: string | null, filter: string | null) => { if (!
 function ReceivablesPanel({ period }: {
     period: string | null;
 }) {
+    const dashboardFocus=useDashboardFocus();
     const access = useAccess(), { show } = useToast(), [items, setItems] = useState<Receivable[]>([]), [loading, setLoading] = useState(true), [error, setError] = useState(''), [search, setSearch] = useState(''), [dateRange, setDateRange] = useState<DateRange>({ from: '', to: '' }), [sort, setSort] = useState<SortState<'installment' | 'order' | 'due' | 'amount' | 'method' | 'status'>>({ key: 'due', direction: 'asc' }), [summaryFilter, setSummaryFilter] = useState<FinancialCardFilter | 'groups' | 'history'>('all'), [selected, setSelected] = useState<Receivable | null>(null), [scope, setScope] = useState<'single' | 'group'>('single'), [dueDate, setDueDate] = useState(''), [amount, setAmount] = useState(0), [method, setMethod] = useState(''), [saving, setSaving] = useState(false), [payment, setPayment] = useState<Receivable | null>(null), [paymentScope, setPaymentScope] = useState<'single' | 'group'>('single'), [paymentAmount, setPaymentAmount] = useState(0), [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10)), [reversal, setReversal] = useState<Receivable | null>(null), [reversalScope, setReversalScope] = useState<'single' | 'group'>('single'), [reversalReason, setReversalReason] = useState('');
     const load = useCallback(async () => { if (!supabase || !access)
         return; setLoading(true); setError(''); await supabase.rpc('refresh_financial_overdues', { org_id: access.organizationId }); const { data, error } = await supabase.from('receivables').select('id,group_id,installment,installment_count,description,due_date,amount,gross_amount,fee_amount,paid_amount,status,payment_method,order:orders!receivables_order_id_fkey(display_number,client:clients!orders_client_id_fkey(name))').eq('organization_id', access.organizationId).order('due_date', { ascending: true }).order('installment', { ascending: true }).abortSignal(AbortSignal.timeout(15000)); if (error)
@@ -53,7 +56,7 @@ function ReceivablesPanel({ period }: {
     else
         setItems((data ?? []) as unknown as Receivable[]); setLoading(false); }, [access]);
     useEffect(() => { void load(); }, [load]);
-    const periodItems = useMemo(() => items.filter(x => matchesPeriod(x.due_date, period) && inDateRange(x.due_date, dateRange)), [items, period, dateRange]);
+    const periodItems = useMemo(() => items.filter(x => matchesDashboardFocus(x.id,dashboardFocus,x) && matchesPeriod(x.due_date, period) && inDateRange(x.due_date, dateRange)), [items, period, dateRange,dashboardFocus]);
     const matching = useMemo(() => { const term = search.trim().toLocaleLowerCase('pt-BR'); return term ? periodItems.filter(x => `${x.description} ${x.order?.display_number ?? ''} ${x.order?.client?.name ?? ''} ${x.payment_method ?? ''}`.toLocaleLowerCase('pt-BR').includes(term)) : periodItems; }, [periodItems, search]);
     const filtered = useMemo(() => {
         const valid = matching.filter(x => !['cancelled', 'reversed'].includes(x.status));
@@ -94,7 +97,7 @@ function ReceivablesPanel({ period }: {
     const summary = financialSummary(matching, localDate(new Date()));
     const groups = new Set(summaryItems.map(x => x.group_id)).size, historyCount = matching.filter(x => ['cancelled', 'reversed'].includes(x.status)).length;
     const chooseSummary = (filter: typeof summaryFilter) => setSummaryFilter(current => current === filter && filter !== 'all' ? 'all' : filter);
-    return <>
+    return <><DashboardFocusNotice focus={dashboardFocus}/>
 <section className="panel">
 <div className="toolbar">
 <label className="search">

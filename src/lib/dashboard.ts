@@ -1,9 +1,9 @@
 import {needsCalendarSync} from './calendarStatus'
 
 export type DashboardBudget = { id: string; created_at?: string; status: string; total: number | string; document_type: 'pre_budget' | 'budget' }
-export type DashboardOrder = { status: string; created_at?: string }
-export type DashboardReceivable = { status: string; amount: number | string; paid_amount: number | string; due_date: string | null }
-export type DashboardEvent = { starts_at: string; cancelled_at: string | null; sync_status: string }
+export type DashboardOrder = { id?: string; status: string; created_at?: string }
+export type DashboardReceivable = { id?: string; status: string; amount: number | string; paid_amount: number | string; due_date: string | null }
+export type DashboardEvent = { id?: string; starts_at: string; cancelled_at: string | null; sync_status: string }
 
 export function summarizeDashboard(budgets: DashboardBudget[], orders: DashboardOrder[], receivables: DashboardReceivable[], events: DashboardEvent[], now = new Date()) {
   // Conversion changes document_type on the same budget ID; a duplicated quote

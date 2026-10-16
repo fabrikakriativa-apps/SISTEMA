@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { ArrowLeft, CalendarPlus, Copy, FileText, GitBranch, ImagePlus, Plus, Search, Trash2, X } from 'lucide-react'
 import { Page } from '../components/Page'
+import { DashboardFocusNotice, useDashboardFocus } from '../components/DashboardFocusNotice'
+import { matchesDashboardFocus } from '../lib/dashboardFocus'
 import { useAccess } from '../components/AuthorizedAccess'
 import { useToast } from '../components/ToastProvider'
 import { money } from '../lib/format'
@@ -61,6 +63,7 @@ function errorMessage(error:unknown, fallback:string) {
 }
 
 export function Budgets() {
+  const dashboardFocus=useDashboardFocus()
   const access = useAccess()
   const { show } = useToast()
   const [items,setItems] = useState<Budget[]>([]), [clients,setClients] = useState<Client[]>([])
@@ -87,6 +90,7 @@ export function Budgets() {
   },[access])
 
   useEffect(() => { void load() },[load])
+  useEffect(()=>{if(dashboardFocus?.kind==='pre-drafts')setDocumentFilter('pre_budget');else if(dashboardFocus?.kind==='budget-drafts')setDocumentFilter('budget')},[dashboardFocus])
   useEffect(() => { const id=readRoute(window.location.hash).recordId;if(id&&items.length&&!selected){const budget=items.find(item=>item.id===id);if(budget)openEditor(budget)} },[items])
   useEffect(() => { if(selected)navigateTo('orcamentos',selected.id) },[selected?.id])
   useEffect(() => () => { if(saveTimer.current) window.clearTimeout(saveTimer.current) },[])
@@ -136,7 +140,7 @@ export function Budgets() {
     finally{setCreating(false)}
   }
 
-  const matching=useMemo(()=>items.filter(item=>item.document_type===documentFilter&&inDateRange(item.created_at,dateRange)&&`${item.display_number} ${item.client?.name??''} ${labels[item.status]}`.toLowerCase().includes(search.toLowerCase())),[items,search,documentFilter,dateRange])
+  const matching=useMemo(()=>items.filter(item=>matchesDashboardFocus(item.id,dashboardFocus,item)&&item.document_type===documentFilter&&inDateRange(item.created_at,dateRange)&&`${item.display_number} ${item.client?.name??''} ${labels[item.status]}`.toLowerCase().includes(search.toLowerCase())),[items,search,documentFilter,dateRange,dashboardFocus])
   const filtered=useMemo(()=>{const selected=statusFilter?matching.filter(item=>item.status===statusFilter):matching;const value=(item:Budget)=>sort.key==='number'?`${item.display_number} ${item.client?.name??''}`:sort.key==='type'?item.document_type:sort.key==='revision'?item.current_revision:sort.key==='created'?item.created_at:sort.key==='value'?Number(item.total):labels[item.status];return [...selected].sort((a,b)=>compareValues(value(a),value(b))*(sort.direction==='asc'?1:-1))},[matching,statusFilter,sort])
   const counts=useMemo(()=>({draft:matching.filter(x=>x.status==='draft').length,sent:matching.filter(x=>x.status==='sent').length,approved:matching.filter(x=>x.status==='approved').length,rejected:matching.filter(x=>x.status==='rejected').length,cancelled:matching.filter(x=>x.status==='cancelled').length}),[matching])
   const toggleStatusFilter=(status:BudgetStatus)=>setStatusFilter(current=>current===status?null:status)
@@ -147,7 +151,7 @@ export function Budgets() {
 <button className="button primary" disabled={creating} onClick={()=>void create('budget')}><Plus/>Novo orçamento</button></div>}>
     {loading&&<p role="status">Carregando orçamentos…</p>}{error&&<p role="alert">{error} <button className="button secondary" onClick={load}>Tentar novamente</button>
 </p>}
-    <div className="segmented-control" role="tablist" aria-label="Tipo de documento"><button className={documentFilter==='pre_budget'?'active':''} onClick={()=>{setDocumentFilter('pre_budget');setStatusFilter(null)}}>Pré-orçamentos</button><button className={documentFilter==='budget'?'active':''} onClick={()=>{setDocumentFilter('budget');setStatusFilter(null)}}>Orçamentos</button></div>
+    <DashboardFocusNotice focus={dashboardFocus}/><div className="segmented-control" role="tablist" aria-label="Tipo de documento"><button className={documentFilter==='pre_budget'?'active':''} onClick={()=>{setDocumentFilter('pre_budget');setStatusFilter(null)}}>Pré-orçamentos</button><button className={documentFilter==='budget'?'active':''} onClick={()=>{setDocumentFilter('budget');setStatusFilter(null)}}>Orçamentos</button></div>
     <section className="status-grid budget-status-grid">
 <button type="button" className={`budget-status-card ${statusFilter==='draft'?'active':''}`} aria-pressed={statusFilter==='draft'} onClick={()=>toggleStatusFilter('draft')}>
 <span>Rascunhos</span>

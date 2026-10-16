@@ -5,7 +5,7 @@ const modules = new Set<ModuleKey>(['inicio','prospeccao','clientes','insumos','
 export type AppRoute={module:ModuleKey;recordId:string|null}
 
 export function readRoute(hash:string):AppRoute {
-  const [rawModule,rawId]=hash.replace(/^#\/?/,'').split('/')
+  const [rawModule,rawId]=hash.split('?')[0].replace(/^#\/?/,'').split('/')
   const module=modules.has(rawModule as ModuleKey)?rawModule as ModuleKey:'inicio'
   return {module,recordId:rawId?decodeURIComponent(rawId):null}
 }
@@ -19,3 +19,4 @@ export function navigateTo(module:ModuleKey,recordId?:string|null){
   if(window.location.hash===next) window.dispatchEvent(new HashChangeEvent('hashchange'))
   else window.location.hash=next
 }
+

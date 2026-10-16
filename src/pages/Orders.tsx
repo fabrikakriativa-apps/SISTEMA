@@ -12,10 +12,13 @@ import { navigateTo, readRoute } from '../lib/navigation';
 import { DateRangeFilter, inDateRange, type DateRange } from '../components/DateRangeFilter';
 import { SortableHeader, compareValues, type SortState } from '../components/SortableHeader';
 import './Orders.css';
+import { DashboardFocusNotice, useDashboardFocus } from '../components/DashboardFocusNotice';
+import { matchesDashboardFocus } from '../lib/dashboardFocus';
 type Order = DetailOrder & {
     status: OrderStatus;
 };
 export function Orders() {
+    const dashboardFocus=useDashboardFocus();
     const access = useAccess(), [orders, setOrders] = useState<Order[]>([]), [loading, setLoading] = useState(true), [error, setError] = useState(''), [search, setSearch] = useState(''), [dateRange, setDateRange] = useState<DateRange>({ from: '', to: '' }), [sort, setSort] = useState<SortState<'order' | 'origin' | 'created' | 'delivery' | 'items' | 'value' | 'status'>>({ key: 'order', direction: 'desc' }), [cardFilter, setCardFilter] = useState<'active' | 'awaiting_purchase' | 'ready_to_schedule' | 'pending_issue' | null>(null), [cancelOrder, setCancelOrder] = useState<Order | null>(null), [operationOrder, setOperationOrder] = useState<Order | null>(null), [requestedStage, setRequestedStage] = useState<(typeof operationalStatuses)[number]>('preparing');
     const load = useCallback(async () => { if (!supabase || !access)
         return; setLoading(true); setError(''); const { data, error } = await supabase.from('orders').select('id,display_number,status,payment_terms,promised_date,client_address,notes,total,commercial_terms,created_at,client:clients!orders_client_id_fkey(name,document,address,city),budget:budgets!orders_budget_id_fkey(id,display_number),order_items:order_items!order_items_order_id_fkey(id,status,snapshot),receivables:receivables!receivables_order_id_fkey(id,installment,installment_count,due_date,amount,gross_amount,fee_amount,paid_amount,paid_at,payment_method,status)').eq('organization_id', access.organizationId).order('number', { ascending: false }).abortSignal(AbortSignal.timeout(15000)); if (error)
@@ -24,7 +27,7 @@ export function Orders() {
         setOrders((data ?? []) as unknown as Order[]); setLoading(false); }, [access]);
     useEffect(() => { void load(); }, [load]);
     const detailId = readRoute(window.location.hash).recordId, detailOrder = detailId ? orders.find(order => order.id === detailId) ?? null : null;
-    const matching = useMemo(() => { const term = search.trim().toLocaleLowerCase('pt-BR'); return orders.filter(x => (!term || `${x.display_number} ${x.client?.name ?? ''} ${x.budget?.display_number ?? ''} ${labels[x.status]}`.toLocaleLowerCase('pt-BR').includes(term)) && inDateRange(x.promised_date, dateRange)); }, [orders, search, dateRange]);
+    const matching = useMemo(() => { const term = search.trim().toLocaleLowerCase('pt-BR'); return orders.filter(x => matchesDashboardFocus(x.id,dashboardFocus,x) && (!term || `${x.display_number} ${x.client?.name ?? ''} ${x.budget?.display_number ?? ''} ${labels[x.status]}`.toLocaleLowerCase('pt-BR').includes(term)) && inDateRange(x.promised_date, dateRange)); }, [orders, search, dateRange,dashboardFocus]);
     const filtered = useMemo(() => { const selected = cardFilter === 'active' ? matching.filter(x => !['completed', 'cancelled'].includes(x.status)) : cardFilter ? matching.filter(x => x.status === cardFilter) : matching; return [...selected].sort((a, b) => { const values = { order: [a.display_number, b.display_number], origin: [a.budget?.display_number ?? '', b.budget?.display_number ?? ''], created: [a.created_at, b.created_at], delivery: [a.promised_date ?? '', b.promised_date ?? ''], items: [a.order_items.length, b.order_items.length], value: [Number(a.total), Number(b.total)], status: [labels[a.status], labels[b.status]] }[sort.key]; return compareValues(values[0], values[1]) * (sort.direction === 'asc' ? 1 : -1); }); }, [matching, cardFilter, sort]);
     const requestStatus = (order: Order, next: OrderStatus) => { if (next === order.status)
         return; if (next === 'cancelled') {
@@ -61,7 +64,7 @@ export function Orders() {
 <strong>{issues}</strong>
 </button>
 </section>
-<section className="panel">
+<DashboardFocusNotice focus={dashboardFocus}/><section className="panel">
 <div className="toolbar">
 <label className="search">
 <Search />
@@ -110,3 +113,4 @@ export function Orders() {
 </div>}</section>
 </Page>;
 }
+
