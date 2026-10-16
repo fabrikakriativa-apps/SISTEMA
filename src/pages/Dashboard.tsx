@@ -27,7 +27,7 @@ export function Dashboard({ navigate }: { navigate: (key: ModuleKey) => void }) 
     const { error: overdueError } = await client.rpc('refresh_financial_overdues', { org_id: org })
     const startOfToday=new Date(new Date().setHours(0,0,0,0)).toISOString()
     const [budgets, orders, receivables, events] = await Promise.all([
-      loadAll<DashboardBudget>((from,to)=>client.from('budgets').select('status,total,document_type').eq('organization_id', org).order('id').range(from,to)),
+      loadAll<DashboardBudget>((from,to)=>client.from('budgets').select('id,status,total,document_type').eq('organization_id', org).order('id').range(from,to)),
       loadAll<DashboardOrder>((from,to)=>client.from('orders').select('status').eq('organization_id', org).not('status', 'in', '(completed,cancelled)').order('id').range(from,to)),
       loadAll<DashboardReceivable>((from,to)=>client.from('receivables').select('status,amount,paid_amount,due_date').eq('organization_id', org).in('status', ['open', 'partial', 'overdue']).order('id').range(from,to)),
       loadAll<DashboardEvent>((from,to)=>client.from('calendar_events').select('starts_at,cancelled_at,sync_status').eq('organization_id', org).gte('starts_at', startOfToday).order('id').range(from,to)),
@@ -39,9 +39,9 @@ export function Dashboard({ navigate }: { navigate: (key: ModuleKey) => void }) 
   useEffect(() => { void load() }, [load])
   const summary = useMemo(() => summarizeDashboard(data.budgets, data.orders, data.receivables, data.events), [data])
   const metrics = [
-    { label:'Pré-orçamentos em rascunho', value:String(summary.preBudgetDraftCount), helper:'Estimativas rápidas ainda em evolução', icon:FileText, module:'orcamentos' as ModuleKey },
-    { label:'Orçamentos em negociação', value:money.format(summary.negotiatingTotal), helper:`${summary.formalBudgetDraftCount} em rascunho · ${summary.formalBudgetSentCount} enviados`, icon:FileText, module:'orcamentos' as ModuleKey },
-    { label:'Conversão de orçamentos', value:`${summary.budgetConversionRate.toLocaleString('pt-BR',{maximumFractionDigits:1})}%`, helper:`${summary.approvedBudgetCount} aprovados de ${summary.totalBudgetCount} formais`, icon:FileText, module:'orcamentos' as ModuleKey },
+    { label:'Negociações cadastradas', value:String(summary.totalBudgetCount), helper:`${summary.totalPreBudgetCount} pré-orçamentos · ${summary.totalFormalBudgetCount} orçamentos`, icon:FileText, module:'orcamentos' as ModuleKey },
+    { label:'Valor em negociação', value:money.format(summary.negotiatingTotal), helper:`Pré + orçamento · ${summary.negotiationDraftCount} em rascunho · ${summary.negotiationSentCount} enviados`, icon:FileText, module:'orcamentos' as ModuleKey },
+    { label:'Conversão de negociações', value:`${summary.budgetConversionRate.toLocaleString('pt-BR',{maximumFractionDigits:1})}%`, helper:`${summary.approvedBudgetCount} aprovadas de ${summary.totalBudgetCount} negociações únicas`, icon:FileText, module:'orcamentos' as ModuleKey },
     { label:'Pedidos ativos', value:String(summary.activeOrderCount), helper:'Ainda não concluídos', icon:PackageCheck, module:'pedidos' as ModuleKey },
     { label:'A receber', value:money.format(summary.receivableBalance), helper:'Saldo das parcelas em aberto', icon:CircleDollarSign, module:'financeiro' as ModuleKey },
     { label:'Próximos compromissos', value:String(summary.upcomingEventCount), helper:'Agenda dos próximos 7 dias', icon:CalendarClock, module:'agenda' as ModuleKey },
@@ -61,3 +61,4 @@ export function Dashboard({ navigate }: { navigate: (key: ModuleKey) => void }) 
     </section>
   </Page>
 }
+

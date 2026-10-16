@@ -1,14 +1,17 @@
 import {needsCalendarSync} from './calendarStatus'
 
-export type DashboardBudget = { status: string; total: number | string; document_type: 'pre_budget' | 'budget' }
+export type DashboardBudget = { id: string; status: string; total: number | string; document_type: 'pre_budget' | 'budget' }
 export type DashboardOrder = { status: string }
 export type DashboardReceivable = { status: string; amount: number | string; paid_amount: number | string; due_date: string | null }
 export type DashboardEvent = { starts_at: string; cancelled_at: string | null; sync_status: string }
 
 export function summarizeDashboard(budgets: DashboardBudget[], orders: DashboardOrder[], receivables: DashboardReceivable[], events: DashboardEvent[], now = new Date()) {
-  const formalBudgets = budgets.filter(item => item.document_type === 'budget')
-  const preBudgets = budgets.filter(item => item.document_type === 'pre_budget')
-  const activeBudgets = formalBudgets.filter(item => ['draft', 'sent'].includes(item.status))
+  // Conversion changes document_type on the same budget ID; a duplicated quote
+  // has a new ID and represents an independent negotiation.
+  const negotiations = [...new Map(budgets.map(item => [item.id, item])).values()]
+  const formalBudgets = negotiations.filter(item => item.document_type === 'budget')
+  const preBudgets = negotiations.filter(item => item.document_type === 'pre_budget')
+  const activeBudgets = negotiations.filter(item => ['draft', 'sent'].includes(item.status))
   const activeOrders = orders.filter(item => !['completed', 'cancelled'].includes(item.status))
   const openReceivables = receivables.filter(item => ['open', 'partial', 'overdue'].includes(item.status))
   const today = new Date(now); today.setHours(0, 0, 0, 0)
@@ -20,12 +23,16 @@ export function summarizeDashboard(budgets: DashboardBudget[], orders: Dashboard
     preBudgetDraftCount: preBudgets.filter(item => item.status === 'draft').length,
     formalBudgetDraftCount: formalBudgets.filter(item => item.status === 'draft').length,
     formalBudgetSentCount: formalBudgets.filter(item => item.status === 'sent').length,
+    totalPreBudgetCount: preBudgets.length,
+    totalFormalBudgetCount: formalBudgets.length,
+    negotiationDraftCount: activeBudgets.filter(item => item.status === 'draft').length,
+    negotiationSentCount: activeBudgets.filter(item => item.status === 'sent').length,
     activeOrderCount: activeOrders.length,
     receivableBalance: openReceivables.reduce((sum, item) => sum + Math.max(0, Number(item.amount || 0) - Number(item.paid_amount || 0)), 0),
     upcomingEventCount: upcomingEvents.length,
-    budgetConversionRate: formalBudgets.length ? (approvedBudgets / formalBudgets.length) * 100 : 0,
+    budgetConversionRate: negotiations.length ? (approvedBudgets / negotiations.length) * 100 : 0,
     approvedBudgetCount: approvedBudgets,
-    totalBudgetCount: formalBudgets.length,
+    totalBudgetCount: negotiations.length,
     priorities: {
       preBudgetDrafts: preBudgets.filter(item => item.status === 'draft').length,
       budgetDrafts: formalBudgets.filter(item => item.status === 'draft').length,
@@ -35,3 +42,4 @@ export function summarizeDashboard(budgets: DashboardBudget[], orders: Dashboard
     },
   }
 }
+
