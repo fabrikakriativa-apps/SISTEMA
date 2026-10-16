@@ -10,6 +10,8 @@ import { money } from '../lib/format'
 import { supabase } from '../lib/supabase'
 import { DateRangeFilter, inDateRange, type DateRange } from './DateRangeFilter'
 import { SortableHeader, compareValues, type SortState } from './SortableHeader'
+import { FinancialFilterTotals } from './FinancialFilterTotals'
+import { financialSummary } from '../lib/financialSummary'
 
 type Supplier = { id: string; name: string }
 type Installment = { id?: string; due_date: string; amount: number; locked?: boolean }
@@ -116,6 +118,7 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
   }), [items, period, search, dateRange, sort, savedAllocations, orders])
 
   const installmentsTotal = rounded(installments.reduce((sum, item) => sum + item.amount, 0))
+  const filteredSummary = financialSummary(visible,dateKey(new Date()))
   const totalsMatch = installments.length > 0 && installmentsTotal === rounded(form.total)
   const lockedInstallments = installments.filter(installment => installment.locked)
   const lockedTotal = rounded(lockedInstallments.reduce((sum, installment) => sum + installment.amount, 0))
@@ -206,6 +209,7 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
         <DateRangeFilter label="Vencimento" value={dateRange} onChange={setDateRange} />
         <button className="button primary" onClick={beginCreate}><Plus /> Nova conta a pagar</button>
       </div>
+      <FinancialFilterTotals summary={filteredSummary} kind="payable"/>
       <div className="table-wrap"><table><thead><tr><SortableHeader label="Parcelas" column="installment" sort={sort} onChange={setSort} /><SortableHeader label="Pedido / fornecedor" column="order" sort={sort} onChange={setSort} /><SortableHeader label="Vencimento" column="due" sort={sort} onChange={setSort} /><SortableHeader label="Valor / saldo" column="amount" sort={sort} onChange={setSort} /><SortableHeader label="Status" column="status" sort={sort} onChange={setSort} /></tr></thead><tbody>
         {visible.map(item => <tr className="clickable-row" key={item.id} onClick={() => setSelected(item)}>
           <td><strong>Parcela {item.installment}/{item.installment_count}</strong><small className="table-subline">{item.installment_count > 1 ? `${item.installment_count} parcelas vinculadas` : 'Lançamento único'}</small></td>

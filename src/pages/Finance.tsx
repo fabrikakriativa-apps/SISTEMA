@@ -7,6 +7,8 @@ import { useToast } from '../components/ToastProvider';
 import { money } from '../lib/format';
 import { supabase } from '../lib/supabase';
 import { PayablesPanel } from '../components/PayablesPanel';
+import { FinancialFilterTotals } from '../components/FinancialFilterTotals';
+import { financialSummary } from '../lib/financialSummary';
 import { DateRangeFilter, inDateRange, type DateRange } from '../components/DateRangeFilter';
 import { SortableHeader, compareValues, type SortState } from '../components/SortableHeader';
 type FinancialStatus = 'open' | 'partial' | 'settled' | 'overdue' | 'cancelled' | 'reversed';
@@ -89,31 +91,10 @@ function ReceivablesPanel({ period }: {
         show(reversalScope === 'group' ? 'Recebimentos do grupo estornados.' : 'Recebimento estornado.', 'success');
     } setSaving(false); };
     const summaryItems = matching.filter(x => !['cancelled', 'reversed'].includes(x.status));
-    const expected = summaryItems.reduce((sum, x) => sum + Number(x.amount), 0), received = summaryItems.reduce((sum, x) => sum + Number(x.paid_amount), 0), open = summaryItems.filter(x => ['open', 'partial', 'overdue'].includes(x.status)).reduce((sum, x) => sum + Math.max(0, Number(x.amount) - Number(x.paid_amount)), 0), groups = new Set(summaryItems.map(x => x.group_id)).size, historyCount = matching.filter(x => ['cancelled', 'reversed'].includes(x.status)).length;
+    const summary = financialSummary(matching, localDate(new Date()));
+    const groups = new Set(summaryItems.map(x => x.group_id)).size, historyCount = matching.filter(x => ['cancelled', 'reversed'].includes(x.status)).length;
     const chooseSummary = (filter: typeof summaryFilter) => setSummaryFilter(current => current === filter && filter !== 'all' ? 'all' : filter);
     return <>
-<section className="status-grid finance-status-grid">
-<button type="button" className={`status-filter-card ${summaryFilter === 'all' ? 'active' : ''}`} aria-pressed={summaryFilter === 'all'} onClick={() => chooseSummary('all')}>
-<span>Total previsto</span>
-<strong>{money.format(expected)}</strong>
-</button>
-<button type="button" className={`status-filter-card ${summaryFilter === 'received' ? 'active' : ''}`} aria-pressed={summaryFilter === 'received'} onClick={() => chooseSummary('received')}>
-<span>Recebido</span>
-<strong>{money.format(received)}</strong>
-</button>
-<button type="button" className={`status-filter-card ${summaryFilter === 'open' ? 'active' : ''}`} aria-pressed={summaryFilter === 'open'} onClick={() => chooseSummary('open')}>
-<span>Em aberto</span>
-<strong>{money.format(open)}</strong>
-</button>
-<button type="button" className={`status-filter-card ${summaryFilter === 'groups' ? 'active' : ''}`} aria-pressed={summaryFilter === 'groups'} onClick={() => chooseSummary('groups')}>
-<span>Grupos de parcelas</span>
-<strong>{groups}</strong>
-</button>
-<button type="button" className={`status-filter-card ${summaryFilter === 'history' ? 'active' : ''}`} aria-pressed={summaryFilter === 'history'} onClick={() => chooseSummary('history')}>
-<span>Canceladas / estornadas</span>
-<strong>{historyCount}</strong>
-</button>
-</section>
 <section className="panel">
 <div className="toolbar">
 <label className="search">
@@ -122,7 +103,7 @@ function ReceivablesPanel({ period }: {
 </label>
 <DateRangeFilter label="Vencimento" value={dateRange} onChange={setDateRange} />
 <span>{filtered.length} parcela(s)</span>
-</div>{error ? <div className="empty-state">
+</div>{!loading && !error && <FinancialFilterTotals summary={summary} kind="receivable" active={summaryFilter} onSelect={chooseSummary}><button type="button" aria-pressed={summaryFilter==='groups'} onClick={()=>chooseSummary('groups')}>{groups} grupos</button><button type="button" aria-pressed={summaryFilter==='history'} onClick={()=>chooseSummary('history')}>{historyCount} canceladas / estornadas</button></FinancialFilterTotals>}{error ? <div className="empty-state">
 <CircleDollarSign />
 <strong>{error}</strong>
 <button className="button secondary" onClick={() => void load()}>Tentar novamente</button>
@@ -402,3 +383,4 @@ export function Finance({ mode, filter, navigate }: {
 <button className={view === 'receivable' ? 'active' : ''} onClick={() => setView('receivable')}>Contas a receber</button>
 <button className={view === 'payable' ? 'active' : ''} onClick={() => setView('payable')}>Contas a pagar</button>{period && <button onClick={() => navigate('financeiro-lancamentos')}>Limpar filtro</button>}</div>{view === 'receivable' ? <ReceivablesPanel period={period}/> : access ? <PayablesPanel organizationId={access.organizationId} period={period}/> : null}</Page>;
 }
+
