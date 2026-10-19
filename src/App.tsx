@@ -7,7 +7,7 @@ import { navigateTo, readRoute } from './lib/navigation'
 import { FormDraftProtection } from './components/FormDraftProtection'
 
 const Dashboard=lazy(()=>import('./pages/Dashboard').then(module=>({default:module.Dashboard})))
-const Prospecting=lazy(()=>import('./pages/Prospecting').then(module=>({default:module.Prospecting})))
+const Prospecting=lazy(()=>import('./pages/SalesProspecting').then(module=>({default:module.SalesProspecting})))
 const Clients=lazy(()=>import('./pages/Clients').then(module=>({default:module.Clients})))
 const Supplies=lazy(()=>import('./pages/Supplies').then(module=>({default:module.Supplies})))
 const Budgets=lazy(()=>import('./pages/Budgets').then(module=>({default:module.Budgets})))
@@ -39,3 +39,4 @@ export function App() {
     : <Administration/>
   return <ToastProvider><AuthGate><Layout active={active} setActive={navigate}><FormDraftProtection/><Suspense fallback={<p className="panel-message" role="status">Carregando módulo…</p>}>{content}</Suspense></Layout></AuthGate></ToastProvider>
 }
+
