@@ -19,7 +19,7 @@ export function SalesResults<T extends SalesLead>({leads,budgets,orders,onOpenLe
  useEffect(()=>{void load()},[load])
  const valid=Boolean(range.from&&range.to&&range.from<=range.to&&range.from<=today)
  const cutoff=until==='today'?today:(range.to<today?range.to:today)
- const selected=useMemo(()=>leads.filter(l=>(!capture||l.capture_source===capture)&&(!origin||l.origin===origin)&&(!campaign||l.campaign===campaign)),[leads,capture,origin,campaign])
+ const selected=useMemo(()=>leads.filter(l=>(!l.archived_at||salesDay(l.archived_at)>cutoff)&&(!capture||l.capture_source===capture)&&(!origin||l.origin===origin)&&(!campaign||l.campaign===campaign)),[leads,capture,origin,campaign,cutoff])
  const filteredOrders=useMemo(()=>capture||origin||campaign?orders.filter(o=>selected.some(l=>linkedBudgetIds(l).includes(o.budget_id))):orders,[orders,selected,capture,origin,campaign])
  const data=useMemo(()=>calculateSalesResults(selected,budgets,filteredOrders,history,range,cutoff),[selected,budgets,filteredOrders,history,range,cutoff])
  const choose=(value:string)=>{setPreset(value);setDetail(null);if(value==='month')setRange(monthRange(today.slice(0,7)));if(value==='last'){const d=new Date(today+'T12:00:00');d.setMonth(d.getMonth()-1);setRange(monthRange(d.toISOString().slice(0,7)))}if(value==='year')setRange({from:today.slice(0,4)+'-01-01',to:today.slice(0,4)+'-12-31'})}
@@ -35,7 +35,7 @@ export function SalesResults<T extends SalesLead>({leads,budgets,orders,onOpenLe
   const proposals=new Set(inRange.filter(h=>h.entity_type==='budget'&&!h.state.baseline&&h.state.status==='sent').flatMap(h=>selected.filter(l=>linkedBudgetIds(l).includes(h.entity_id)).map(l=>l.id)))
   return {qualification:selected.filter(l=>qualification.has(l.id)),proposals:selected.filter(l=>proposals.has(l.id)),entries:selected.filter(l=>l.customer_kind==='new_lead'&&inSalesRange(l.received_on,range))}
  },[selected,history,range,today])
- const legacyUnknown=leads.filter(l=>!l.received_on).length
+ const legacyUnknown=selected.filter(l=>!l.received_on).length
  const historicalGap=until==='end'&&data.historyStarts!==null&&cutoff<data.historyStarts
  return <section className="sales-results" aria-label="Painel de resultados comerciais">
   <section className="panel sales-results-filters"><div className="sales-filter-heading"><div><h2>Resultados da captação</h2><p>Perfil, propostas e compras — sem contar o mesmo lead duas vezes.</p></div><button className="button secondary compact-button" onClick={()=>void load()} disabled={loading}><RefreshCw/>Atualizar histórico</button></div><div className="sales-filter-controls">

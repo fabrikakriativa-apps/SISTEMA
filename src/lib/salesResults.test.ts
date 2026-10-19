@@ -6,6 +6,15 @@ const orders:SalesOrder[]=[{id:'o',display_number:'PED1',budget_id:'b',status:'a
 const history=[event('opportunity','l','2026-10-05T12:00:00Z',{profile_status:'unassessed',stage:'new'}),event('opportunity','l','2026-11-10T12:00:00Z',{profile_status:'in_profile',stage:'budgeting'}),...orders.map(o=>event('order',o.id,o.created_at,{status:o.status,total:o.total}))]
 const range={from:'2026-10-01',to:'2026-10-31'}
 describe('resultados comerciais',()=>{
+ it('retira cancelados dos leads sem apagar pedidos nem a fotografia anterior',()=>{
+  const archived={...lead,archived_at:'2026-12-20T12:00:00Z'}
+  const h=[...history,event('opportunity','l','2026-12-20T12:00:00Z',{archived_at:archived.archived_at})]
+  expect(calculateSalesResults([archived],[],orders,h,range,'2026-12-10').buyers).toHaveLength(1)
+  const result=calculateSalesResults([archived],[],orders,h,{from:'2026-12-01',to:'2026-12-31'},'2026-12-31')
+  expect(result.rows).toHaveLength(0);expect(result.closed).toHaveLength(2)
+  expect(result.groups.find(g=>g.key==='previous')?.buyers).toBe(0)
+  expect(result.groups.find(g=>g.key==='unknown')?.orders).toHaveLength(2)
+ })
  it('atribui venda de dezembro à captação de outubro apenas na visão acumulada',()=>{
   expect(calculateSalesResults([lead],[],orders,history,range,'2026-10-31').buyers).toHaveLength(0)
   const result=calculateSalesResults([lead],[],orders,history,range,'2026-12-31')

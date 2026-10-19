@@ -18,8 +18,12 @@ export function calculateSalesResults(leads:SalesLead[],budgets:SalesBudget[],or
  for(const event of history){const key=event.entity_type+':'+event.entity_id;const list=facts.get(key)??[];list.push(event);facts.set(key,list)}
  for(const list of facts.values())list.sort((a,b)=>a.recorded_at.localeCompare(b.recorded_at)||a.id.localeCompare(b.id))
  const events=(kind:string,id:string)=>(facts.get(kind+':'+id)??[]).filter(e=>salesDay(e.recorded_at)<=cutoff)
+ const activeLeads=leads.filter(lead=>{
+  const state=events('opportunity',lead.id).at(-1)?.state
+  return state? !state.archived_at:!lead.archived_at||salesDay(lead.archived_at)>cutoff
+ })
  const budgetMap=new Map(budgets.map(b=>[b.id,b]))
- const orderOwners=new Map<string,SalesLead>();for(const lead of leads)for(const id of linkedBudgetIds(lead))orderOwners.set(id,lead)
+ const orderOwners=new Map<string,SalesLead>();for(const lead of activeLeads)for(const id of linkedBudgetIds(lead))orderOwners.set(id,lead)
  const validOrders=orders.flatMap(order=>{
   if(salesDay(order.created_at)>cutoff)return []
   const snapshot=events('order',order.id).at(-1)
@@ -27,7 +31,7 @@ export function calculateSalesResults(leads:SalesLead[],budgets:SalesBudget[],or
   if(!snapshot)return []
   return snapshot.state.status==='cancelled'?[]:[{...order,total:Number(snapshot.state.total??order.total)}]
  })
- const cohort=leads.filter(l=>l.customer_kind==='new_lead'&&inSalesRange(l.received_on,range)&&l.received_on!<=cutoff)
+ const cohort=activeLeads.filter(l=>l.customer_kind==='new_lead'&&inSalesRange(l.received_on,range)&&l.received_on!<=cutoff)
  const rows=cohort.flatMap(lead=>{
   const state=events('opportunity',lead.id).at(-1)?.state
   if(state?.archived_at)return []
@@ -54,6 +58,6 @@ export function calculateSalesResults(leads:SalesLead[],budgets:SalesBudget[],or
   })
   return {key,orders:deals,buyers:new Set(deals.map(o=>orderOwners.get(o.budget_id)?.id).filter(Boolean)).size,value:deals.reduce((s,o)=>s+Number(o.total),0)}
  })
- return {rows,buyers,immediate,proposals:rows.filter(l=>l.proposals.length),qualified:rows.filter(l=>l.profile_status==='in_profile'),outside:rows.filter(l=>l.profile_status==='out_of_profile'),unassessed:rows.filter(l=>l.profile_status==='unassessed'),noResponse:rows.filter(l=>l.response_status==='no_response'&&!l.deals.length),lost:rows.filter(l=>l.stage==='lost'&&l.response_status!=='no_response'&&!l.deals.length),groups,closed,unknownEntry:leads.filter(l=>!l.received_on).length,historyStarts:history.map(e=>salesDay(e.recorded_at)).sort()[0]??null}
+ return {rows,buyers,immediate,proposals:rows.filter(l=>l.proposals.length),qualified:rows.filter(l=>l.profile_status==='in_profile'),outside:rows.filter(l=>l.profile_status==='out_of_profile'),unassessed:rows.filter(l=>l.profile_status==='unassessed'),noResponse:rows.filter(l=>l.response_status==='no_response'&&!l.deals.length),lost:rows.filter(l=>l.stage==='lost'&&l.response_status!=='no_response'&&!l.deals.length),groups,closed,unknownEntry:activeLeads.filter(l=>!l.received_on).length,historyStarts:history.map(e=>salesDay(e.recorded_at)).sort()[0]??null}
 }
 

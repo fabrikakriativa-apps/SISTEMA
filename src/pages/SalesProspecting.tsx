@@ -12,6 +12,7 @@ import {opportunityPayload,isOpportunityOverdue,type OpportunityStage} from '../
 import {linkedBudgetIds,profileLabels,salesDay,validateLeadTracking,type SalesLead,type LeadProfile,type SalesBudget,type SalesOrder} from '../lib/salesResults'
 import {SalesResults} from './SalesResults'
 import {withOpportunityClient} from '../lib/opportunityClient'
+import {cancellationNote} from '../lib/opportunityCancellation'
 import './SalesResults.css'
 
 type Lead=SalesLead&{phone:string|null;email:string|null;notes:string|null;estimated_value:number|null;next_follow_up_at:string|null;lost_reason:string|null;client_id:string|null}
@@ -24,6 +25,7 @@ export function SalesProspecting(){
  const [items,setItems]=useState<Lead[]>([]),[clients,setClients]=useState<Client[]>([]),[budgets,setBudgets]=useState<SalesBudget[]>([]),[orders,setOrders]=useState<SalesOrder[]>([])
  const [loading,setLoading]=useState(true),[error,setError]=useState(''),[saving,setSaving]=useState(false),[open,setOpen]=useState(false),[form,setForm]=useState<Form>(fresh),[search,setSearch]=useState(''),[clientSearch,setClientSearch]=useState(''),[budgetSearch,setBudgetSearch]=useState(''),[results,setResults]=useState(false)
  const canEdit=Boolean(access&&['admin','comercial'].includes(access.role))
+ const [cancelled,setCancelled]=useState(false),[cancelling,setCancelling]=useState(false),[cancelReason,setCancelReason]=useState('')
  const load=useCallback(async()=>{
   if(!supabase||!access){setLoading(false);return}setLoading(true);setError('')
   const org=access.organizationId
@@ -41,7 +43,20 @@ export function SalesProspecting(){
  useEffect(()=>{void load()},[load])
  const won=(lead:SalesLead)=>orders.some(o=>o.status!=='cancelled'&&linkedBudgetIds(lead).includes(o.budget_id))
  const column=(lead:Lead)=>won(lead)?'won':lead.response_status==='no_response'?'no_response':lead.stage==='lost'?'lost':lead.response_status==='waiting'?'waiting':lead.stage
- const edit=(lead?:Lead)=>{setForm(lead?{...lead,estimated_value:lead.estimated_value??'',next_follow_up_at:lead.next_follow_up_at?.slice(0,16)??''}:fresh());setClientSearch(clients.find(c=>c.id===lead?.client_id)?.name??'');setBudgetSearch('');setOpen(true)}
+ const edit=(lead?:Lead)=>{setCancelling(false);setCancelReason('');setForm(lead?{...lead,estimated_value:lead.estimated_value??'',next_follow_up_at:lead.next_follow_up_at?.slice(0,16)??''}:fresh());setClientSearch(clients.find(c=>c.id===lead?.client_id)?.name??'');setBudgetSearch('');setOpen(true)}
+ const archive=async(restore=false)=>{
+  if(!supabase||!access||!canEdit||saving||!form.id)return
+  setSaving(true)
+  try{
+   const original=items.find(l=>l.id===form.id);if(!original)throw new Error('Atualize a lista e tente novamente.')
+   const at=new Date().toISOString()
+   const data=restore?{archived_at:null}:{archived_at:at,notes:cancellationNote(original.notes,cancelReason,at)}
+   let query=supabase.from('sales_opportunities').update(data).eq('organization_id',access.organizationId).eq('id',form.id)
+   query=restore?query.eq('archived_at',original.archived_at!):query.is('archived_at',null)
+   const {error}=await query.select('id').single();if(error)throw error
+   setOpen(false);setCancelling(false);show(restore?'Lançamento restaurado.':'Lançamento cancelado. Cliente, orçamentos e pedidos foram preservados.','success');await load()
+  }catch(e){show(e instanceof Error?e.message:'Não foi possível atualizar o lançamento.','error')}finally{setSaving(false)}
+ }
  const payload=()=>{
   validateLeadTracking(form)
   const validated=opportunityPayload({name:form.name,stage:form.stage as OpportunityStage,lost_reason:form.response_status==='no_response'?'Encerrado sem retorno':form.lost_reason??''})
@@ -54,20 +69,21 @@ export function SalesProspecting(){
   const {error}=await query.select('id').single();if(error)throw error
   return id
  }
- const save=async(e:FormEvent)=>{e.preventDefault();if(saving||!canEdit)return;setSaving(true);try{await persist();setOpen(false);show('Oportunidade salva.','success');await load()}catch(e){show(e instanceof Error?e.message:'Não foi possível salvar.','error')}finally{setSaving(false)}}
+ const save=async(e:FormEvent)=>{e.preventDefault();if(saving||!canEdit||cancelling||form.archived_at)return;setSaving(true);try{await persist();setOpen(false);show('Oportunidade salva.','success');await load()}catch(e){show(e instanceof Error?e.message:'Não foi possível salvar.','error')}finally{setSaving(false)}}
  const createBudget=async()=>{
   if(!supabase||!access||saving||!form.id||!canEdit)return;setSaving(true)
   try{const id=await persist();const {data,error}=await supabase.rpc('convert_opportunity_to_budget',{org_id:access.organizationId,target_opportunity_id:id});if(error)throw error;setOpen(false);await load();navigateTo('orcamentos',(data as {id:string}).id);show('Cliente vinculado e rascunho de orçamento criado.','success')}catch(e){show(e instanceof Error?e.message:'Não foi possível criar o orçamento.','error')}finally{setSaving(false)}
  }
- const filtered=useMemo(()=>items.filter(l=>!l.archived_at&&`${l.name} ${l.phone??''} ${l.origin??''} ${l.campaign??''}`.toLocaleLowerCase('pt-BR').includes(search.toLocaleLowerCase('pt-BR'))),[items,search])
+ const filtered=useMemo(()=>items.filter(l=>Boolean(l.archived_at)===cancelled&&`${l.name} ${l.phone??''} ${l.origin??''} ${l.campaign??''}`.toLocaleLowerCase('pt-BR').includes(search.toLocaleLowerCase('pt-BR'))),[items,search,cancelled])
  const chosen=linkedBudgetIds(form)
- const documentOptions=budgets.filter(b=>!chosen.includes(b.id)&&(!form.client_id||b.client_id===form.client_id)&&!items.some(l=>l.id!==form.id&&linkedBudgetIds(l).includes(b.id)))
+ const documentOptions=budgets.filter(b=>!chosen.includes(b.id)&&(!form.client_id||b.client_id===form.client_id)&&!items.some(l=>!l.archived_at&&l.id!==form.id&&linkedBudgetIds(l).includes(b.id)))
  const visibleColumns=columns.filter(([key])=>key!=='qualified'||filtered.some(l=>column(l)==='qualified'))
  const possibleDuplicate=items.find(l=>l.id!==form.id&&!l.archived_at&&((form.phone&&l.phone&&form.phone.replace(/\D/g,'')===l.phone.replace(/\D/g,''))||(form.client_id&&l.client_id===form.client_id)))
  return <Page title="Prospecção" description="Acompanhe o atendimento, avalie o perfil e veja o resultado da captação." action={<div className="sales-actions"><button className="button secondary" onClick={()=>void load()} disabled={loading}><RefreshCw/>Atualizar</button><button className="button primary" disabled={!canEdit} onClick={()=>edit()}><Plus/>Nova oportunidade</button></div>}>
   <div className="sales-view-tabs"><button className={`button ${!results?'primary':'secondary'}`} onClick={()=>setResults(false)}>Atendimento</button><button className={`button ${results?'primary':'secondary'}`} onClick={()=>setResults(true)}><BarChart3/>Resultados</button></div>
+  {!results&&<label className="field">Exibir lançamentos<select value={cancelled?'cancelled':'active'} onChange={e=>setCancelled(e.target.value==='cancelled')}><option value="active">Ativos</option><option value="cancelled">Cancelados (histórico)</option></select></label>}
   {error?<section className="panel panel-message" role="alert">{error}</section>:loading?<p role="status">Carregando prospecção…</p>:results?<SalesResults leads={items} budgets={budgets} orders={orders} onOpenLead={edit}/>:<section className="panel"><div className="toolbar"><label className="search"><Search/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Nome, telefone, origem ou campanha"/></label><span>{filtered.length} oportunidade(s)</span></div><div className="opportunity-board">{visibleColumns.map(([key,label])=><section className="opportunity-column" key={key}><header><strong>{label}</strong><span>{filtered.filter(l=>column(l)===key).length}</span></header>{filtered.filter(l=>column(l)===key).map(l=><button className="opportunity-card" key={l.id} onClick={()=>edit(l)}><strong>{l.name}</strong><span className={`sales-profile ${l.profile_status}`}>{profileLabels[l.profile_status]}</span><span>{l.phone||l.email||'Contato não informado'}</span><small>{l.received_on?`Entrada: ${l.received_on.split('-').reverse().join('/')}`:'Entrada não informada'} · {l.capture_source||l.origin||'Origem não informada'}</small>{Number(l.estimated_value)>0&&<b>{money.format(Number(l.estimated_value))}</b>}{l.next_follow_up_at&&<small className={isOpportunityOverdue(l.next_follow_up_at)?'overdue':''}><Clock3/>{new Date(l.next_follow_up_at).toLocaleString('pt-BR')}</small>}</button>)}</section>)}</div></section>}
-  {open&&<div className="dialog-backdrop"><form className="dialog sales-lead-dialog" onSubmit={save}><header><div><span className="eyebrow">Atendimento e perfil</span><h2>{form.id?'Editar oportunidade':'Nova oportunidade'}</h2></div><button type="button" className="icon-button" aria-label="Fechar oportunidade" onClick={()=>setOpen(false)}><X/></button></header><fieldset disabled={!canEdit||saving} className="sales-fieldset"><div className="form-grid">
+  {open&&<div className="dialog-backdrop"><form className="dialog sales-lead-dialog" onSubmit={save}><header><div><span className="eyebrow">Atendimento e perfil</span><h2>{form.id?'Editar oportunidade':'Nova oportunidade'}</h2></div><button type="button" className="icon-button" aria-label="Fechar oportunidade" onClick={()=>setOpen(false)}><X/></button></header><fieldset disabled={!canEdit||saving||Boolean(form.archived_at)} className="sales-fieldset"><div className="form-grid">
    <label className="field span-2">Nome do contato<input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/></label>
    <label className="field span-2">Cliente já cadastrado (opcional)<SearchSelect ariaLabel="Buscar cliente da oportunidade" value={clientSearch} onChange={v=>{setClientSearch(v);if(!v.trim())setForm({...form,client_id:null})}} onSelect={o=>{const client=clients.find(c=>c.id===o.id);if(!client)return;setClientSearch(client.name);setForm(current=>withOpportunityClient(current,client,clients.find(c=>c.id===current.client_id)))}} options={clients.map(c=>({id:c.id,label:c.name,detail:c.phone||c.city||undefined}))} placeholder="Digite para localizar um cliente"/><small>Ao selecionar, nome, telefone e e-mail disponíveis são preenchidos. Você pode ajustar o contato sem alterar o cadastro do cliente.</small></label>
    <label className="field">Telefone<input value={form.phone??''} onChange={e=>setForm({...form,phone:e.target.value})}/></label><label className="field">E-mail<input type="email" value={form.email??''} onChange={e=>setForm({...form,email:e.target.value})}/></label>
@@ -85,7 +101,7 @@ export function SalesProspecting(){
    <label className="field">Valor estimado<input type="number" min="0" step="0.01" value={form.estimated_value} onChange={e=>setForm({...form,estimated_value:e.target.value===''?'':Number(e.target.value)})}/></label><label className="field">Próximo retorno<input type="datetime-local" value={form.next_follow_up_at??''} onChange={e=>setForm({...form,next_follow_up_at:e.target.value})}/></label>
    <section className="span-2 sales-document-links"><h3>Orçamentos desta oportunidade</h3><small>Vincule os documentos certos para acompanhar propostas e pedidos automaticamente. Não basta ter o mesmo cliente.</small>{chosen.map(id=><div className="sales-linked-document" key={id}><button type="button" className="text-button" onClick={()=>navigateTo('orcamentos',id)}>{budgets.find(b=>b.id===id)?.display_number??'Orçamento vinculado'}</button>{id!==form.budget_id&&<button type="button" className="text-button" onClick={()=>setForm({...form,related_budget_ids:form.related_budget_ids.filter(v=>v!==id)})}>Desvincular</button>}</div>)}<SearchSelect ariaLabel="Vincular orçamento à oportunidade" value={budgetSearch} onChange={setBudgetSearch} onSelect={o=>{setForm({...form,related_budget_ids:[...form.related_budget_ids,o.id]});setBudgetSearch('')}} options={documentOptions.map(b=>({id:b.id,label:b.display_number,detail:clients.find(c=>c.id===b.client_id)?.name}))} placeholder="Busque o número do pré-orçamento ou orçamento"/>{won(form)&&<p className="sales-win-note">Compra confirmada: esta oportunidade aparece como Ganha no quadro e no painel.</p>}</section>
    <label className="field span-2">Observações<textarea value={form.notes??''} onChange={e=>setForm({...form,notes:e.target.value})}/></label>
-  </div></fieldset><footer><button type="button" className="button secondary" onClick={()=>setOpen(false)}>Cancelar</button>{form.id&&!form.budget_id&&form.stage!=='lost'&&<button type="button" className="button secondary" disabled={saving||!canEdit} onClick={()=>void createBudget()}>Criar cliente e orçamento</button>}<button className="button primary" disabled={saving||!canEdit}>{saving?'Salvando…':'Salvar oportunidade'}</button></footer></form></div>}
+  </div></fieldset>{cancelling&&<section className="panel" aria-label="Confirmar cancelamento"><h3>Cancelar lançamento</h3><p>Este lançamento sairá do quadro ativo e dos indicadores de leads. Cliente, orçamentos e pedidos não serão cancelados. O histórico será preservado.</p><label className="field">Motivo do cancelamento<input value={cancelReason} onChange={e=>setCancelReason(e.target.value)} placeholder="Erro de cadastro, duplicidade…" disabled={saving}/></label><button type="button" className="button secondary" disabled={saving} onClick={()=>setCancelling(false)}>Voltar</button><button type="button" className="button danger" disabled={saving||cancelReason.trim().length<5} onClick={()=>void archive()}>Confirmar cancelamento</button></section>}<footer><button type="button" className="button secondary" onClick={()=>setOpen(false)}>Cancelar</button>{form.id&&canEdit&&!form.archived_at&&<button type="button" className="button secondary" disabled={saving} onClick={()=>setCancelling(true)}>Cancelar lançamento</button>}{form.archived_at&&canEdit&&<button type="button" className="button secondary" disabled={saving} onClick={()=>void archive(true)}>Restaurar lançamento</button>}{form.id&&!form.archived_at&&!form.budget_id&&form.stage!=='lost'&&<button type="button" className="button secondary" disabled={saving||!canEdit||cancelling} onClick={()=>void createBudget()}>Criar cliente e orçamento</button>}<button className="button primary" disabled={saving||!canEdit||Boolean(form.archived_at)||cancelling}>{saving?'Salvando…':'Salvar oportunidade'}</button></footer></form></div>}
  </Page>
 }
 
