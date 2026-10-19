@@ -1,5 +1,6 @@
 import { Printer, X } from 'lucide-react'
 import { money } from '../lib/format'
+import './ReceiptPreview.css'
 
 type ReceiptPayment = { id:string; installment:number; installment_count:number; paid_amount:number; paid_at:string|null; payment_method:string|null; status:string }
 type ReceiptOrder = {
