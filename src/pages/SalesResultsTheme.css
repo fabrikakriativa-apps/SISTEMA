@@ -1,0 +1,23 @@
+.sales-results{--sales-blue:#254d72;--sales-teal:#14685d;--sales-coral:#964a42;--sales-slate:#4b5b6b}
+.sales-results .sales-funnel-step{color:#fff}
+.sales-results .sales-funnel-entry:before{background:var(--sales-blue)}
+.sales-results .sales-funnel-proposal:before{background:#436b8c}
+.sales-results .sales-funnel-win:before{background:var(--sales-teal)}
+.sales-results .sales-profile-branches button{background:#e7edf3;color:#304f6c}
+.sales-results .sales-profile-branches button:first-child{background:#e0f0e9;color:#245e4e}
+.sales-results .sales-profile-branches button:nth-child(2){background:#f7e9e5;color:var(--sales-coral)}
+.sales-results .sales-profile-branches button:last-child{background:#edf0f4;color:var(--sales-slate)}
+.sales-results .sales-order-origin .sales-origin-current{background:#254d72;color:#fff}
+.sales-results .sales-order-origin .sales-origin-previous{background:#dde8f2;color:#254d72}
+.sales-results .sales-order-origin .sales-origin-repeat{background:#e0f0e9;color:#245e4e}
+.sales-results .sales-order-origin .sales-origin-unknown{background:#f7e9e5;color:#87473f}
+.sales-results .button.primary{background:#254d72;color:#fff}
+.sales-reading-guide{display:grid;grid-template-columns:1fr 1fr;gap:16px;border:1px solid #d6e1eb;border-radius:12px;background:#f0f5fa;padding:14px 18px}
+.sales-reading-guide p{margin:0;font-size:12px;line-height:1.55;color:#3b5266}
+.sales-reading-guide strong{color:#254d72}
+.sales-data-warning{display:flex;gap:16px;align-items:center;justify-content:space-between;border:1px solid #e6c9bc;border-radius:12px;background:#fff5ef;padding:14px 18px;color:#75483a}
+.sales-data-warning strong{font-size:13px}.sales-data-warning p{margin:4px 0 0;font-size:12px;line-height:1.5;max-width:850px}
+.sales-issue-cell{min-width:220px;max-width:330px;line-height:1.5}.sales-issue-cell>span{display:block;color:#87473f;font-size:12px}.sales-issue-cell .button{margin-top:8px}.sales-issue-cell .sales-data-ok{color:#245e4e}
+.sales-results .sales-detail-help{padding:14px 20px;margin:0;background:#f5f8fb;line-height:1.5}
+@media(max-width:760px){.sales-reading-guide{grid-template-columns:1fr;gap:8px}.sales-data-warning{align-items:flex-start;flex-direction:column}}
+

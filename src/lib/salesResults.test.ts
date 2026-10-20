@@ -1,11 +1,26 @@
 import {describe,it,expect} from 'vitest'
-import {calculateSalesResults,validateLeadTracking,salesDay,type SalesLead,type SalesHistory,type SalesOrder} from './salesResults'
+import {calculateSalesResults,salesOrderIssue,validateLeadTracking,salesDay,type SalesLead,type SalesHistory,type SalesOrder} from './salesResults'
 const lead:SalesLead={id:'l',name:'Lead',received_on:'2026-10-05',customer_kind:'new_lead',profile_status:'in_profile',profile_reason:null,capture_source:'Agência',campaign:null,response_status:'active',stage:'budgeting',budget_id:'b',related_budget_ids:[],origin:'Instagram'}
 const event=(entity_type:SalesHistory['entity_type'],entity_id:string,recorded_at:string,state:SalesHistory['state']):SalesHistory=>({id:recorded_at+entity_id,entity_type,entity_id,recorded_at,state})
 const orders:SalesOrder[]=[{id:'o',display_number:'PED1',budget_id:'b',status:'awaiting_finance',created_at:'2026-12-01T13:00:00Z',total:100},{id:'o2',display_number:'PED2',budget_id:'b',status:'awaiting_finance',created_at:'2026-12-02T13:00:00Z',total:50}]
 const history=[event('opportunity','l','2026-10-05T12:00:00Z',{profile_status:'unassessed',stage:'new'}),event('opportunity','l','2026-11-10T12:00:00Z',{profile_status:'in_profile',stage:'budgeting'}),...orders.map(o=>event('order',o.id,o.created_at,{status:o.status,total:o.total}))]
 const range={from:'2026-10-01',to:'2026-10-31'}
 describe('resultados comerciais',()=>{
+ it('explica entrada posterior ao pedido sem confundir com origem comercial',()=>{
+  const o={...orders[0],created_at:'2026-10-08T12:00:00Z'}
+  const late={...lead,origin:'Indicação',received_on:'2026-10-19'}
+  const h=[...history,event('order',o.id,o.created_at,{status:o.status,total:o.total})]
+  expect(salesOrderIssue(o,late)).toContain('depois do fechamento')
+  const r=calculateSalesResults([late],[],[o],h,range,'2026-10-31')
+  expect(r.groups.find(g=>g.key==='unknown')?.orders).toHaveLength(1)
+  expect(r.buyers).toHaveLength(0);expect(r.closed).toHaveLength(1)
+  expect(salesOrderIssue(o,{...late,received_on:'2026-10-01'})).toBeNull()
+ })
+ it('distingue vínculo ausente, data ausente e tipo desconhecido',()=>{
+  expect(salesOrderIssue(orders[0])).toContain('sem oportunidade')
+  expect(salesOrderIssue(orders[0],{...lead,received_on:null})).toContain('Data de entrada')
+  expect(salesOrderIssue(orders[0],{...lead,customer_kind:'unknown'})).toContain('Tipo de oportunidade')
+ })
  it('retira cancelados dos leads sem apagar pedidos nem a fotografia anterior',()=>{
   const archived={...lead,archived_at:'2026-12-20T12:00:00Z'}
   const h=[...history,event('opportunity','l','2026-12-20T12:00:00Z',{archived_at:archived.archived_at})]

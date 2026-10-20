@@ -8,6 +8,13 @@ export type SalesRange={from:string;to:string}
 export const salesDay=(value:string)=>value.length===10?value:new Date(value).toLocaleDateString('sv-SE',{timeZone:'America/Sao_Paulo'})
 export const inSalesRange=(day:string|null,range:SalesRange)=>Boolean(day&&(!range.from||day>=range.from)&&(!range.to||day<=range.to))
 export const linkedBudgetIds=(lead:SalesLead)=>[...new Set([lead.budget_id,...lead.related_budget_ids].filter((id):id is string=>Boolean(id)))]
+export function salesOrderIssue(order:SalesOrder,lead?:SalesLead){
+ if(!lead)return 'Pedido sem oportunidade vinculada. Vincule o orçamento correto a uma oportunidade.'
+ if(!lead.received_on)return 'Data de entrada do contato não informada. Preencha a data real da chegada do cliente.'
+ if(lead.customer_kind==='unknown')return 'Tipo de oportunidade não informado. Indique se é novo lead ou recompra.'
+ if(lead.customer_kind!=='repeat'&&lead.received_on>salesDay(order.created_at))return 'A entrada do contato está depois do fechamento do pedido. Confira a data real da chegada e o vínculo do orçamento.'
+ return null
+}
 export function validateLeadTracking(lead:Pick<SalesLead,'received_on'|'customer_kind'|'profile_status'|'profile_reason'>,today=salesDay(new Date().toISOString())){
  if(lead.received_on&&(!/^\d{4}-\d{2}-\d{2}$/.test(lead.received_on)||Number.isNaN(new Date(lead.received_on+'T12:00:00Z').getTime())||new Date(lead.received_on+'T12:00:00Z').toISOString().slice(0,10)!==lead.received_on||lead.received_on>today))throw new Error('Informe uma data de entrada válida, não futura.')
  if(lead.received_on&&lead.customer_kind==='unknown')throw new Error('Informe se é novo lead ou recompra.')
@@ -51,7 +58,8 @@ export function calculateSalesResults(leads:SalesLead[],budgets:SalesBudget[],or
  const groups=['current','previous','repeat','unknown'].map(key=>{
   const deals=closed.filter(o=>{
    const lead=orderOwners.get(o.budget_id)
-   if(!lead?.received_on||lead.customer_kind==='unknown')return key==='unknown'
+   if(salesOrderIssue(o,lead))return key==='unknown'
+   if(!lead?.received_on)return false
    if(lead.customer_kind==='repeat')return key==='repeat'
    if(lead.received_on>salesDay(o.created_at))return key==='unknown'
    return inSalesRange(lead.received_on,range)?key==='current':key==='previous'
