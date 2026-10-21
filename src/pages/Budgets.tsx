@@ -43,7 +43,7 @@ type Budget = {
   created_at:string; updated_at:string; client:{name:string}|null
 }
 type DocumentType='pre_budget'|'budget'
-type Client = { id:string; name:string; document:string|null; phone:string|null; address:string|null; city:string|null; client_type:string; master_client_id:string|null; master:{name:string;address:string|null;city:string|null}[] }
+type Client = { crm_lifecycle?:'legacy'|'lead'|'customer'; id:string; name:string; document:string|null; phone:string|null; address:string|null; city:string|null; client_type:string; master_client_id:string|null; master:{name:string;address:string|null;city:string|null}[] }
 type Editable = Pick<Budget,'client_id'|'client_address'|'client_address_edited'|'valid_until'|'payment_terms'|'delivery_terms'|'notes'|'internal_notes'|'discount'>
 type Family={id:string;name:string;code:string;form_key:string}
 type BudgetItem={id:string;family_id:string|null;position:number;presentation:string;environment:string|null;description:string;quantity:number;configuration:Record<string,unknown>;cost_total:number;margin_percent:number|null;sale_total:number;affects_total:boolean;family:{name:string}|null}
@@ -79,7 +79,7 @@ export function Budgets() {
     try {
       const [budgetResult,clientResult] = await Promise.all([
         supabase.from('budgets').select(columns).eq('organization_id',access.organizationId).order('number',{ascending:false}),
-        loadAllPages<Client>((from,to)=>supabase!.from('clients').select('id,name,document,phone,address,city,client_type,master_client_id',{count:'exact'}).eq('organization_id',access.organizationId).is('archived_at',null).order('name').order('id').range(from,to) as unknown as PromiseLike<{data:Client[]|null;error:unknown;count:number|null}>),
+        loadAllPages<Client>((from,to)=>supabase!.from('clients').select('id,name,document,phone,address,city,client_type,master_client_id,crm_lifecycle',{count:'exact'}).eq('organization_id',access.organizationId).is('archived_at',null).order('name').order('id').range(from,to) as unknown as PromiseLike<{data:Client[]|null;error:unknown;count:number|null}>),
       ])
       if (clientResult.error) throw clientResult.error
       setClients(((clientResult.data ?? []) as Client[]).map(client=>({...client,master:[]})))
@@ -320,9 +320,9 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     event.preventDefault();if(!supabase||newClientSaving||!newClient.name.trim())return
     setNewClientSaving(true)
     const payload={id:crypto.randomUUID(),organization_id:budgetOrganizationId,client_type:'Cliente final',name:newClient.name.trim(),document:newClient.document.trim()||null,phone:newClient.phone.trim()||null,address:newClient.address.trim()||null,city:newClient.city.trim()||null,origin:newClient.origin||null,notes:newClient.notes.trim()||null,master_client_id:newClient.master_client_id||null,created_by:access.userId}
-    const {data,error}=await supabase.from('clients').insert(payload).select('id,name,document,phone,address,city,client_type,master_client_id').single()
+    const {data,error}=await supabase.from('clients').insert(payload).select('id,name,document,phone,address,city,client_type,master_client_id,crm_lifecycle').single()
     if(error||!data)show('Não foi possível cadastrar o cliente. Confira os dados e tente novamente.','error')
-    else {const saved={...(data as Client),master:[]};setAvailableClients(current=>[...current,saved].sort((a,b)=>a.name.localeCompare(b.name,'pt-BR')));setClientSearch(saved.name);setForm({...form,client_id:saved.id,client_address:[saved.address,saved.city].filter(Boolean).join(' · '),client_address_edited:false});setNewClientOpen(false);setNewClient({name:'',document:'',phone:'',address:'',city:'',origin:'',notes:'',master_client_id:''});show('Cliente cadastrado e selecionado no orçamento.','success')}
+    else {const saved={...(data as Client),master:[]};setAvailableClients(current=>[...current,saved].sort((a,b)=>a.name.localeCompare(b.name,'pt-BR')));setClientSearch(saved.name);setForm({...form,client_id:saved.id,client_address:[saved.address,saved.city].filter(Boolean).join(' · '),client_address_edited:false});setNewClientOpen(false);setNewClient({name:'',document:'',phone:'',address:'',city:'',origin:'',notes:'',master_client_id:''});show('Lead cadastrado e selecionado no orçamento. Será cliente ao confirmar o primeiro pedido.','success')}
     setNewClientSaving(false)
   }
   const [pendingPhotos,setPendingPhotos]=useState<File[]>([])
@@ -598,7 +598,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <header>
 <div>
 <span className="eyebrow">Cliente do orçamento</span>
-<h2>Novo cliente</h2>
+<h2>Novo contato / lead</h2>
 <p>O cadastro será incluído na base e selecionado neste orçamento.</p>
 </div>
 <button type="button" className="icon-button" aria-label="Fechar" onClick={()=>setNewClientOpen(false)}>
@@ -675,9 +675,9 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <option value={status} key={status}>{labels[status]}</option>)}</select>
 </label>
 <div className="field">
-<span>Cliente</span>
+<span>Cliente / lead</span>
 <div className="client-picker">
-<SearchSelect ariaLabel="Buscar cliente" disabled={budget.status!=='draft'} value={clientSearch} onChange={value=>{setClientSearch(value);if(!value.trim())setForm({...form,client_id:null,client_address:'',client_address_edited:false})}} onSelect={option=>{const selectedClient=availableClients.find(item=>item.id===option.id);if(selectedClient)selectClient(selectedClient)}} options={availableClients.map(item=>({id:item.id,label:item.name,detail:[item.client_type,item.phone,item.city].filter(Boolean).join(' · ')}))} placeholder="Digite para buscar"/>
+<SearchSelect ariaLabel="Buscar cliente" disabled={budget.status!=='draft'} value={clientSearch} onChange={value=>{setClientSearch(value);if(!value.trim())setForm({...form,client_id:null,client_address:'',client_address_edited:false})}} onSelect={option=>{const selectedClient=availableClients.find(item=>item.id===option.id);if(selectedClient)selectClient(selectedClient)}} options={availableClients.map(item=>({id:item.id,label:item.name,detail:[item.crm_lifecycle==='lead'?'Lead':item.crm_lifecycle==='customer'?'Cliente':'Cadastro anterior',item.client_type,item.phone,item.city].filter(Boolean).join(' · ')}))} placeholder="Digite para buscar"/>
 <button type="button" className="button secondary" disabled={budget.status!=='draft'} onClick={()=>setNewClientOpen(true)}>
 <Plus/>Novo</button>
 </div>
@@ -867,3 +867,4 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 </div>}
   </Page>
 }
+

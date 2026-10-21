@@ -8,7 +8,7 @@ type NavItem = { key: ModuleKey; label: string; icon: typeof Home }
 const groups: { label: string; items: NavItem[] }[] = [
   { label: 'Principal', items: [
     { key:'inicio', label:'Visão geral', icon:Home }, { key:'prospeccao', label:'Prospecção', icon:Handshake },
-    { key:'clientes', label:'Clientes', icon:UsersRound }, { key:'orcamentos', label:'Orçamentos', icon:FileText },
+    { key:'clientes', label:'Leads e clientes', icon:UsersRound }, { key:'orcamentos', label:'Orçamentos', icon:FileText },
     { key:'pedidos', label:'Pedidos', icon:PackageCheck }, { key:'agenda', label:'Agenda', icon:CalendarDays },
   ]},
   { label: 'Operação', items: [{ key:'compras', label:'Compras', icon:ShoppingCart },{ key:'prestadores', label:'Carga de prestadores', icon:CalendarDays }] },
@@ -31,3 +31,4 @@ export function Layout({ active, setActive, children }: { active: ModuleKey; set
     <main className="main-content">{children}</main>
   </div>
 }
+
