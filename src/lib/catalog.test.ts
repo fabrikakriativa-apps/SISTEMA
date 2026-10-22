@@ -13,4 +13,5 @@ describe('cadastros vinculados', () => {
   it('adiciona empresa ao insumo sem coluna de autor inexistente', () => { const result = catalogPayload('supplies', supply, access); expect(result.organization_id).toBe('org'); expect(result).not.toHaveProperty('created_by') })
   it.each([-1, NaN, Infinity])('rejeita custo inválido %s', current_cost => expect(() => catalogPayload('supplies', { ...supply, current_cost }, access)).toThrow())
   it('rejeita unidade vazia', () => expect(() => catalogPayload('supplies', { ...supply, usage_unit: '' }, access)).toThrow())
+  it('preserva os campos complementares e o vínculo do fornecedor no novo cadastro',()=>expect(catalogPayload('supplies',{...supply,primary_supplier_id:'fddbccd2-462b-4f71-973a-e4cbdc9f6499',brand:' Marca ',reference:' REF ',notes:' Observação ',active:false,import_details:{Largura:.53,Comprimento:10}},access)).toMatchObject({primary_supplier_id:'fddbccd2-462b-4f71-973a-e4cbdc9f6499',brand:'Marca',reference:'REF',notes:'Observação',active:false,import_details:{Largura:.53,Comprimento:10}}))
 })
