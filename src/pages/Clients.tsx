@@ -40,7 +40,7 @@ export function Clients(){
 <table>
 <thead>
 <tr>
-<SortableHeader label="Cliente" column="name" sort={sort} onChange={setSort}/>
+<SortableHeader label="Contato" column="name" sort={sort} onChange={setSort}/>
 <SortableHeader label="Tipo" column="type" sort={sort} onChange={setSort}/>
 <SortableHeader label="Telefone" column="phone" sort={sort} onChange={setSort}/>
 <SortableHeader label="Cidade" column="city" sort={sort} onChange={setSort}/>
@@ -120,4 +120,3 @@ export function Clients(){
 </div>}
  </Page>
 }
-
