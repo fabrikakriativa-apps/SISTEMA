@@ -1,0 +1,41 @@
+begin;
+select set_config('request.jwt.claim.sub',(select user_id::text from public.memberships where active and role='admin' limit 1),true);
+select set_config('request.jwt.claims',jsonb_build_object('sub',current_setting('request.jwt.claim.sub'),'role','authenticated')::text,true);
+set local role authenticated;
+do $test$
+declare org uuid;c uuid;o uuid;o2 uuid;doc public.budgets;doc2 public.budgets;count_before int;
+begin
+ select organization_id into org from public.memberships where user_id=auth.uid() and active limit 1;
+ insert into public.clients(organization_id,name,phone,email,origin,client_type,created_by) values(org,'TEST AUTOMATION','11999999999','test@example.invalid','Indicação','Cliente final',auth.uid()) returning id into c;
+ select id into o from public.sales_opportunities where client_id=c;
+ if o is null or (select count(*) from public.sales_opportunities where client_id=c)<>1 then raise exception 'Lead creation failed';end if;
+ if not exists(select 1 from public.sales_opportunities where id=o and phone='11999999999' and email='test@example.invalid' and origin='Indicação') then raise exception 'Contact data lost';end if;
+ if (select count(*) from public.sales_opportunities where client_id=c)<>1 then raise exception 'Duplicate lead';end if;
+ doc:=public.create_commercial_draft(org,'pre_budget');
+ update public.budgets set client_id=c where id=doc.id;
+ if not exists(select 1 from public.sales_opportunities where id=o and budget_id=doc.id and commercial_phase='preparing') then raise exception 'Unique linking failed';end if;
+ update public.budgets set client_id=c where id=doc.id;
+ if (select cardinality(related_budget_ids) from public.sales_opportunities where id=o)<>0 then raise exception 'Link duplicated';end if;
+ insert into public.sales_opportunities(organization_id,client_id,name,created_by) values(org,c,'Second negotiation',auth.uid()) returning id into o2;
+ doc2:=public.create_commercial_draft(org,'budget');
+ update public.budgets set client_id=c where id=doc2.id;
+ if exists(select 1 from public.sales_opportunities where budget_id=doc2.id or doc2.id=any(related_budget_ids)) then raise exception 'Ambiguous auto link';end if;
+ perform public.link_budget_opportunity(org,doc2.id,o2);
+ perform public.link_budget_opportunity(org,doc2.id,o2);
+ if not exists(select 1 from public.sales_opportunities where id=o2 and budget_id=doc2.id) then raise exception 'Explicit link failed';end if;
+ insert into public.budget_items(organization_id,budget_id,position,description,quantity,cost_total,sale_total,affects_total) values(org,doc2.id,1,'TEST ITEM',1,50,100,true);
+ perform public.mark_budget_sent(org,doc2.id);
+ perform public.approve_budget_and_create_order(org,doc2.id);
+ if (select crm_lifecycle from public.clients where id=c)<>'customer' then raise exception 'Customer promotion failed';end if;
+ if not exists(select 1 from public.sales_opportunities where id=o2 and stage='won' and next_follow_up_at is null) then raise exception 'Won automation failed';end if;
+ if (select stage from public.sales_opportunities where id=o)='won' then raise exception 'Wrong opportunity won';end if;
+ begin perform public.link_budget_opportunity(gen_random_uuid(),doc2.id,o);raise exception 'Cross org allowed';exception when insufficient_privilege then null;end;
+ select count(*) into count_before from public.sales_opportunities;
+ insert into public.sales_opportunities(organization_id,name,created_by) values(org,'Opportunity creates own lead',auth.uid()) returning id into o;
+ update public.sales_opportunities set client_id=null where id=o;
+ perform public.convert_opportunity_to_budget(org,o);
+ if (select count(*) from public.sales_opportunities)<>count_before+1 then raise exception 'Recursive opportunity';end if;
+end $test$;
+set constraints all immediate;
+rollback;
+

@@ -30,6 +30,7 @@ import { newUpholsteryEstimate, type UpholsteryEstimate } from '../lib/upholster
 import './Budgets.css'
 import { readRecovery,writeRecovery,clearRecovery,useRecoveryDraft } from '../lib/recoveryDraft'
 import { itemFieldRules } from '../lib/itemFieldRules'
+import {BudgetOpportunityLink} from '../components/BudgetOpportunityLink'
 import { RemoveAttachment } from '../components/RemoveAttachment'
 import { PendingItemPhoto } from '../components/PendingItemPhoto'
 import {loadAllPages} from '../lib/loadAllPages'
@@ -682,6 +683,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <Plus/>Novo</button>
 </div>
 </div>
+      <BudgetOpportunityLink organizationId={budgetOrganizationId} budgetId={budget.id} clientId={budget.client_id} revision={budget.updated_at}/>
       <label className="field span-2">Endereço do cliente<input disabled={!form.client_id||budget.status!=='draft'} value={form.client_address??''} onChange={e=>setForm({...form,client_address:e.target.value,client_address_edited:true})} placeholder={form.client_id?'Informe o endereço usado neste orçamento':'Selecione o cliente primeiro'}/>{form.client_address_edited&&<small className="field-note edited">Endereço editado pelo usuário neste orçamento</small>}</label>
       {master&&<label className="field span-2">Endereço do Parceiro/master<input readOnly value={masterAddress}/>
 <small className="field-note">{master.name}</small>

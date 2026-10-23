@@ -6,7 +6,10 @@
 - Clientes finais e parceiros/master continuam tipos independentes da situação comercial.
 - Primeiro pedido não cancelado promove o mesmo contato a Cliente. Oportunidade vinculada fica Ganha e o retorno é encerrado. Perfil não é alterado.
 - Cadastros anteriores sem compra comprovada permanecem identificados como Cadastro anterior; não foram convertidos em leads por suposição.
-- Documentos vinculados atualizam a preparação/envio de proposta. Não há associação automática por nome.
+- Cadastro direto de Lead cria uma oportunidade Novo contato com os dados e data de entrada. Contatos criados pela Prospecção não geram cartão duplicado; parceiros e cadastros anteriores não são tratados como novos leads.
+- Orçamento novo ou com contato selecionado vincula-se automaticamente quando houver exatamente uma oportunidade ativa desse contato na mesma organização. Vínculo existente é preservado; não há associação por nome.
+- Com mais de uma oportunidade ativa, o orçamento mostra a escolha explícita. Orçamentos anteriores sem vínculo podem ser associados nesse mesmo campo, sem inferir histórico automaticamente.
+- Documentos vinculados atualizam preparação/envio e pedidos confirmados mantêm o vínculo e promovem o contato a Cliente, sem alterar perfil.
 - Novas oportunidades de clientes com compra anterior à entrada informada são recompra. A origem de aquisição da oportunidade inicial é preservada ao ganhar.
 - Primeiro retorno: 1 dia corrido. Retorno após contato/proposta: 3 dias corridos. Administradores podem mudar os prazos para novos agendamentos. Agenda futura explícita é preservada no envio da proposta.
 - Contato é registrado manualmente sem integração de mensagens. Saídas contam como tentativas; entradas e saídas com resposta contam como respostas. Eventos de sistema não entram nesses contadores.
