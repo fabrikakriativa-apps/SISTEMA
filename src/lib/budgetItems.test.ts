@@ -2,6 +2,13 @@ import { describe,expect,it } from 'vitest'
 import { composedItemCost,itemCostTotal,marginFromSalePrice,salePriceFromCostAndMargin,salePriceFromMargin,supplyCostTotal } from './budgetItems'
 
 describe('budget item totals',()=>{
+  it('keeps imported PDF cost separate from sale and recalculates margin',()=>{
+    const imported={manufacturer_cost:818,additional_cost:0,margin_percent:50}
+    expect(salePriceFromMargin(imported)).toBe(1227)
+    expect(imported.manufacturer_cost).toBe(818)
+    expect(marginFromSalePrice(itemCostTotal(imported),1308.8)).toBe(60)
+    expect(salePriceFromMargin({...imported,additional_cost:100})).toBe(1377)
+  })
   it('includes manufacturer and additional costs',()=>{
     expect(itemCostTotal({manufacturer_cost:100,additional_cost:40,margin_percent:50})).toBe(140)
   })
@@ -21,3 +28,4 @@ describe('budget item totals',()=>{
     expect(marginFromSalePrice(0,300)).toBe(0)
   })
 })
+
