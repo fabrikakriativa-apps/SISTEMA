@@ -13,7 +13,7 @@ const Supplies=lazy(()=>import('./pages/Supplies').then(module=>({default:module
 const Budgets=lazy(()=>import('./pages/Budgets').then(module=>({default:module.Budgets})))
 const Orders=lazy(()=>import('./pages/Orders').then(module=>({default:module.Orders})))
 const Finance=lazy(()=>import('./pages/Finance').then(module=>({default:module.Finance})))
-const PurchasesConnected=lazy(()=>import('./pages/PurchasesConnected').then(module=>({default:module.PurchasesConnected})))
+const PurchasesConnected=lazy(()=>import('./pages/PurchasingWorkspace').then(module=>({default:module.PurchasingWorkspace})))
 const Suppliers=lazy(()=>import('./pages/Suppliers').then(module=>({default:module.Suppliers})))
 const Calendar=lazy(()=>import('./pages/Calendar').then(module=>({default:module.Calendar})))
 const ProviderWorkload=lazy(()=>import('./pages/ProviderWorkload').then(module=>({default:module.ProviderWorkload})))
@@ -39,4 +39,3 @@ export function App() {
     : <Administration/>
   return <ToastProvider><AuthGate><Layout active={active} setActive={navigate}><FormDraftProtection/><Suspense fallback={<p className="panel-message" role="status">Carregando módulo…</p>}>{content}</Suspense></Layout></AuthGate></ToastProvider>
 }
-

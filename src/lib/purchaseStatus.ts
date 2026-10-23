@@ -1,7 +1,7 @@
 export type PurchaseStatus='draft'|'awaiting_delivery'|'delayed'|'completed'|'cancelled'|'returned'
 
 export const purchaseStatusLabels:Record<PurchaseStatus,string>={
- draft:'Rascunho',awaiting_delivery:'Aguardando entrega',delayed:'Atrasado',completed:'Recebido',cancelled:'Cancelado',returned:'Devolvido'
+ draft:'Compra pendente',awaiting_delivery:'Aguardando entrega',delayed:'Atrasado',completed:'Concluído',cancelled:'Cancelado',returned:'Devolvido'
 }
 
 export const purchaseStatusOptions=(current:PurchaseStatus):PurchaseStatus[]=>{

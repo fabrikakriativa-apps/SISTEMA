@@ -10,9 +10,9 @@ type Item={id:string;snapshot:{description?:string};order:{display_number:string
 type Supply={id:string;code:string;name:string;category:string;usage_unit:string;current_cost:number;collection_name:string|null}
 const itemLabel=(item:Item)=>[item.order?.display_number,item.order?.client?.name,item.snapshot.description].filter(Boolean).join(' · ')
 const supplyLabel=(supply:Supply)=>`${supply.name} · ${supply.code}`
-export function ProcurementNeedEditor({organizationId,need,onClose,onSaved}:{organizationId:string;need:EditableNeed|null;onClose:()=>void;onSaved:()=>Promise<void>}){
- const key=`${organizationId}:need:${need?.id??'new'}`
- const [form,setForm]=useState(()=>readRecovery<EditableNeed>(key)??need??{id:'',order_item_id:'',supply_id:null,description:'',quantity:1,unit:'un',unit_cost:0,deadline:null})
+export function ProcurementNeedEditor({organizationId,need,onClose,onSaved,initialItemId}:{organizationId:string;need:EditableNeed|null;initialItemId?:string;onClose:()=>void;onSaved:()=>Promise<void>}){
+ const key=`${organizationId}:need:${need?.id??initialItemId??'new'}`
+ const [form,setForm]=useState(()=>readRecovery<EditableNeed>(key)??need??{id:'',order_item_id:initialItemId??'',supply_id:null,description:'',quantity:1,unit:'un',unit_cost:0,deadline:null})
  const [items,setItems]=useState<Item[]>([]),[supplies,setSupplies]=useState<Supply[]>([]),[saving,setSaving]=useState(false),[confirmDelete,setConfirmDelete]=useState(false),{show}=useToast()
  const [itemSearch,setItemSearch]=useState<string|null>(null),[supplySearch,setSupplySearch]=useState<string|null>(null),[loading,setLoading]=useState(true),[loadError,setLoadError]=useState(false)
  useRecoveryDraft(key,form)
