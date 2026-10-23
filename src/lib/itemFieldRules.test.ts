@@ -7,7 +7,8 @@ describe('campos por tipo de item', () => {
   it('mantém ambiente no papel de parede, sem custos avulsos', () => {
     expect(itemFieldRules('wallpaper')).toEqual({environment:true,manufacturerCost:false,additionalCost:false})
   })
-  it('preserva custos do fabricante para cortinas', () => {
-    expect(itemFieldRules('curtain')).toEqual({environment:true,manufacturerCost:true,additionalCost:true})
+  it.each(['curtain','blind','decoration'])('preserva campos básicos e custos para %s', key => {
+    expect(itemFieldRules(key)).toEqual({environment:true,manufacturerCost:true,additionalCost:true})
   })
 })
+
