@@ -44,4 +44,5 @@
   .upholstery-calculator .upholstery-piece{grid-template-columns:1fr}
   .upholstery-calculator .upholstery-summary{grid-template-columns:1fr}
 }
+.upholstery-calculator .upholstery-piece>.upholstery-manual-rate,.upholstery-calculator .upholstery-piece>.upholstery-manual-foam{grid-column:span 6;white-space:normal}.upholstery-manual-rate small,.upholstery-manual-foam small,.upholstery-pricing-note{font-size:11px;color:var(--muted);line-height:1.4}
 
