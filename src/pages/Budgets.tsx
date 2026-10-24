@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { ArrowLeft, CalendarPlus, Copy, FileText, GitBranch, ImagePlus, Plus, Search, Trash2, X } from 'lucide-react'
+import { GripVertical, ChevronUp, ChevronDown, ArrowLeft, CalendarPlus, Copy, FileText, GitBranch, ImagePlus, Plus, Search, Trash2, X } from 'lucide-react'
 import { Page } from '../components/Page'
 import { DashboardFocusNotice, useDashboardFocus } from '../components/DashboardFocusNotice'
 import { matchesDashboardFocus } from '../lib/dashboardFocus'
@@ -29,6 +29,7 @@ import { SortableHeader, compareValues, type SortState } from '../components/Sor
 import { newUpholsteryEstimate, type UpholsteryEstimate } from '../lib/upholsteryEstimate'
 import './Budgets.css'
 import { readRecovery,writeRecovery,clearRecovery,useRecoveryDraft } from '../lib/recoveryDraft'
+import {moveItem,documentItemOrder} from '../lib/itemOrder'
 import { itemFieldRules } from '../lib/itemFieldRules'
 import {BudgetOpportunityLink} from '../components/BudgetOpportunityLink'
 import { RemoveAttachment } from '../components/RemoveAttachment'
@@ -229,7 +230,9 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   const canEditItems=budget.status==='draft'&&(access.role==='admin'||access.role==='comercial')
   const canStartRevision=budget.document_type==='budget'&&['sent','rejected'].includes(budget.status)&&(access.role==='admin'||access.role==='comercial')
   const [families,setFamilies]=useState<Family[]>([]),[items,setItems]=useState<BudgetItem[]>([]),[itemSort,setItemSort]=useState<SortState<'position'|'type'|'description'|'quantity'|'cost'|'sale'|'presentation'>>({key:'position',direction:'asc'}),[itemOpen,setItemOpen]=useState(false),[itemForm,setItemForm]=useState<ItemForm>(newBlankItem),[itemSaving,setItemSaving]=useState(false),[itemDuplicatingId,setItemDuplicatingId]=useState<string|null>(null),[itemsLoading,setItemsLoading]=useState(true)
-  const sortedBudgetItems=useMemo(()=>[...items].sort((a,b)=>{const values={position:[a.position,b.position],type:[`${a.family?.name??''} ${a.environment??''}`,`${b.family?.name??''} ${b.environment??''}`],description:[a.description,b.description],quantity:[Number(a.quantity),Number(b.quantity)],cost:[Number(a.cost_total),Number(b.cost_total)],sale:[Number(a.sale_total),Number(b.sale_total)],presentation:[a.affects_total?'Item principal':'Opção',b.affects_total?'Item principal':'Opção']}[itemSort.key];return compareValues(values[0],values[1])*(itemSort.direction==='asc'?1:-1)}),[items,itemSort])
+  const [draggedItem,setDraggedItem]=useState<string|null>(null),[dropItem,setDropItem]=useState<string|null>(null),[itemOrderSaving,setItemOrderSaving]=useState(false)
+  const itemOrderLock=useRef(false)
+  const sortedBudgetItems=useMemo(()=>[...items].sort((a,b)=>{const values={position:[a.position,b.position],type:[`${a.family?.name??''} ${a.environment??''}`,`${b.family?.name??''} ${b.environment??''}`],description:[a.description,b.description],quantity:[Number(a.quantity),Number(b.quantity)],cost:[Number(a.cost_total),Number(b.cost_total)],sale:[Number(a.sale_total),Number(b.sale_total)],presentation:[a.affects_total?'Item principal':'Opção',b.affects_total?'Item principal':'Opção']}[itemSort.key];return (compareValues(values[0],values[1])||(itemSort.key==='position'?a.id.localeCompare(b.id):0))*(itemSort.direction==='asc'?1:-1)}),[items,itemSort])
   const [supplies,setSupplies]=useState<SupplyOption[]>([]),[supplyLines,setSupplyLines]=useState<SupplyLine[]>([])
   const [providers,setProviders]=useState<ProviderOption[]>([]),[laborLines,setLaborLines]=useState<LaborLine[]>([])
   const [paymentOptions,setPaymentOptions]=useState<ItemPaymentOption[]>([]),[itemPaymentOptions,setItemPaymentOptions]=useState<Record<string,ItemPaymentOption[]>>({})
@@ -308,6 +311,19 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   },[budget.id,budgetOrganizationId,show])
   useEffect(()=>{void loadItems()},[loadItems])
   useEffect(()=>setAvailableClients(clients),[clients])
+  const reorderItems=async(fromId:string,toId:string)=>{
+    if(!supabase||!canEditItems||itemOrderLock.current||itemSaving||itemDuplicatingId)return
+    const moved=moveItem(sortedBudgetItems,fromId,toId)
+    if(moved===sortedBudgetItems)return
+    const previous=items,expected=documentItemOrder(items).map(i=>i.id),next=moved.map((item,index)=>({...item,position:index+1}))
+    itemOrderLock.current=true;setItemOrderSaving(true);setDraggedItem(null);setDropItem(null);setItems(next);setItemSort({key:'position',direction:'asc'})
+    try{
+      const r=await supabase.rpc('reorder_budget_items',{org_id:budgetOrganizationId,target_budget_id:budget.id,item_ids:next.map(i=>i.id),expected_item_ids:expected})
+      if(r.error)throw r.error
+      show('Ordem dos itens salva. A prévia e o PDF seguem esta sequência.','success')
+    }catch(error){setItems(previous);show(error&&typeof error==='object'&&'message'in error?String(error.message):'Não foi possível salvar a ordem.','error');await loadItems()}
+    finally{itemOrderLock.current=false;setItemOrderSaving(false)}
+  }
   const costOf=(value:ItemForm,lines=supplyLines,labor=laborLines)=>Number((composedItemCost(value,lines)+laborCostTotal(labor)).toFixed(2))
   const withMargin=(value:ItemForm,lines=supplyLines,labor=laborLines)=>({...value,sale_total:salePriceFromCostAndMargin(costOf(value,lines,labor),value.margin_percent)})
   const changeSupplyLines=(lines:SupplyLine[])=>{setSupplyLines(lines);setItemForm(current=>withMargin(current,lines))}
@@ -591,7 +607,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <button className="button secondary" onClick={close}>
 <ArrowLeft/>Voltar aos orçamentos</button>
 </div>}>
-    {previewOpen&&<BudgetPreview budget={{...budget,valid_until:form.valid_until,payment_terms:form.payment_terms,delivery_terms:form.delivery_terms,notes:form.notes,discount:Number(form.discount||0),total:Math.max(0,Number(budget.subtotal)-Number(form.discount||0))}} items={sortedBudgetItems} paymentOptions={itemPaymentOptions} clientName={client?.name??'Cliente não informado'} clientAddress={form.client_address??''} onClose={()=>setPreviewOpen(false)}/>}
+    {previewOpen&&<BudgetPreview budget={{...budget,valid_until:form.valid_until,payment_terms:form.payment_terms,delivery_terms:form.delivery_terms,notes:form.notes,discount:Number(form.discount||0),total:Math.max(0,Number(budget.subtotal)-Number(form.discount||0))}} items={documentItemOrder(items)} paymentOptions={itemPaymentOptions} clientName={client?.name??'Cliente não informado'} clientAddress={form.client_address??''} onClose={()=>setPreviewOpen(false)}/>}
     {specOpen&&<div className="dialog-backdrop"><form className="dialog" onSubmit={e=>{e.preventDefault();void saveSpecifications()}}><header><div><h2>Revisar especificações</h2><p>Complemente tecido, descrições e observações. Esta revisão mantém os valores aprovados e o pedido vinculado.</p></div><button type="button" className="icon-button" aria-label="Fechar" onClick={()=>setSpecOpen(false)}><X/></button></header><div className="form-grid">{specItems.map((item,index)=><label className="field span-2" key={item.id}>Descrição do item {index+1}<textarea required value={item.description} onChange={e=>setSpecItems(current=>current.map(x=>x.id===item.id?{...x,description:e.target.value}:x))}/></label>)}<label className="field span-2">Observações<textarea value={specNotes} onChange={e=>setSpecNotes(e.target.value)}/></label></div><footer><button type="button" className="button secondary" onClick={()=>setSpecOpen(false)}>Cancelar</button><button className="button primary" disabled={workflowBusy}>{workflowBusy?'Salvando…':'Salvar revisão'}</button></footer></form></div>}
     {confirmDuplicate&&<div className="dialog-backdrop"><div className="dialog"><header><div><h2>Duplicar orçamento</h2><p>Uma cópia em rascunho receberá um novo número da sequência atual. Cliente, itens, custos e condições serão copiados. Pedidos, financeiro e arquivos anexados não serão duplicados.</p></div></header><footer><button className="button secondary" disabled={workflowBusy} onClick={()=>setConfirmDuplicate(false)}>Cancelar</button><button className="button primary" disabled={workflowBusy} onClick={()=>void duplicateBudget()}>{workflowBusy?'Duplicando…':'Confirmar duplicação'}</button></footer></div></div>}
     {newClientOpen&&<div className="dialog-backdrop">
@@ -734,11 +750,11 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <p>{isPreBudget?'Comece pelo item, medidas aproximadas e valor de referência.':'Cada item mantém seu ambiente, custo, margem e forma de apresentação.'}</p>
 </div>
 {canEditItems?<button className="button primary" onClick={()=>openItem()}><Plus/>Adicionar item</button>:<span className="field-note">{canStartRevision?'Crie uma revisão para atualizar os itens e enviar novamente.':budget.status!=='draft'?'Itens bloqueados neste status.':'Seu perfil atual não pode alterar itens.'}</span>}
-</header>{itemsLoading?<p className="panel-message">Carregando itens…</p>:items.length?<div className="table-wrap">
+</header><div className="budget-item-order-toolbar"><button type="button" className="text-button" onClick={()=>setItemSort({key:'position',direction:'asc'})}>Ordem do orçamento</button><small role="status">{itemOrderSaving?'Salvando ordem…':canEditItems?'Arraste pela alça ⋮⋮ ou use as setas para mover os itens.':'Ordem preservada nesta versão.'}</small></div>{itemsLoading?<p className="panel-message">Carregando itens…</p>:items.length?<div className="table-wrap">
 <table>
 <thead>
 <tr>
-<SortableHeader label="Tipo / ambiente" column="type" sort={itemSort} onChange={setItemSort}/>
+<th className="item-reorder-column" aria-label="Ordem dos itens">Ordem</th><SortableHeader label="Tipo / ambiente" column="type" sort={itemSort} onChange={setItemSort}/>
 <SortableHeader label="Descrição" column="description" sort={itemSort} onChange={setItemSort}/>
 <SortableHeader label="Qtd." column="quantity" sort={itemSort} onChange={setItemSort}/>
 <SortableHeader label="Custo" column="cost" sort={itemSort} onChange={setItemSort}/>
@@ -747,8 +763,9 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 {canEditItems&&<th className="actions-column">Ações</th>}
 </tr>
 </thead>
-<tbody>{sortedBudgetItems.map(item=>
-<tr className="clickable-row" key={item.id} onClick={()=>void openItem(item)}>
+<tbody>{sortedBudgetItems.map((item,itemIndex)=>
+<tr className={`clickable-row ${dropItem===item.id?'item-drop-target':''} ${draggedItem===item.id?'item-dragging':''}`} key={item.id} onClick={()=>{if(!itemOrderSaving&&!draggedItem)void openItem(item)}} onDragOver={event=>{if(canEditItems&&draggedItem&&draggedItem!==item.id&&!itemOrderSaving){event.preventDefault();event.dataTransfer.dropEffect='move';setDropItem(item.id)}}} onDrop={event=>{event.preventDefault();event.stopPropagation();if(draggedItem)void reorderItems(draggedItem,item.id)}}>
+<td className="item-reorder-cell" onClick={event=>event.stopPropagation()}>{canEditItems?<div className="item-reorder-controls"><button type="button" className="item-drag-handle" draggable={!itemOrderSaving&&!itemSaving&&itemDuplicatingId===null} disabled={itemOrderSaving||itemSaving||itemDuplicatingId!==null} aria-label={'Arrastar item '+(itemIndex+1)} title="Arraste para reordenar" onDragStart={event=>{event.stopPropagation();event.dataTransfer.effectAllowed='move';event.dataTransfer.setData('text/plain',item.id);setDraggedItem(item.id)}} onDragEnd={()=>{setDraggedItem(null);setDropItem(null)}}><GripVertical size={16}/></button><div className="item-order-arrows"><button type="button" aria-label={'Mover item '+(itemIndex+1)+' para cima'} title="Mover para cima" disabled={itemOrderSaving||itemIndex===0} onClick={()=>void reorderItems(item.id,sortedBudgetItems[itemIndex-1]?.id)}><ChevronUp size={12}/></button><button type="button" aria-label={'Mover item '+(itemIndex+1)+' para baixo'} title="Mover para baixo" disabled={itemOrderSaving||itemIndex===sortedBudgetItems.length-1} onClick={()=>void reorderItems(item.id,sortedBudgetItems[itemIndex+1]?.id)}><ChevronDown size={12}/></button></div></div>:<span>{item.position}</span>}</td>
 <td>
 <strong>{item.family?.name??'Item'}</strong>
 <small>{item.environment||'Ambiente a definir'}</small>
@@ -762,7 +779,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <td>
 <span className="badge">{item.affects_total?'Item principal':'Opção'}</span>
 </td>
-{canEditItems&&<td className="item-actions"><div className="item-action-list"><button type="button" className="button secondary compact-button" disabled={itemDuplicatingId!==null} onClick={event=>{event.stopPropagation();void duplicateItem(item)}}><Copy/>{itemDuplicatingId===item.id?'Duplicando…':'Duplicar'}</button><button type="button" className="button item-delete-button" aria-label={`Excluir ${item.description}`} title="Excluir item" disabled={itemDuplicatingId!==null} onClick={event=>{event.stopPropagation();setItemPendingDelete(item)}}><Trash2/></button></div></td>}
+{canEditItems&&<td className="item-actions"><div className="item-action-list"><button type="button" className="button secondary compact-button" disabled={itemDuplicatingId!==null||itemOrderSaving} onClick={event=>{event.stopPropagation();void duplicateItem(item)}}><Copy/>{itemDuplicatingId===item.id?'Duplicando…':'Duplicar'}</button><button type="button" className="button item-delete-button" aria-label={`Excluir ${item.description}`} title="Excluir item" disabled={itemDuplicatingId!==null} onClick={event=>{event.stopPropagation();setItemPendingDelete(item)}}><Trash2/></button></div></td>}
 </tr>)}</tbody>
 </table>
 </div>:<div className="empty-state compact">
