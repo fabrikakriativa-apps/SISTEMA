@@ -14,3 +14,12 @@
 ## Verificação
 
 Testes unitários de derivação e centavos; integração autenticada em transação com rollback: dois pedidos, rateio, confirmação e recebimento repetidos, compra de loja quitada, bloqueio de dispensa com compra vinculada, proteção de cancelamento agrupado e rejeição de outra organização. Comparação antes/depois de IDs/status/valores confirma preservação dos registros reais.
+# Fluxo simplificado
+
+- A aba por pedido abre os materiais de cada item em modal. A dispensa de compra é uma situação da linha; registros antigos de estoque são exibidos como Não necessita de compra, sem alteração dos dados anteriores.
+- A aba Compras e encomendas é uma lista única de materiais: necessidades sem compra e linhas de compras existentes. Documentos antigos são acessíveis diretamente, sem tela de histórico separada.
+- Registrar compra usa a ação transacional direct: cria registro interno e financeiro juntos, com pagamento/retirada explícitos. Registrar encomenda usa order, exige número do fornecedor e previsão, e mantém recebimento separado.
+- supplier_due_date guarda a previsão sem deslocar vencimentos financeiros silenciosamente. Recebimento não recria contas. Custos continuam vinculados às linhas e itens de origem.
+- A lista compartilhável agrupa descrição e unidade por fornecedor; o texto pode ser revisado e copiado. Não inclui clientes, pedidos, preços ou margens e não altera status. A divisão por item continua preservada no banco.
+
+

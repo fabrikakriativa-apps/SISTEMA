@@ -4,7 +4,7 @@ export type WorkspaceItem={id:string;order_id:string;status:string;procurement_r
 export function purchasingSummary(item:Pick<WorkspaceItem,'procurement_review'>,needs:Pick<WorkspaceNeed,'status'>[],hasPendingPurchase=false){
  const active=needs.filter(n=>n.status!=='cancelled')
  if(item.procurement_review==='not_required')return 'Não necessita de compra'
- if(item.procurement_review==='stock')return 'Material disponível'
+ if(item.procurement_review==='stock')return 'Não necessita de compra'
  if(item.procurement_review==='pending')return 'A avaliar'
  if(!active.length)return 'Necessidades a informar'
  if(active.every(n=>n.status==='received'))return 'Compras concluídas'
@@ -14,3 +14,4 @@ export function purchasingSummary(item:Pick<WorkspaceItem,'procurement_review'>,
 }
 export const workspacePurchaseLabels:Record<string,string>={draft:'Compra pendente',awaiting_delivery:'Aguardando entrega',delayed:'Aguardando entrega (atrasada)',completed:'Concluído',cancelled:'Cancelado',returned:'Devolvido'}
 export const lineTotal=(n:{quantity:number;unit_cost:number})=>Math.round((Number(n.quantity)*Number(n.unit_cost)+Number.EPSILON)*100)/100
+

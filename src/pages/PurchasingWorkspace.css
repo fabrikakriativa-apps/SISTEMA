@@ -2,4 +2,5 @@
 .purchasing-item-heading span:not(.badge){display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 
 .purchasing-item-preview{display:-webkit-box!important;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.5}.purchasing-workspace td strong{font-size:12px}.purchasing-workspace .text-button{font-size:11px}
+.purchasing-dialog>.purchasing-item-body{padding:18px}.purchasing-dialog>.purchasing-item-body .table-wrap{margin-top:16px}.purchasing-dialog>.purchasing-item-body p{white-space:pre-wrap}.purchasing-material-name{text-align:left;font-weight:600}.purchasing-dialog .purchasing-actions{margin-top:12px}.purchasing-dialog td{font-size:12px;white-space:normal}.purchasing-dialog .field textarea{font-family:inherit;line-height:1.6}.purchasing-item-heading select{max-width:220px}
 
