@@ -71,8 +71,7 @@ export function Dashboard({ navigate }: { navigate: (key: ModuleKey) => void }) 
     {kind:'overdue-receivables',label:'Parcelas a receber vencidas',ids:ids(scoped.receivables.filter(x=>x.status==='overdue'||!!(x.due_date&&x.due_date<todayKey)))},
     {kind:'calendar-sync',label:'Compromissos para sincronizar',ids:ids(scoped.events.filter(x=>!x.cancelled_at&&needsCalendarSync(x.sync_status)))},
   ].filter(item=>item.ids.length>0)
-  return <Page title="Visão geral" description={filtering?'Sua operação no período selecionado':'Sua operação hoje'} action={<button className="button secondary" disabled={loading} onClick={() => void load()}><RefreshCw/>{loading ? 'Atualizando…' : 'Atualizar'}</button>}>
-    <DashboardPeriodFilter value={period} preset={preset} onChange={(value,selected)=>{setPeriod(value);setPreset(selected)}}/>
+  return <Page className="dashboard-page" title="Visão geral" description={filtering?'Sua operação no período selecionado':'Sua operação hoje'} action={<div className="dashboard-heading-actions"><DashboardPeriodFilter value={period} preset={preset} onChange={(value,selected)=>{setPeriod(value);setPreset(selected)}}/><button className="button secondary dashboard-refresh" disabled={loading} onClick={() => void load()}><RefreshCw/>{loading ? 'Atualizando…' : 'Atualizar'}</button></div>}>
     {!validPeriod&&<div className="inline-warning" role="alert"><AlertCircle/><span>A data inicial não pode ser posterior à data final.</span></div>}
     {error && <div className="inline-warning"><AlertCircle/><span>{error}</span></div>}
     <section className="metric-grid dashboard-metrics">{metrics.map(metric => <button type="button" className="metric-card clickable-metric" key={metric.label} disabled={!validPeriod} onClick={()=>navigate(metric.module)}><div><span>{metric.label}</span><strong>{loading||!validPeriod ? '—' : metric.value}</strong><small>{metric.helper}</small></div><metric.icon/></button>)}</section>
@@ -81,4 +80,3 @@ export function Dashboard({ navigate }: { navigate: (key: ModuleKey) => void }) 
     </section>
   </Page>
 }
-

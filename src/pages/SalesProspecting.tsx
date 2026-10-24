@@ -11,6 +11,7 @@ import {opportunityPayload,type OpportunityStage} from '../lib/opportunities'
 import {linkedBudgetIds,profileLabels,salesDay,validateLeadTracking,type SalesLead,type LeadProfile,type SalesBudget,type SalesOrder} from '../lib/salesResults'
 import {SalesResults} from './SalesResults'
 import {withOpportunityClient} from '../lib/opportunityClient'
+import {resolveOpportunityOrigins} from '../lib/opportunityOrigin'
 import {cancellationNote} from '../lib/opportunityCancellation'
 import {matchesOpportunitySearch} from '../lib/opportunitySearch'
 import {SalesContactHistory} from '../components/SalesContactHistory'
@@ -19,13 +20,15 @@ import './SalesResults.css'
 import './SalesProspecting.css'
 
 type Lead=SalesLead&{commercial_phase?:CommercialPhase|null;assigned_to?:string|null;phone:string|null;email:string|null;notes:string|null;estimated_value:number|null;next_follow_up_at:string|null;lost_reason:string|null;client_id:string|null}
-type Client={id:string;name:string;phone:string|null;email:string|null;city:string|null}
+type Client={id:string;name:string;phone:string|null;email:string|null;city:string|null;origin:string|null;archived_at:string|null}
 type Form=Omit<Lead,'estimated_value'>&{estimated_value:number|''}
 const fresh=():Form=>({id:'',name:'',phone:'',email:'',notes:'',origin:'',stage:'new',estimated_value:'',next_follow_up_at:'',lost_reason:'',client_id:null,budget_id:null,related_budget_ids:[],received_on:salesDay(new Date().toISOString()),profile_status:'unassessed',profile_reason:'',capture_source:'',campaign:'',customer_kind:'new_lead',response_status:'active',commercial_phase:'new',assigned_to:null})
 const columns=Object.entries(commercialLabels) as [CommercialPhase,string][]
 export function SalesProspecting(){
  const access=useAccess(),{show}=useToast()
- const [items,setItems]=useState<Lead[]>([]),[clients,setClients]=useState<Client[]>([]),[budgets,setBudgets]=useState<SalesBudget[]>([]),[orders,setOrders]=useState<SalesOrder[]>([])
+ const [rawItems,setItems]=useState<Lead[]>([]),[allClients,setClients]=useState<Client[]>([]),[budgets,setBudgets]=useState<SalesBudget[]>([]),[orders,setOrders]=useState<SalesOrder[]>([])
+ const items=useMemo(()=>resolveOpportunityOrigins(rawItems,allClients),[rawItems,allClients])
+ const clients=useMemo(()=>allClients.filter(client=>!client.archived_at),[allClients])
  const [loading,setLoading]=useState(true),[error,setError]=useState(''),[saving,setSaving]=useState(false),[open,setOpen]=useState(false),[form,setForm]=useState<Form>(fresh),[search,setSearch]=useState(''),[clientSearch,setClientSearch]=useState(''),[budgetSearch,setBudgetSearch]=useState(''),[results,setResults]=useState(false)
  const canEdit=Boolean(access&&['admin','comercial'].includes(access.role))
  const [cancelled,setCancelled]=useState(false),[cancelling,setCancelling]=useState(false),[cancelReason,setCancelReason]=useState('')
@@ -36,7 +39,7 @@ export function SalesProspecting(){
   try{
    const [l,c,b,o,a,u,s]=await Promise.all([
     loadAllPages<Lead>((from,to)=>supabase!.from('sales_opportunities').select('*',{count:'exact'}).eq('organization_id',org).order('updated_at',{ascending:false}).order('id').range(from,to)),
-    loadAllPages<Client>((from,to)=>supabase!.from('clients').select('id,name,phone,email,city',{count:'exact'}).eq('organization_id',org).is('archived_at',null).order('name').order('id').range(from,to)),
+    loadAllPages<Client>((from,to)=>supabase!.from('clients').select('id,name,phone,email,city,origin,archived_at',{count:'exact'}).eq('organization_id',org).order('name').order('id').range(from,to)),
     loadAllPages<SalesBudget>((from,to)=>supabase!.from('budgets').select('id,display_number,client_id,status,created_at,total',{count:'exact'}).eq('organization_id',org).order('created_at',{ascending:false}).order('id').range(from,to)),
     loadAllPages<SalesOrder>((from,to)=>supabase!.from('orders').select('id,display_number,budget_id,status,created_at,total',{count:'exact'}).eq('organization_id',org).order('id').range(from,to)),
     loadAllPages<ContactActivity>((from,to)=>supabase!.from('sales_contact_activities').select('id,opportunity_id,kind,occurred_at,channel,direction,outcome,notes,next_follow_up_at,created_by',{count:'exact'}).eq('organization_id',org).order('occurred_at',{ascending:false}).order('id').range(from,to)),
@@ -50,7 +53,7 @@ export function SalesProspecting(){
  useEffect(()=>{void load()},[load])
  const won=(lead:SalesLead)=>orders.some(o=>o.status!=='cancelled'&&linkedBudgetIds(lead).includes(o.budget_id))
  const column=(lead:Lead|Form)=>phaseForLead(lead,orders,budgets)
- const edit=(lead?:Lead)=>{setCancelling(false);setCancelReason('');setForm(lead?{...lead,commercial_phase:column(lead),estimated_value:lead.estimated_value??'',next_follow_up_at:lead.next_follow_up_at?.slice(0,16)??''}:{...fresh(),assigned_to:access?.userId??null});setClientSearch(clients.find(c=>c.id===lead?.client_id)?.name??'');setBudgetSearch('');setOpen(true)}
+ const edit=(lead?:Lead)=>{const source=rawItems.find(item=>item.id===lead?.id)??lead;setCancelling(false);setCancelReason('');setForm(source?{...source,commercial_phase:column(source),estimated_value:source.estimated_value??'',next_follow_up_at:source.next_follow_up_at?.slice(0,16)??''}:{...fresh(),assigned_to:access?.userId??null});setClientSearch(allClients.find(c=>c.id===source?.client_id)?.name??'');setBudgetSearch('');setOpen(true)}
  const archive=async(restore=false)=>{
   if(!supabase||!access||!canEdit||saving||!form.id)return
   setSaving(true)
@@ -84,6 +87,7 @@ export function SalesProspecting(){
  const filtered=useMemo(()=>items.filter(l=>Boolean(l.archived_at)===cancelled&&matchesOpportunitySearch(l,orders,search)&&matchesFollowUp(l,column(l),followFilter)&&(!owner||l.assigned_to===owner)),[items,orders,budgets,search,cancelled,followFilter,owner])
  const saveRules=async()=>{if(!supabase||!access||access.role!=='admin'||saving)return;setSaving(true);try{const {error}=await supabase.from('sales_followup_settings').upsert({organization_id:access.organizationId,first_contact_days:firstDays,follow_up_days:followDays});if(error)throw error;setRulesOpen(false);show('Prazos automáticos salvos. Retornos já agendados foram preservados.','success')}catch{show('Não foi possível salvar as regras.','error')}finally{setSaving(false)}}
  const afterContact=async()=>{if(!supabase||!access)return;const {data,error}=await supabase.from('sales_opportunities').select('stage,commercial_phase,response_status,next_follow_up_at,assigned_to').eq('organization_id',access.organizationId).eq('id',form.id).single();if(error)throw error;setForm(current=>({...current,...data}));await load()}
+ const inheritedOrigin=allClients.find(client=>client.id===form.client_id)?.origin?.trim()||''
  const chosen=linkedBudgetIds(form)
  const documentOptions=budgets.filter(b=>!chosen.includes(b.id)&&(!form.client_id||b.client_id===form.client_id)&&!items.some(l=>!l.archived_at&&l.id!==form.id&&linkedBudgetIds(l).includes(b.id)))
  const visibleColumns=columns
@@ -99,7 +103,7 @@ export function SalesProspecting(){
    {possibleDuplicate&&<p className="span-2 inline-warning" role="status">Já existe uma oportunidade para este cliente ou telefone: {possibleDuplicate.name}. Se for o mesmo atendimento, use o registro existente para não duplicar o lead. Para uma nova demanda de cliente antigo, selecione Recompra.</p>}
    <label className="field">Data de entrada do contato<input type="date" max={salesDay(new Date().toISOString())} value={form.received_on??''} onChange={e=>setForm({...form,received_on:e.target.value||null})}/><small>Data real da chegada, não a data do cadastro. Deixe em branco se desconhecida.</small></label>
    <label className="field">Tipo de oportunidade<select value={form.customer_kind} onChange={e=>setForm({...form,customer_kind:e.target.value as Form['customer_kind']})}><option value="new_lead">Novo lead</option><option value="repeat">Cliente existente / recompra</option><option value="unknown">Não informado</option></select></label>
-   <label className="field">Origem<input value={form.origin??''} onChange={e=>setForm({...form,origin:e.target.value})} placeholder="Instagram, Google, indicação…"/></label>
+   <label className="field">Origem<input value={form.origin?.trim()?form.origin:inheritedOrigin} onChange={e=>setForm({...form,origin:e.target.value})} placeholder="Instagram, Google, indicação…"/><small>{!form.origin?.trim()&&inheritedOrigin?'Usando a origem do cadastro vinculado.':'Deixe vazio para usar a origem do cadastro vinculado, quando disponível.'}</small></label>
    <label className="field">Captação<input list="sales-capture" value={form.capture_source??''} onChange={e=>setForm({...form,capture_source:e.target.value})} placeholder="Agência de marketing, orgânico…"/><datalist id="sales-capture"><option>Agência de marketing</option><option>Orgânico</option><option>Indicação</option><option>Loja</option></datalist></label>
    <label className="field span-2">Campanha (opcional)<input value={form.campaign??''} onChange={e=>setForm({...form,campaign:e.target.value})}/></label>
    <label className="field">Perfil do lead<select value={form.profile_status} onChange={e=>setForm({...form,profile_status:e.target.value as LeadProfile})}>{Object.entries(profileLabels).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select><small>Independente da compra: avalie a compatibilidade com sua proposta de valor.</small></label>
