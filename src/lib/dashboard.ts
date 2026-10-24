@@ -8,7 +8,7 @@ export type DashboardEvent = { id?: string; starts_at: string; cancelled_at: str
 export function summarizeDashboard(budgets: DashboardBudget[], orders: DashboardOrder[], receivables: DashboardReceivable[], events: DashboardEvent[], now = new Date()) {
   // Conversion changes document_type on the same budget ID; a duplicated quote
   // has a new ID and represents an independent negotiation.
-  const negotiations = [...new Map(budgets.map(item => [item.id, item])).values()]
+  const negotiations = [...new Map(budgets.map(item => [item.id, item])).values()].filter(item=>item.status!=='cancelled')
   const formalBudgets = negotiations.filter(item => item.document_type === 'budget')
   const preBudgets = negotiations.filter(item => item.document_type === 'pre_budget')
   const activeBudgets = negotiations.filter(item => ['draft', 'sent'].includes(item.status))
@@ -43,4 +43,3 @@ export function summarizeDashboard(budgets: DashboardBudget[], orders: Dashboard
     },
   }
 }
-

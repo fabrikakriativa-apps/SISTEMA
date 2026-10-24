@@ -40,6 +40,7 @@ type Budget = {
   id:string; organization_id:string; number:number; display_number:string; current_revision:number; client_id:string|null
   document_type:DocumentType; pre_budget_display_number:string|null
   status:BudgetStatus; valid_until:string|null; payment_terms:string|null; delivery_terms:string|null
+  status_reason?:string|null;status_changed_at?:string|null
   client_address:string|null; client_address_edited:boolean
   notes:string|null; internal_notes:string|null; subtotal:number; discount:number; total:number
   created_at:string; updated_at:string; client:{name:string}|null
@@ -56,7 +57,7 @@ type ItemPhoto={id:string;original_name:string;storage_path:string;created_at:st
 
 const blankEditable:Editable = { client_id:null, client_address:'', client_address_edited:false, valid_until:null, payment_terms:'', delivery_terms:'', notes:'', internal_notes:'', discount:0 }
 const newBlankItem=():ItemForm=>({family_id:'',environment:'',description:'',quantity:1,presentation:'principal',manufacturer_cost:0,additional_cost:0,margin_percent:50,sale_total:0,confection_subitem:'',initial_configuration:{}})
-const columns = 'id,organization_id,number,display_number,current_revision,client_id,client_address,client_address_edited,document_type,pre_budget_display_number,status,valid_until,payment_terms,delivery_terms,notes,internal_notes,subtotal,discount,total,created_at,updated_at'
+const columns = 'id,organization_id,number,display_number,current_revision,client_id,client_address,client_address_edited,document_type,pre_budget_display_number,status,status_reason,status_changed_at,valid_until,payment_terms,delivery_terms,notes,internal_notes,subtotal,discount,total,created_at,updated_at'
 const withClient = (budget:Budget, clients:Client[]):Budget => ({...budget,client:clients.find(client=>client.id===budget.client_id)?{name:clients.find(client=>client.id===budget.client_id)!.name}:null})
 
 function errorMessage(error:unknown, fallback:string) {
@@ -168,7 +169,7 @@ export function Budgets() {
 <strong>{counts.approved}</strong>
 </button>
 <button type="button" className={`budget-status-card ${statusFilter==='rejected'?'active':''}`} aria-pressed={statusFilter==='rejected'} onClick={()=>toggleStatusFilter('rejected')}>
-<span>Reprovados</span>
+<span>Perdidos</span>
 <strong>{counts.rejected}</strong>
 </button>
 <button type="button" className={`budget-status-card ${statusFilter==='cancelled'?'active':''}`} aria-pressed={statusFilter==='cancelled'} onClick={()=>toggleStatusFilter('cancelled')}>
@@ -228,7 +229,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   const budgetOrganizationId=budget.organization_id
   const {show}=useToast()
   const canEditItems=budget.status==='draft'&&(access.role==='admin'||access.role==='comercial')
-  const canStartRevision=budget.document_type==='budget'&&['sent','rejected'].includes(budget.status)&&(access.role==='admin'||access.role==='comercial')
+  const canStartRevision=budget.document_type==='budget'&&budget.status==='sent'&&(access.role==='admin'||access.role==='comercial')
   const [families,setFamilies]=useState<Family[]>([]),[items,setItems]=useState<BudgetItem[]>([]),[itemSort,setItemSort]=useState<SortState<'position'|'type'|'description'|'quantity'|'cost'|'sale'|'presentation'>>({key:'position',direction:'asc'}),[itemOpen,setItemOpen]=useState(false),[itemForm,setItemForm]=useState<ItemForm>(newBlankItem),[itemSaving,setItemSaving]=useState(false),[itemDuplicatingId,setItemDuplicatingId]=useState<string|null>(null),[itemsLoading,setItemsLoading]=useState(true)
   const [draggedItem,setDraggedItem]=useState<string|null>(null),[dropItem,setDropItem]=useState<string|null>(null),[itemOrderSaving,setItemOrderSaving]=useState(false)
   const itemOrderLock=useRef(false)
@@ -568,7 +569,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     setWorkflowBusy(true)
     const {data,error}=await supabase.rpc('change_budget_status',{org_id:access.organizationId,target_budget_id:budget.id,new_status:pendingStatus,change_reason:statusReason.trim()||null})
     if(error)show('Não foi possível alterar o status do orçamento.','error')
-    else {setBudget(data as unknown as Budget);setPendingStatus(null);show(`Status alterado para ${labels[pendingStatus]}.`,'success')}
+    else {setBudget({...budget,...data as Omit<Budget,'client'>});setPendingStatus(null);show(`Status alterado para ${labels[pendingStatus]}.`,'success')}
     setWorkflowBusy(false)
   }
   const openAttachment=async(attachment:Attachment)=>{if(!supabase)return;const {data,error}=await supabase.storage.from('documents').createSignedUrl(attachment.storage_path,300);if(error||!data?.signedUrl)show('Não foi possível abrir o documento.','error');else window.open(data.signedUrl,'_blank','noopener,noreferrer')}
@@ -674,7 +675,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     {pendingStatus&&<div className="workflow-confirm">
 <div>
 <strong>Alterar status para {labels[pendingStatus]}?</strong>
-<span>{pendingStatus==='draft'?'Uma nova revisão editável será iniciada.':'Esta alteração ficará registrada no histórico.'}</span>{statusNeedsReason(pendingStatus)&&<input autoFocus value={statusReason} onChange={e=>setStatusReason(e.target.value)} placeholder="Informe o motivo"/>}</div>
+<span>{pendingStatus==='draft'?'Uma nova revisão editável será iniciada.':pendingStatus==='cancelled'?'Use para erro ou duplicidade. O documento fica no histórico, fora da conversão.':pendingStatus==='rejected'?'A negociação sairá do valor em aberto e poderá ser reaberta. Outros documentos ativos serão preservados.':'Esta alteração ficará registrada no histórico.'}</span>{statusNeedsReason(pendingStatus)&&<input aria-label="Motivo da alteração de status" autoFocus value={statusReason} onChange={e=>setStatusReason(e.target.value)} placeholder="Informe o motivo (mínimo de 5 caracteres)"/>}</div>
 <button className="button secondary" onClick={()=>setPendingStatus(null)}>Voltar</button>
 <button className="button primary" disabled={workflowBusy||statusNeedsReason(pendingStatus)&&statusReason.trim().length<5} onClick={()=>void changeStatus()}>{workflowBusy?'Alterando…':'Confirmar alteração'}</button>
 </div>}
@@ -688,9 +689,10 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <span className={`save-state ${saveState}`}>{stateLabel}</span>
 </header>
 <div className="form-grid">
-      <label className="field">{isPreBudget?'Etapa':'Status'}<select value={budget.status} disabled={workflowBusy} onChange={e=>requestStatus(e.target.value as BudgetStatus)}>{(isPreBudget?(budget.status==='draft'?['draft','sent','cancelled'] as BudgetStatus[]:budget.status==='sent'?['sent','draft','cancelled'] as BudgetStatus[]:[budget.status]):budgetStatusOptions(budget.status)).map(status=>
+      <label className="field">Status<select value={budget.status} disabled={workflowBusy||!['admin','comercial'].includes(access.role)} onChange={e=>requestStatus(e.target.value as BudgetStatus)}>{budgetStatusOptions(budget.status,budget.document_type).map(status=>
 <option value={status} key={status}>{labels[status]}</option>)}</select>
 </label>
+{['rejected','cancelled'].includes(budget.status)&&<div className="field span-2"><span>{labels[budget.status]}{budget.status_changed_at?' em '+new Date(budget.status_changed_at).toLocaleDateString('pt-BR'):''}</span><small>{budget.status_reason||'Motivo registrado no histórico anterior.'}{budget.status==='rejected'?' Para retomar, altere o status para Rascunho.':''}</small></div>}
 <div className="field">
 <span>Cliente / lead</span>
 <div className="client-picker">
@@ -892,4 +894,3 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 </div>}
   </Page>
 }
-

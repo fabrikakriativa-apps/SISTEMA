@@ -29,11 +29,13 @@ describe('summarizeDashboard', () => {
     expect(result.approvedBudgetCount).toBe(1)
     expect(result.budgetConversionRate).toBe(50)
   })
-  it('pré-orçamentos enviados e encerrados também integram a base histórica',()=>{
+  it('cancelados não distorcem a conversão, mas perdidos integram a base histórica',()=>{
     const result=summarizeDashboard([{id:'pre',document_type:'pre_budget',status:'cancelled',total:100},{id:'formal',document_type:'budget',status:'approved',total:100}],[],[],[])
-    expect(result.budgetConversionRate).toBe(50)
+    expect(result.budgetConversionRate).toBe(100)
     expect(result.negotiatingTotal).toBe(0)
+    const lost=summarizeDashboard([{id:'pre',document_type:'pre_budget',status:'rejected',total:100},{id:'formal',document_type:'budget',status:'approved',total:100}],[],[],[])
+    expect(lost.budgetConversionRate).toBe(50)
+    expect(lost.negotiatingTotal).toBe(0)
   })
   it('trata base vazia sem divisão por zero',()=>expect(summarizeDashboard([],[],[],[]).budgetConversionRate).toBe(0))
 })
-
