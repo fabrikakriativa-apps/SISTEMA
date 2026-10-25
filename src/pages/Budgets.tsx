@@ -145,7 +145,7 @@ export function Budgets() {
 
   const matching=useMemo(()=>items.filter(item=>matchesDashboardFocus(item.id,dashboardFocus,item)&&item.document_type===documentFilter&&inDateRange(item.created_at,dateRange)&&`${item.display_number} ${item.client?.name??''} ${labels[item.status]}`.toLowerCase().includes(search.toLowerCase())),[items,search,documentFilter,dateRange,dashboardFocus])
   const filtered=useMemo(()=>{const selected=statusFilter?matching.filter(item=>item.status===statusFilter):matching;const value=(item:Budget)=>sort.key==='number'?`${item.display_number} ${item.client?.name??''}`:sort.key==='type'?item.document_type:sort.key==='revision'?item.current_revision:sort.key==='created'?item.created_at:sort.key==='value'?Number(item.total):labels[item.status];return [...selected].sort((a,b)=>compareValues(value(a),value(b))*(sort.direction==='asc'?1:-1))},[matching,statusFilter,sort])
-  const counts=useMemo(()=>({draft:matching.filter(x=>x.status==='draft').length,sent:matching.filter(x=>x.status==='sent').length,approved:matching.filter(x=>x.status==='approved').length,rejected:matching.filter(x=>x.status==='rejected').length,cancelled:matching.filter(x=>x.status==='cancelled').length}),[matching])
+  const counts=useMemo(()=>({draft:matching.filter(x=>x.status==='draft').length,sent:matching.filter(x=>x.status==='sent').length,no_response:matching.filter(x=>x.status==='no_response').length,approved:matching.filter(x=>x.status==='approved').length,rejected:matching.filter(x=>x.status==='rejected').length,cancelled:matching.filter(x=>x.status==='cancelled').length}),[matching])
   const toggleStatusFilter=(status:BudgetStatus)=>setStatusFilter(current=>current===status?null:status)
   if(selected) return <BudgetEditor access={access!} budget={selected} setBudget={budget=>{const updated=withClient(budget,clients);selectedRef.current=updated;setSelected(updated);setItems(current=>current.map(item=>item.id===updated.id?updated:item))}} form={form} setForm={setForm} clients={clients} saveState={saveState} close={()=>{initialized.current=false;selectedRef.current=null;setSelected(null);navigateTo('orcamentos')}}/>
 
@@ -163,6 +163,9 @@ export function Budgets() {
 <button type="button" className={`budget-status-card ${statusFilter==='sent'?'active':''}`} aria-pressed={statusFilter==='sent'} onClick={()=>toggleStatusFilter('sent')}>
 <span>Enviados</span>
 <strong>{counts.sent}</strong>
+</button>
+<button type="button" className={`budget-status-card ${statusFilter==='no_response'?'active':''}`} aria-pressed={statusFilter==='no_response'} onClick={()=>toggleStatusFilter('no_response')}>
+<span>Sem resposta</span><strong>{counts.no_response}</strong>
 </button>
 <button type="button" className={`budget-status-card ${statusFilter==='approved'?'active':''}`} aria-pressed={statusFilter==='approved'} onClick={()=>toggleStatusFilter('approved')}>
 <span>Aprovados</span>
@@ -560,7 +563,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   const requestStatus=(next:BudgetStatus)=>{
     if(next===budget.status)return
     if(next==='approved'){setConfirmApproval(true);return}
-    if(next==='sent'){void markSent();return}
+    if(next==='sent'&&budget.status!=='no_response'){void markSent();return}
     setStatusReason('');setPendingStatus(next)
   }
   const changeStatus=async()=>{
@@ -675,7 +678,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     {pendingStatus&&<div className="workflow-confirm">
 <div>
 <strong>Alterar status para {labels[pendingStatus]}?</strong>
-<span>{pendingStatus==='draft'?'Uma nova revisão editável será iniciada.':pendingStatus==='cancelled'?'Use para erro ou duplicidade. O documento fica no histórico, fora da conversão.':pendingStatus==='rejected'?'A negociação sairá do valor em aberto e poderá ser reaberta. Outros documentos ativos serão preservados.':'Esta alteração ficará registrada no histórico.'}</span>{statusNeedsReason(pendingStatus)&&<input aria-label="Motivo da alteração de status" autoFocus value={statusReason} onChange={e=>setStatusReason(e.target.value)} placeholder="Informe o motivo (mínimo de 5 caracteres)"/>}</div>
+<span>{pendingStatus==='draft'?'Uma nova revisão editável será iniciada.':pendingStatus==='cancelled'?'Use para erro ou duplicidade. O documento fica no histórico, fora da conversão.':pendingStatus==='rejected'?'A negociação sairá do valor em aberto e poderá ser reaberta. Outros documentos ativos serão preservados.':pendingStatus==='no_response'?'Continua em negociação. O perfil e os retornos agendados serão preservados.':'Esta alteração ficará registrada no histórico.'}</span>{statusNeedsReason(pendingStatus)&&<input aria-label="Motivo da alteração de status" autoFocus value={statusReason} onChange={e=>setStatusReason(e.target.value)} placeholder="Informe o motivo (mínimo de 5 caracteres)"/>}</div>
 <button className="button secondary" onClick={()=>setPendingStatus(null)}>Voltar</button>
 <button className="button primary" disabled={workflowBusy||statusNeedsReason(pendingStatus)&&statusReason.trim().length<5} onClick={()=>void changeStatus()}>{workflowBusy?'Alterando…':'Confirmar alteração'}</button>
 </div>}
@@ -693,6 +696,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <option value={status} key={status}>{labels[status]}</option>)}</select>
 </label>
 {['rejected','cancelled'].includes(budget.status)&&<div className="field span-2"><span>{labels[budget.status]}{budget.status_changed_at?' em '+new Date(budget.status_changed_at).toLocaleDateString('pt-BR'):''}</span><small>{budget.status_reason||'Motivo registrado no histórico anterior.'}{budget.status==='rejected'?' Para retomar, altere o status para Rascunho.':''}</small></div>}
+{budget.status==='no_response'&&<div className="field span-2"><small>Sem resposta{budget.status_changed_at?' desde '+new Date(budget.status_changed_at).toLocaleDateString('pt-BR'):''}. Continua no valor em negociação, sem encerrar o atendimento.</small></div>}
 <div className="field">
 <span>Cliente / lead</span>
 <div className="client-picker">

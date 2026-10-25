@@ -38,4 +38,8 @@ describe('summarizeDashboard', () => {
     expect(lost.negotiatingTotal).toBe(0)
   })
   it('trata base vazia sem divisão por zero',()=>expect(summarizeDashboard([],[],[],[]).budgetConversionRate).toBe(0))
+  it('mantém sem resposta no valor em negociação e na base de conversão',()=>{
+    const result=summarizeDashboard([{id:'pending',status:'no_response',total:250,document_type:'pre_budget'},{id:'won',status:'approved',total:100,document_type:'budget'}],[],[],[])
+    expect(result.negotiatingTotal).toBe(250);expect(result.budgetConversionRate).toBe(50)
+  })
 })

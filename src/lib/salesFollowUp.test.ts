@@ -22,5 +22,9 @@ describe('follow-up comercial',()=>{
   expect(matchesFollowUp({...lead,next_follow_up_at:null},'new','unscheduled',now)).toBe(true)
   expect(matchesFollowUp({...lead,archived_at:'2026-10-20'},'new','today',now)).toBe(false)
  })
+ it('sem resposta continua aguardando retorno, não significa perda',()=>{
+  const pending={...lead,response_status:'no_response' as const}
+  expect(matchesFollowUp(pending,'proposal_sent','waiting')).toBe(true)
+  expect(phaseForLead(pending,[],[{id:'b',display_number:'ORC1',client_id:null,status:'no_response',created_at:'2026-10-01',total:100}])).toBe('proposal_sent')
+ })
 })
-

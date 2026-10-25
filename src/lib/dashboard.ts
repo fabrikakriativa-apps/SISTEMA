@@ -11,7 +11,7 @@ export function summarizeDashboard(budgets: DashboardBudget[], orders: Dashboard
   const negotiations = [...new Map(budgets.map(item => [item.id, item])).values()].filter(item=>item.status!=='cancelled')
   const formalBudgets = negotiations.filter(item => item.document_type === 'budget')
   const preBudgets = negotiations.filter(item => item.document_type === 'pre_budget')
-  const activeBudgets = negotiations.filter(item => ['draft', 'sent'].includes(item.status))
+  const activeBudgets = negotiations.filter(item => ['draft', 'sent','no_response'].includes(item.status))
   const activeOrders = orders.filter(item => !['completed', 'cancelled'].includes(item.status))
   const openReceivables = receivables.filter(item => ['open', 'partial', 'overdue'].includes(item.status))
   const today = new Date(now); today.setHours(0, 0, 0, 0)
@@ -26,7 +26,7 @@ export function summarizeDashboard(budgets: DashboardBudget[], orders: Dashboard
     totalPreBudgetCount: preBudgets.length,
     totalFormalBudgetCount: formalBudgets.length,
     negotiationDraftCount: activeBudgets.filter(item => item.status === 'draft').length,
-    negotiationSentCount: activeBudgets.filter(item => item.status === 'sent').length,
+    negotiationSentCount: activeBudgets.filter(item => ['sent','no_response'].includes(item.status)).length,
     activeOrderCount: activeOrders.length,
     receivableBalance: openReceivables.reduce((sum, item) => sum + Math.max(0, Number(item.amount || 0) - Number(item.paid_amount || 0)), 0),
     upcomingEventCount: upcomingEvents.length,

@@ -8,7 +8,7 @@ export function phaseForLead(lead:FollowUpLead,orders:SalesOrder[],budgets:Sales
  if(orders.some(o=>o.status!=='cancelled'&&ids.includes(o.budget_id)))return 'won'
  if(lead.stage==='lost')return 'lost'
  if(lead.commercial_phase)return lead.commercial_phase
- if(budgets.some(b=>ids.includes(b.id)&&['sent','approved'].includes(b.status)))return 'proposal_sent'
+ if(budgets.some(b=>ids.includes(b.id)&&['sent','no_response','approved'].includes(b.status)))return 'proposal_sent'
  if(ids.length||lead.stage==='budgeting')return 'preparing'
  return lead.stage==='new'?'new':lead.stage==='won'?'won':'contacted'
 }
@@ -20,7 +20,7 @@ export type FollowUpFilter='all'|'today'|'overdue'|'unscheduled'|'waiting'
 export function matchesFollowUp(lead:FollowUpLead,phase:CommercialPhase,filter:FollowUpFilter,now=new Date()){
  if(filter==='all')return true
  if(['won','lost'].includes(phase)||lead.archived_at)return false
- if(filter==='waiting')return lead.response_status==='waiting'
+ if(filter==='waiting')return ['waiting','no_response'].includes(lead.response_status)
  if(filter==='unscheduled')return !lead.next_follow_up_at
  if(!lead.next_follow_up_at)return false
  if(filter==='today')return salesDay(lead.next_follow_up_at)===salesDay(now.toISOString())
@@ -28,4 +28,3 @@ export function matchesFollowUp(lead:FollowUpLead,phase:CommercialPhase,filter:F
 }
 export const channelLabels:Record<string,string>={whatsapp:'WhatsApp',email:'E-mail',phone:'Ligação',meeting:'Reunião',other:'Outro',system:'Sistema'}
 export const outcomeLabels:Record<string,string>={answered:'Houve resposta',no_response:'Sem resposta',requested_return:'Pediu retorno',stage:'Atualização automática'}
-
