@@ -1,15 +1,16 @@
 .upholstery-calculator .upholstery-piece{
   grid-template-columns:repeat(12,minmax(0,1fr));
-  align-items:end;
+  align-items:start;
   column-gap:12px;
   row-gap:14px;
 }
 
 .upholstery-calculator .upholstery-piece>.field{grid-column:span 2;min-width:0}
 .upholstery-calculator .upholstery-piece>.field:first-of-type{grid-column:span 6}
-.upholstery-calculator .upholstery-piece>.field:nth-of-type(5),
-.upholstery-calculator .upholstery-piece>.field:nth-of-type(6){grid-column:span 3}
-.upholstery-calculator .upholstery-piece>.field:last-of-type{grid-column:span 6}
+.upholstery-calculator .upholstery-piece>.upholstery-fabric-reference,
+.upholstery-calculator .upholstery-piece>.upholstery-manual-rate{grid-column:span 3}
+.upholstery-manual-rate small,.upholstery-manual-foam small,.upholstery-pricing-note{font-size:11px;color:var(--muted);line-height:1.4;white-space:normal}
+.upholstery-manual-foam .text-button{font-size:11px;text-align:left;justify-self:start;white-space:normal}
 .upholstery-calculator .upholstery-piece input,
 .upholstery-calculator .upholstery-piece select{width:100%;min-width:0}
 
@@ -32,8 +33,7 @@
 @media (max-width:1100px){
   .upholstery-calculator .upholstery-piece{grid-template-columns:repeat(2,minmax(0,1fr))}
   .upholstery-calculator .upholstery-piece>.field:nth-of-type(n){grid-column:span 1}
-  .upholstery-calculator .upholstery-piece>.field:first-of-type,
-  .upholstery-calculator .upholstery-piece>.field:last-of-type{grid-column:1/-1}
+  .upholstery-calculator .upholstery-piece>.field:first-of-type{grid-column:1/-1}
 }
 
 @media (max-width:900px){
@@ -44,5 +44,3 @@
   .upholstery-calculator .upholstery-piece{grid-template-columns:1fr}
   .upholstery-calculator .upholstery-summary{grid-template-columns:1fr}
 }
-.upholstery-calculator .upholstery-piece>.upholstery-manual-rate,.upholstery-calculator .upholstery-piece>.upholstery-manual-foam{grid-column:span 6;white-space:normal}.upholstery-manual-rate small,.upholstery-manual-foam small,.upholstery-pricing-note{font-size:11px;color:var(--muted);line-height:1.4}
-

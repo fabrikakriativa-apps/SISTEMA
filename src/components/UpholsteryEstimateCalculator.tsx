@@ -23,9 +23,9 @@ export function UpholsteryEstimateCalculator({estimate,onChange,onApplyValue,onI
         <label className="field">Espessura da peça (cm)<DecimalInput value={piece.piece_thickness??0} decimalScale={1} onValueChange={value=>updatePiece(piece.id,{piece_thickness:value})}/></label>
         <label className="field">Espuma<select value={piece.density} onChange={event=>updatePiece(piece.id,{density:event.target.value as UpholsteryPiece['density']})}>{Object.entries(foamDensityLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
         <label className="field">Espessura da espuma (cm)<DecimalInput value={piece.thickness} decimalScale={1} onValueChange={value=>updatePiece(piece.id,{thickness:value})}/></label>
-        <label className="field">Referência do tecido<input value={piece.fabric_reference} onChange={event=>updatePiece(piece.id,{fabric_reference:event.target.value})} placeholder="Ex.: Linho linha essencial"/></label>
-        <label className="field upholstery-manual-rate">Custo do estofado por m²<DecimalInput ariaLabel={'Custo por m² da peça '+(index+1)} value={piece.cost_per_square_meter??0} decimalScale={2} onValueChange={value=>updatePiece(piece.id,{cost_per_square_meter:value})}/><small>Área: {(piece.width*piece.height).toLocaleString('pt-BR',{maximumFractionDigits:3})} m² · valor definido por você.</small></label>
         <label className="field upholstery-manual-foam">Qtd. de espuma (m²)<DecimalInput ariaLabel={'Quantidade de espuma da peça '+(index+1)} value={piece.foam_quantity_manual??Number((piece.width*piece.height).toFixed(3))} decimalScale={3} onValueChange={value=>updatePiece(piece.id,{foam_quantity_manual:value})}/>{piece.foam_quantity_manual!=null?<button type="button" className="text-button" onClick={()=>updatePiece(piece.id,{foam_quantity_manual:null})}>Usar medidas da peça</button>:<small>Sugerida pelas medidas; pode ser editada.</small>}</label>
+        <label className="field upholstery-fabric-reference">Referência do tecido<input value={piece.fabric_reference} onChange={event=>updatePiece(piece.id,{fabric_reference:event.target.value})} placeholder="Ex.: Linho linha essencial"/></label>
+        <label className="field upholstery-manual-rate">Custo do estofado por m²<DecimalInput ariaLabel={'Custo por m² da peça '+(index+1)} value={piece.cost_per_square_meter??0} decimalScale={2} onValueChange={value=>updatePiece(piece.id,{cost_per_square_meter:value})}/><small>Área: {(piece.width*piece.height).toLocaleString('pt-BR',{maximumFractionDigits:3})} m² · valor definido por você.</small></label>
       </div>)}
     </div>
     <div className="upholstery-estimate-inputs">
@@ -46,4 +46,3 @@ export function UpholsteryEstimateCalculator({estimate,onChange,onApplyValue,onI
     <footer><button type="button" className="button secondary" disabled={!description} onClick={()=>onInsertDescription(description)}>Inserir resumo na descrição</button><button type="button" className="button primary" disabled={!result.pricing_ready} onClick={()=>onApplyValue(result.sale_total)}>Usar valor sugerido</button></footer>
   </section>
 }
-
