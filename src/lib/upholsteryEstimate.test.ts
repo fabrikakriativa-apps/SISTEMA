@@ -8,10 +8,10 @@ describe('calculateUpholsteryEstimate',()=>{
     expect(calculateUpholsteryEstimate(estimate).upholstery_cost).toBe(450)
     expect(calculateUpholsteryEstimate(estimate).sale_total).toBe(675)
     const changed=calculateUpholsteryEstimate({...estimate,pieces:estimate.pieces.map(p=>({...p,foam_quantity_manual:4,density:'d23',thickness:8}))})
-    expect(changed.foam_quantity).toBe(8)
+    expect(changed.foam_quantity).toBe(.64)
     expect(changed.upholstery_cost).toBe(450)
     expect(calculateUpholsteryEstimate({...estimate,pieces:estimate.pieces.map(p=>({...p,foam_quantity_manual:0}))}).foam_quantity).toBe(0)
-    expect(calculateUpholsteryEstimate({...estimate,pieces:estimate.pieces.map(p=>({...p,foam_quantity_manual:null}))}).foam_quantity).toBe(3)
+    expect(calculateUpholsteryEstimate({...estimate,pieces:estimate.pieces.map(p=>({...p,foam_quantity_manual:null}))}).foam_quantity).toBe(.11)
   })
   it('does not invent a price for legacy estimates without manual rates',()=>{
     const estimate:UpholsteryEstimate={pieces:[{id:'1',name:'Cabeceira',width:2,height:1,thickness:3,density:'d28',fabric_reference:''}],fabric_width:1.4,fabric_estimate:0,labor_estimate:0,additional_estimate:0,margin_percent:70}
@@ -36,7 +36,7 @@ describe('calculateUpholsteryEstimate',()=>{
     ]}
     const result=calculateUpholsteryEstimate(estimate)
     expect(result.upholstery_cost).toBe(1116)
-    expect(result.foam_quantity).toBe(3)
+    expect(result.foam_quantity).toBe(.09)
     expect(result.fabric_groups).toEqual([{reference:'Linho',meters:3.5,piece_count:2},{reference:'Veludo',meters:1.5,piece_count:1}])
     expect(result.base_total).toBe(1296)
     expect(result.sale_total).toBe(1944)
@@ -54,5 +54,21 @@ describe('calculateUpholsteryEstimate',()=>{
     expect(upholsteryDescription(estimate)).toContain('Espuma: D28 — espessura: 3 cm')
     expect(calculateUpholsteryEstimate(estimate).base_total).toBe(calculateUpholsteryEstimate({...estimate,pieces:estimate.pieces.map(p=>({...p,piece_thickness:20}))}).base_total)
   })
+  it('uses foam volume in m³ independently from service area and price',()=>{
+    const piece={id:'1',name:'Cabeceira',width:3.4,height:1.1,thickness:5,piece_thickness:10,density:'d28' as const,fabric_reference:'',cost_per_square_meter:100}
+    const estimate:UpholsteryEstimate={pieces:[piece],fabric_width:1.4,fabric_estimate:0,labor_estimate:0,additional_estimate:0,margin_percent:0}
+    const result=calculateUpholsteryEstimate(estimate)
+    expect(result.foam_quantity).toBe(.187)
+    expect(result.pieces[0].foam_area).toBe(3.74)
+    expect(result.upholstery_cost).toBe(374)
+    const manual=calculateUpholsteryEstimate({...estimate,pieces:[{...piece,foam_quantity_manual:.2,foam_quantity_unit:'m3'}]})
+    expect(manual.foam_quantity).toBe(.2)
+    expect(manual.upholstery_cost).toBe(374)
+    expect(calculateUpholsteryEstimate({...estimate,pieces:[{...piece,thickness:10}]}).foam_quantity).toBe(.374)
+    expect(calculateUpholsteryEstimate({...estimate,pieces:[{...piece,cost_per_square_meter:999}]}).foam_quantity).toBe(.187)
+    const legacy={...piece,foam_quantity_manual:4}
+    expect(calculateUpholsteryEstimate({...estimate,pieces:[legacy]}).foam_quantity).toBe(.2)
+    expect(legacy.foam_quantity_manual).toBe(4)
+    expect(calculateUpholsteryEstimate({...estimate,pieces:[{...piece,width:.1,height:.1,thickness:.1}]}).foam_quantity).toBe(.00001)
+  })
 })
-

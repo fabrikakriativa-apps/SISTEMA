@@ -1,6 +1,6 @@
 import { Plus, X } from 'lucide-react'
 import { DecimalInput } from './DecimalInput'
-import { calculateUpholsteryEstimate, foamDensityLabels, upholsteryDescription, type UpholsteryEstimate, type UpholsteryPiece } from '../lib/upholsteryEstimate'
+import { calculateUpholsteryEstimate, foamQuantityCubicMeters, foamDensityLabels, upholsteryDescription, type UpholsteryEstimate, type UpholsteryPiece } from '../lib/upholsteryEstimate'
 import { money } from '../lib/format'
 import './UpholsteryEstimateCalculator.css'
 
@@ -23,9 +23,9 @@ export function UpholsteryEstimateCalculator({estimate,onChange,onApplyValue,onI
         <label className="field">Espessura da peça (cm)<DecimalInput value={piece.piece_thickness??0} decimalScale={1} onValueChange={value=>updatePiece(piece.id,{piece_thickness:value})}/></label>
         <label className="field">Espuma<select value={piece.density} onChange={event=>updatePiece(piece.id,{density:event.target.value as UpholsteryPiece['density']})}>{Object.entries(foamDensityLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
         <label className="field">Espessura da espuma (cm)<DecimalInput value={piece.thickness} decimalScale={1} onValueChange={value=>updatePiece(piece.id,{thickness:value})}/></label>
-        <label className="field upholstery-manual-foam">Qtd. de espuma (m²)<DecimalInput ariaLabel={'Quantidade de espuma da peça '+(index+1)} value={piece.foam_quantity_manual??Number((piece.width*piece.height).toFixed(3))} decimalScale={3} onValueChange={value=>updatePiece(piece.id,{foam_quantity_manual:value})}/>{piece.foam_quantity_manual!=null?<button type="button" className="text-button" onClick={()=>updatePiece(piece.id,{foam_quantity_manual:null})}>Usar medidas da peça</button>:<small>Sugerida pelas medidas; pode ser editada.</small>}</label>
+        <label className="field upholstery-manual-foam">Qtd. de espuma (m³)<DecimalInput ariaLabel={'Quantidade de espuma em m³ da peça '+(index+1)} value={foamQuantityCubicMeters(piece)} decimalScale={6} onValueChange={value=>updatePiece(piece.id,{foam_quantity_manual:value,foam_quantity_unit:'m3'})}/>{piece.foam_quantity_manual!=null?<button type="button" className="text-button" onClick={()=>updatePiece(piece.id,{foam_quantity_manual:null,foam_quantity_unit:'m3'})}>Usar medidas da peça</button>:<small>Largura × altura × espessura ÷ 100. Editável.</small>}</label>
         <label className="field upholstery-fabric-reference">Referência do tecido<input value={piece.fabric_reference} onChange={event=>updatePiece(piece.id,{fabric_reference:event.target.value})} placeholder="Ex.: Linho linha essencial"/></label>
-        <label className="field upholstery-manual-rate">Custo do estofado por m²<DecimalInput ariaLabel={'Custo por m² da peça '+(index+1)} value={piece.cost_per_square_meter??0} decimalScale={2} onValueChange={value=>updatePiece(piece.id,{cost_per_square_meter:value})}/><small>Área: {(piece.width*piece.height).toLocaleString('pt-BR',{maximumFractionDigits:3})} m² · valor definido por você.</small></label>
+        <label className="field upholstery-manual-rate">Custo do estofado por m²<DecimalInput ariaLabel={'Custo por m² da peça '+(index+1)} value={piece.cost_per_square_meter??0} decimalScale={2} onValueChange={value=>updatePiece(piece.id,{cost_per_square_meter:value})}/><small>Área da peça: {(piece.width*piece.height).toLocaleString('pt-BR',{maximumFractionDigits:3})} m². Independente da espuma.</small></label>
       </div>)}
     </div>
     <div className="upholstery-estimate-inputs">
@@ -37,7 +37,7 @@ export function UpholsteryEstimateCalculator({estimate,onChange,onApplyValue,onI
     </div>
     <div className="upholstery-summary">
       <div><span>Custo do estofado</span><strong>{result.pricing_ready?money.format(result.upholstery_cost):'Informe o valor por m²'}</strong></div>
-      <div><span>Qtd. de espuma</span><strong>{result.foam_quantity.toLocaleString('pt-BR',{minimumFractionDigits:3,maximumFractionDigits:3})} m²</strong></div>
+      <div><span>Qtd. de espuma</span><strong>{result.foam_quantity.toLocaleString('pt-BR',{minimumFractionDigits:3,maximumFractionDigits:6})} m³</strong></div>
       <div className="upholstery-fabric-result"><label className="field">Metragem de tecido (m)<DecimalInput value={result.fabric_meters} decimalScale={3} onValueChange={value=>{if(value!==result.fabric_meters)onChange({...estimate,fabric_meters_manual:value})}}/></label>{estimate.fabric_meters_manual!=null&&<button type="button" className="text-button" onClick={()=>onChange({...estimate,fabric_meters_manual:null})}>Usar cálculo automático</button>}</div>
       <div><span>Custo estimado</span><strong>{result.pricing_ready?money.format(result.base_total):'—'}</strong></div>
       <div className="upholstery-sale"><span>Valor sugerido</span><strong>{result.pricing_ready?money.format(result.sale_total):'—'}</strong></div>

@@ -11,6 +11,7 @@ export type UpholsteryPiece={
   fabric_reference:string
   cost_per_square_meter?:number
   foam_quantity_manual?:number|null
+  foam_quantity_unit?:'m2'|'m3'
 }
 
 export type UpholsteryEstimate={
@@ -27,6 +28,13 @@ export const foamDensityLabels:Record<FoamDensity,string>={d23:'D23',d28:'D28',d
 const round=(value:number,precision=2)=>Number(value.toFixed(precision))
 const positive=(value:number)=>Number.isFinite(value)?Math.max(0,value):0
 
+export function foamQuantityCubicMeters(piece:UpholsteryPiece):number{
+  const thicknessMeters=positive(piece.thickness)/100
+  if(piece.foam_quantity_manual==null)return round(positive(piece.width)*positive(piece.height)*thicknessMeters,6)
+  // Previously saved manual quantities were in m². Convert them, never relabel them as m³.
+  return round(positive(piece.foam_quantity_manual)*(piece.foam_quantity_unit==='m3'?1:thicknessMeters),6)
+}
+
 export const newUpholsteryEstimate=():UpholsteryEstimate=>({
   pieces:[{id:crypto.randomUUID(),name:'Peça 1',width:0,height:0,thickness:3,density:'d28',fabric_reference:''}],
   fabric_width:1.4,fabric_estimate:0,labor_estimate:0,additional_estimate:0,margin_percent:100
@@ -41,7 +49,7 @@ export function calculateUpholsteryEstimate(estimate:UpholsteryEstimate):Upholst
   const pieces=estimate.pieces.filter(piece=>positive(piece.width)>0&&positive(piece.height)>0).map(piece=>{
     const thickness=positive(piece.thickness)
     const foamArea=positive(piece.width)*positive(piece.height)
-    return {...piece,foam_area:round(foamArea,3),foam_quantity:piece.foam_quantity_manual==null?round(foamArea,3):positive(piece.foam_quantity_manual),upholstery_cost:round(foamArea*positive(piece.cost_per_square_meter??0)),cut_width:round(positive(piece.height)+(thickness/100*2)+.08,3),cut_length:round(positive(piece.width)+(thickness/100*2)+.08,3)}
+    return {...piece,foam_area:round(foamArea,3),foam_quantity:foamQuantityCubicMeters(piece),upholstery_cost:round(foamArea*positive(piece.cost_per_square_meter??0)),cut_width:round(positive(piece.height)+(thickness/100*2)+.08,3),cut_length:round(positive(piece.width)+(thickness/100*2)+.08,3)}
   })
   const grouped=new Map<string,UpholsteryPieceResult[]>()
   for(const piece of pieces){
@@ -60,7 +68,7 @@ export function calculateUpholsteryEstimate(estimate:UpholsteryEstimate):Upholst
   })
   const upholstery_cost=round(pieces.reduce((total,piece)=>total+piece.upholstery_cost,0))
   const pricing_ready=pieces.length>0&&pieces.every(piece=>piece.cost_per_square_meter!=null&&Number.isFinite(piece.cost_per_square_meter)&&piece.cost_per_square_meter>=0)
-  const foam_quantity=round(pieces.reduce((total,piece)=>total+piece.foam_quantity,0),3)
+  const foam_quantity=round(pieces.reduce((total,piece)=>total+piece.foam_quantity,0),6)
   const suggested_fabric_meters=round(fabric_groups.reduce((total,group)=>total+group.meters,0),3)
   const manual=estimate.fabric_meters_manual!==undefined&&estimate.fabric_meters_manual!==null
   const fabric_meters=manual?positive(estimate.fabric_meters_manual!):suggested_fabric_meters
@@ -78,4 +86,3 @@ export function upholsteryDescription(estimate:UpholsteryEstimate,result=calcula
     piece.fabric_reference.trim()?`Tecido: ${piece.fabric_reference.trim()}`:''
   ].filter(Boolean).join('\n')).join('\n\n')
 }
-
