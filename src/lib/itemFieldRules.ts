@@ -1,7 +1,7 @@
 export function itemFieldRules(formKey?: string) {
   const simpleCost = ['confection', 'upholstery', 'upholstery_reform', 'wallpaper'].includes(formKey ?? '')
   return {
-    environment: !['confection', 'upholstery', 'upholstery_reform'].includes(formKey ?? ''),
+    environment: true,
     manufacturerCost: !simpleCost,
     additionalCost: !simpleCost,
   }
