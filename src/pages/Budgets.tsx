@@ -8,7 +8,7 @@ import { useToast } from '../components/ToastProvider'
 import { money } from '../lib/format'
 import { DecimalInput } from '../components/DecimalInput'
 import { supabase } from '../lib/supabase'
-import { composedItemCost, marginFromSalePrice, salePriceFromCostAndMargin } from '../lib/budgetItems'
+import { composedItemCost, marginFromSalePrice, salePriceFromCostAndMargin,itemUnitSalePrice,itemSaleTotal,saleTotalForQuantity } from '../lib/budgetItems'
 import { extractPdfText } from '../lib/pdfText'
 import { parseManufacturerText, type ParsedManufacturerDocument } from '../lib/manufacturerPdf'
 import { BudgetPreview } from '../components/BudgetPreview'
@@ -17,7 +17,7 @@ import { navigateTo, readRoute } from '../lib/navigation'
 import { ItemCostComposition, type SupplyLine, type SupplyOption } from '../components/ItemCostComposition'
 import { ItemLaborComposition, laborCostTotal, type LaborLine, type ProviderOption } from '../components/ItemLaborComposition'
 import { ItemPaymentOptions } from '../components/ItemPaymentOptions'
-import { standardItemPaymentOptions, type ItemPaymentOption } from '../lib/paymentOptions'
+import { standardItemPaymentOptions,paymentOptionsForQuantity, type ItemPaymentOption } from '../lib/paymentOptions'
 import { SearchSelect } from '../components/SearchSelect'
 import { budgetDocumentPath } from '../lib/documents'
 import { confectionSubitems } from '../domain'
@@ -330,6 +330,16 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   }
   const costOf=(value:ItemForm,lines=supplyLines,labor=laborLines)=>Number((composedItemCost(value,lines)+laborCostTotal(labor)).toFixed(2))
   const withMargin=(value:ItemForm,lines=supplyLines,labor=laborLines)=>({...value,sale_total:salePriceFromCostAndMargin(costOf(value,lines,labor),value.margin_percent)})
+  const changeItemQuantity=(quantity:number)=>{
+    if(!Number.isFinite(quantity)||quantity<=0||quantity===itemForm.quantity)return
+    setPaymentOptions(current=>paymentOptionsForQuantity(current,itemForm.quantity,quantity))
+    setItemForm(current=>{const sale=saleTotalForQuantity(current.sale_total,current.quantity,quantity);return {...current,quantity,sale_total:sale,margin_percent:marginFromSalePrice(costOf(current),sale)}})
+  }
+  const changeUnitSale=(unit:number)=>setItemForm(current=>{
+    if(unit===itemUnitSalePrice(current.sale_total,current.quantity))return current
+    const sale=itemSaleTotal(unit,current.quantity)
+    return {...current,sale_total:sale,margin_percent:marginFromSalePrice(costOf(current),sale)}
+  })
   const changeSupplyLines=(lines:SupplyLine[])=>{setSupplyLines(lines);setItemForm(current=>withMargin(current,lines))}
   const changeLaborLines=(lines:LaborLine[])=>{setLaborLines(lines);setItemForm(current=>withMargin(current,supplyLines,lines))}
   const selectClient=(selectedClient:Client)=>{
@@ -444,6 +454,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     setItemSaving(true)
     const formKey=families.find(family=>family.id===itemForm.family_id)?.form_key
     const {installation_cost:_,upholstery_estimate:__,...previousConfiguration}=itemForm.initial_configuration
+    previousConfiguration.unit_price_input=true
     const cost=costOf(itemForm)
     const itemPayload={family_id:itemForm.family_id,position:itemForm.id?(items.find(x=>x.id===itemForm.id)?.position??1):items.length+1,presentation:itemForm.presentation,environment:itemForm.environment.trim()||null,description:itemForm.description.trim(),quantity:itemForm.quantity,configuration:{...previousConfiguration,manufacturer_cost:itemForm.manufacturer_cost,additional_cost:itemForm.additional_cost,...(formKey==='confection'&&itemForm.confection_subitem?{confection_subitem:itemForm.confection_subitem}:{}),...(isPreBudget&&(formKey==='confection'||formKey==='upholstery')?{upholstery_estimate:upholsteryEstimate}:{})},cost_total:cost,margin_percent:itemForm.margin_percent,sale_total:itemForm.sale_total,affects_total:itemForm.presentation==='principal'}
     // Organization and budget links are immutable after creation. Including them
@@ -781,6 +792,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <td>{money.format(Number(item.cost_total))}</td>
 <td>
 <strong>{money.format(Number(item.sale_total))}</strong>
+{Number(item.quantity)!==1&&<small className="budget-item-unit-price">Unitário: {money.format(itemUnitSalePrice(Number(item.sale_total),Number(item.quantity)))}</small>}
 </td>
 <td>
 <span className="badge">{item.affects_total?'Item principal':'Opção'}</span>
@@ -846,14 +858,14 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 {isPreBudget&&supportsUpholsteryCalculator&&<UpholsteryEstimateCalculator
   estimate={upholsteryEstimate}
   onChange={setUpholsteryEstimate}
-  onApplyValue={value=>setItemForm(current=>({...current,sale_total:value}))}
+  onApplyValue={value=>setItemForm(current=>{const sale=itemSaleTotal(value,current.quantity);return {...current,sale_total:sale,margin_percent:marginFromSalePrice(costOf(current),sale)}})}
   onInsertDescription={summary=>setItemForm(current=>({
     ...current,
     description:current.description.includes(summary)?current.description:[current.description.trim(),summary].filter(Boolean).join('\n')
   }))}
 />}
 {isPreBudget?<div className="pre-budget-item-basics span-2">
-<label className="field">Quantidade<input type="number" min="0.001" step="0.001" value={itemForm.quantity} onChange={e=>setItemForm({...itemForm,quantity:Number(e.target.value)})}/></label>
+<label className="field">Quantidade<input type="number" min="0.001" step="0.001" value={itemForm.quantity} onChange={e=>changeItemQuantity(Number(e.target.value))}/></label>
 <label className="field">Apresentação<select value={itemForm.presentation} onChange={e=>setItemForm({...itemForm,presentation:e.target.value as ItemForm['presentation']})}>
 <option value="principal">Item principal</option>
 <option value="option">Opção (não soma)</option>
@@ -863,10 +875,10 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <label className="field">Custos adicionais<DecimalInput ariaLabel="Custos adicionais" value={itemForm.additional_cost} decimalScale={2} onValueChange={value=>setItemForm(current=>withMargin({...current,additional_cost:value}))}/></label>
 <label className="field">Custo total<input readOnly aria-label="Custo total" value={money.format(costOf(itemForm))}/></label>
 <label className="field">Margem (%)<DecimalInput ariaLabel="Margem (%)" value={itemForm.margin_percent} decimalScale={3} onValueChange={value=>setItemForm(current=>withMargin({...current,margin_percent:value}))}/><small className="field-note">Percentual aplicado sobre o custo total.</small></label>
-<label className="field pre-budget-value">Preço de venda<DecimalInput ariaLabel="Preço de venda" value={itemForm.sale_total} decimalScale={2} onValueChange={sale=>setItemForm(current=>({...current,sale_total:sale,margin_percent:marginFromSalePrice(costOf(current),sale)}))}/><small className="field-note">Margem e venda são sincronizadas. Valores do PDF entram no custo do fabricante.</small></label>
-</>:<label className="field pre-budget-value">Valor de venda estimado<DecimalInput value={itemForm.sale_total} decimalScale={2} onValueChange={sale=>setItemForm(current=>({...current,sale_total:sale}))}/><small className="field-note">A composição real será definida ao converter em orçamento.</small></label>}
+<label className="field pre-budget-value">Valor unitário de venda<DecimalInput ariaLabel="Valor unitário de venda" value={itemUnitSalePrice(itemForm.sale_total,itemForm.quantity)} decimalScale={2} onValueChange={changeUnitSale}/><small className="field-note">Total = valor unitário × quantidade. O custo do PDF é preservado.</small></label>
+</>:<label className="field pre-budget-value">Valor unitário estimado<DecimalInput ariaLabel="Valor unitário de venda" value={itemUnitSalePrice(itemForm.sale_total,itemForm.quantity)} decimalScale={2} onValueChange={changeUnitSale}/><small className="field-note">Multiplicado pela quantidade no total do item.</small></label>}
 </div>:<>
-<label className="field">Quantidade<input type="number" min="0.001" step="0.001" value={itemForm.quantity} onChange={e=>setItemForm({...itemForm,quantity:Number(e.target.value)})}/></label>
+<label className="field">Quantidade<input type="number" min="0.001" step="0.001" value={itemForm.quantity} onChange={e=>changeItemQuantity(Number(e.target.value))}/></label>
 <label className="field">Apresentação<select value={itemForm.presentation} onChange={e=>setItemForm({...itemForm,presentation:e.target.value as ItemForm['presentation']})}>
 <option value="principal">Item principal</option>
 <option value="option">Opção (não soma)</option>
@@ -881,9 +893,11 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 </label>
 <label className="field">Margem (%)<DecimalInput value={itemForm.margin_percent} decimalScale={3} onValueChange={value=>setItemForm(current=>withMargin({...current,margin_percent:value}))}/>
 </label>
-<label className="field">Preço de venda<DecimalInput value={itemForm.sale_total} decimalScale={2} onValueChange={sale=>{const cost=costOf(itemForm);setItemForm({...itemForm,sale_total:sale,margin_percent:marginFromSalePrice(cost,sale)})}}/>
-<small className="field-note">Margem e preço são sincronizados automaticamente.</small>
+<label className="field">Valor unitário de venda<DecimalInput ariaLabel="Valor unitário de venda" value={itemUnitSalePrice(itemForm.sale_total,itemForm.quantity)} decimalScale={2} onValueChange={changeUnitSale}/>
+<small className="field-note">Total = valor unitário × quantidade.</small>
 </label></div></>}
+<div className="field span-2"><span>Total de venda do item</span><strong>{money.format(itemForm.sale_total)}</strong><small>{itemForm.quantity.toLocaleString('pt-BR')} × {money.format(itemUnitSalePrice(itemForm.sale_total,itemForm.quantity))}. Opções não entram no total do orçamento.</small></div>
+{itemForm.id&&itemForm.quantity>1&&!itemForm.initial_configuration.unit_price_input&&!itemForm.initial_configuration.source_file&&<div className="field span-2"><small>Este registro anterior guardava o total. Se {money.format(itemForm.sale_total)} era o preço de uma unidade, use a correção abaixo e confira antes de salvar.</small><button type="button" className="text-button" onClick={()=>{setPaymentOptions(current=>paymentOptionsForQuantity(current,1,itemForm.quantity));changeUnitSale(itemForm.sale_total);setItemForm(current=>({...current,initial_configuration:{...current.initial_configuration,unit_price_input:true}}))}}>Usar {money.format(itemForm.sale_total)} como valor unitário</button></div>}
 <ItemPaymentOptions saleTotal={itemForm.sale_total} options={paymentOptions} onChange={setPaymentOptions}/>
 </div>
 </fieldset>

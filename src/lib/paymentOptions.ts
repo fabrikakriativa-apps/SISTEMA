@@ -1,5 +1,10 @@
 export type ItemPaymentOption={id?:string;position:number;description:string;adjustment_percent:number;final_value:number|null;observation:string}
 
+export function paymentOptionsForQuantity(options:ItemPaymentOption[],oldQuantity:number,newQuantity:number):ItemPaymentOption[]{
+  if(oldQuantity<=0||newQuantity<=0)return options
+  return options.map(option=>({...option,final_value:option.final_value==null?null:Number((option.final_value/oldQuantity*newQuantity).toFixed(2))}))
+}
+
 const twoDecimals=(value:number)=>Number(Math.max(0,value).toFixed(2))
 
 export const finalValueFromAdjustment=(saleTotal:number,adjustment:number)=>twoDecimals(Math.max(0,saleTotal)*(1+adjustment/100))

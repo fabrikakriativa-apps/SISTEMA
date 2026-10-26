@@ -1,7 +1,18 @@
 import { describe,expect,it } from 'vitest'
-import { composedItemCost,itemCostTotal,marginFromSalePrice,salePriceFromCostAndMargin,salePriceFromMargin,supplyCostTotal } from './budgetItems'
+import { composedItemCost,itemCostTotal,marginFromSalePrice,salePriceFromCostAndMargin,salePriceFromMargin,supplyCostTotal,itemUnitSalePrice,itemSaleTotal,saleTotalForQuantity } from './budgetItems'
 
 describe('budget item totals',()=>{
+  it('multiplies unit sale by quantity once and preserves existing stored totals',()=>{
+    expect(itemSaleTotal(1180,2)).toBe(2360)
+    expect(itemSaleTotal(1602.8,2)).toBe(3205.6)
+    expect(itemUnitSalePrice(2360,2)).toBe(1180)
+    expect(itemUnitSalePrice(1180,2)).toBe(590)
+    expect(saleTotalForQuantity(1180,1,2)).toBe(2360)
+    expect(saleTotalForQuantity(2360,2,3)).toBe(3540)
+    expect(saleTotalForQuantity(100,3,3)).toBe(100)
+    expect(saleTotalForQuantity(100,3,6)).toBe(200)
+    expect(itemSaleTotal(19.9,2.5)).toBe(49.75)
+  })
   it('keeps imported PDF cost separate from sale and recalculates margin',()=>{
     const imported={manufacturer_cost:818,additional_cost:0,margin_percent:50}
     expect(salePriceFromMargin(imported)).toBe(1227)
@@ -28,4 +39,3 @@ describe('budget item totals',()=>{
     expect(marginFromSalePrice(0,300)).toBe(0)
   })
 })
-

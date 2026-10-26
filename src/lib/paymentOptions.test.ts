@@ -1,7 +1,16 @@
 import { describe,expect,it } from 'vitest'
-import { adjustmentFromFinalValue,finalValueFromAdjustment,optionFinalValue,standardItemPaymentOptions } from './paymentOptions'
+import { adjustmentFromFinalValue,finalValueFromAdjustment,optionFinalValue,standardItemPaymentOptions,paymentOptionsForQuantity } from './paymentOptions'
 
 describe('item commercial payment options',()=>{
+  it('rescales fixed totals with quantity without changing percentage discounts',()=>{
+    const options=standardItemPaymentOptions();options[0].final_value=1062
+    const changed=paymentOptionsForQuantity(options,1,2)
+    expect(changed[0].final_value).toBe(2124)
+    expect(changed[1].final_value).toBeNull()
+    expect(changed[1].adjustment_percent).toBe(-3)
+    expect(optionFinalValue(2360,changed[1])).toBe(2289.2)
+    expect(options[0].final_value).toBe(1062)
+  })
   it('starts each new item with the three commercial options used by the business',()=>{
     expect(standardItemPaymentOptions()).toEqual([
       {position:1,description:'À vista (PIX)',adjustment_percent:-6,final_value:null,observation:'No ato da aprovação do orçamento'},

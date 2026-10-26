@@ -2,6 +2,7 @@ import { Printer, X } from 'lucide-react'
 import { money } from '../lib/format'
 import { SaveDocumentImage } from './SaveDocumentImage'
 import { optionFinalValue, type ItemPaymentOption } from '../lib/paymentOptions'
+import { itemUnitSalePrice } from '../lib/budgetItems'
 
 type PreviewItem = { id:string; environment:string|null; description:string; quantity:number; sale_total:number; affects_total:boolean; family:{name:string}|null }
 type PreviewBudget = { display_number:string; current_revision:number; created_at:string; valid_until:string|null; payment_terms:string|null; delivery_terms:string|null; notes:string|null; subtotal:number; discount:number; total:number; document_type?:'pre_budget'|'budget' }
@@ -29,7 +30,7 @@ export function BudgetPreview({budget,items,paymentOptions,clientName,clientAddr
 function BudgetItem({item,index,paymentOptions}:{item:PreviewItem;index:number;paymentOptions:ItemPaymentOption[]}) {
   const label = item.family?.name || `Item ${index+1}`
   return <article className="budget-document-item">
-    <header><div><small>ITEM {index+1}{item.environment ? ` · ${item.environment}` : ''}{!item.affects_total?' · OPÇÃO (NÃO SOMA AO TOTAL)':''}</small><strong>{label}</strong><p>{item.description}</p><span>Quantidade: {Number(item.quantity).toLocaleString('pt-BR')}</span></div><div><small>VALOR DO ITEM</small><strong>{money.format(Number(item.sale_total))}</strong></div></header>
+    <header><div><small>ITEM {index+1}{item.environment ? ` · ${item.environment}` : ''}{!item.affects_total?' · OPÇÃO (NÃO SOMA AO TOTAL)':''}</small><strong>{label}</strong><p>{item.description}</p><span>Quantidade: {Number(item.quantity).toLocaleString('pt-BR')}{Number(item.quantity)!==1?' · Unitário: '+money.format(itemUnitSalePrice(Number(item.sale_total),Number(item.quantity))):''}</span></div><div><small>VALOR TOTAL DO ITEM</small><strong>{money.format(Number(item.sale_total))}</strong></div></header>
     {paymentOptions.length > 0 && <section className="budget-payment-options"><small>FORMAS DE PAGAMENTO PARA ESTE ITEM</small><div>{paymentOptions.map(option => <article key={option.id ?? `${item.id}-${option.position}`}><div><strong>{option.description}</strong>{option.observation && <span>{option.observation}</span>}</div><strong>{money.format(optionFinalValue(Number(item.sale_total),option))}</strong></article>)}</div></section>}
   </article>
 }
