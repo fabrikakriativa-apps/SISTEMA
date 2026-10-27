@@ -14,6 +14,7 @@ import {SearchSelect} from '../components/SearchSelect'
 import {DecimalInput} from '../components/DecimalInput'
 import {catalogPayload} from '../lib/catalog'
 import {supplyCategoryOptions} from '../lib/catalogSearch'
+import './Supplies.css'
 import {loadAllPages} from '../lib/loadAllPages'
 import {emptySupplyForm,supplyToForm,supplyFormPayload,type SupplyForm,type SupplyRecord as Supply} from '../lib/supplyForm'
 type PriceHistory={id:string;value:number;effective_at:string;source:string|null}
@@ -43,7 +44,7 @@ export function Supplies(){
  const closeImport=()=>{if(importing)return;setImportOpen(false);setImportRows([]);setImportFile('');setImportSheet('');setImportMode('merge')}
  const readFile=async(event:ChangeEvent<HTMLInputElement>)=>{const file=event.target.files?.[0];event.target.value='';if(!file)return;try{const parsed=readSupplyWorkbook(await file.arrayBuffer());if(parsed.error){show(parsed.error,'error');return}setImportRows(parsed.rows);setImportFile(file.name);setImportSheet('sheetName' in parsed?parsed.sheetName:'');if(!parsed.rows.length)show('A planilha não possui linhas preenchidas para importar.','error')}catch{show('Não foi possível ler esta planilha. Use um arquivo Excel ou CSV com cabeçalhos.','error')}}
  const applyImport=async()=>{if(!supabase||!access||importing)return;const applicable=importPreview.filter((row):row is SupplyImportRow&{result:NonNullable<SupplyImportRow['result']>}=>(row.action==='create'||row.action==='update')&&Boolean(row.result));if(!applicable.length){show('Não há linhas válidas para importar.','error');return}setImporting(true);let completed=0;try{const payloads=applicable.map(row=>({organization_id:access.organizationId,...row.result}));for(const batch of chunks(payloads,100)){const {error}=await supabase.from('supplies').upsert(batch,supplyImportUpsertOptions);if(error)throw error;completed+=batch.length}catalog.reload();categoryCatalog.reload();setImportOpen(false);setImportRows([]);setImportFile('');setImportSheet('');show(`${importCounts.create} adicionados e ${importCounts.update} atualizados. Nenhum cadastro existente foi excluído.`,'success')}catch(error){catalog.reload();show(`Não foi possível concluir a importação: ${supplyImportErrorMessage(error)}${completed?` ${completed} linhas já foram gravadas. Você pode tentar novamente sem duplicar os códigos.`:''}`,'error')}finally{setImporting(false)}}
- return <Page title="Insumos e produtos" description="Materiais usados diretamente nos itens, compras e custos." action={<div className="page-actions">
+ return <Page className="supplies-page" title="Insumos e produtos" description="Materiais usados diretamente nos itens, compras e custos." action={<div className="page-actions">
 <button className="button secondary" onClick={()=>setImportOpen(true)}>
 <FileUp/>Importar planilha</button>
 <button className="button primary" onClick={()=>edit()}>
@@ -53,14 +54,16 @@ export function Supplies(){
   {catalog.error && <p role="alert">{catalog.error} <button className="button secondary" onClick={catalog.reload}>Tentar novamente</button>
 </p>}
   <section className="panel">
-<div className="toolbar">
+<div className="toolbar supplies-toolbar">
+<div className="supplies-filter-group">
 <label className="search">
 <Search/>
 <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar código, nome ou categoria"/>
 </label>
-<label className="field">Tipo de insumo<select aria-label="Filtrar insumos por tipo" value={category} onChange={e=>{setPage(0);setCategory(e.target.value)}} disabled={categoryCatalog.loading}><option value="">Todos os tipos</option>{categories.map(value=><option key={value} value={value}>{value}</option>)}</select></label>
+<label className="supplies-type"><span>Tipo</span><select aria-label="Filtrar insumos por tipo" value={category} onChange={e=>{setPage(0);setCategory(e.target.value)}} disabled={categoryCatalog.loading}><option value="">Todos os tipos</option>{categories.map(value=><option key={value} value={value}>{value}</option>)}</select></label>
 {category&&<button type="button" className="text-button" onClick={()=>{setPage(0);setCategory('')}}>Limpar tipo</button>}
-<span>{catalog.total} item(ns)</span>
+</div>
+<span className="supplies-count">{catalog.total} item(ns)</span>
 </div>
 {categoryCatalog.error&&<p className="panel-message" role="alert">Não foi possível carregar os tipos de insumo. <button type="button" className="text-button" onClick={categoryCatalog.reload}>Tentar novamente</button></p>}
 <div className="table-wrap">
