@@ -63,7 +63,7 @@ export function PurchasingWorkspace(){
  const open=(kind:Dialog['kind'],purchase?:Purchase,encomenda=false)=>{setParts([]);setDialog({id:purchase?.id??crypto.randomUUID(),kind,purchase});setVendor(purchase?.supplier_id??(new Set(chosen.map(n=>normalizeSearchText(n.supplier_name||''))).size===1?vendors.find(v=>normalizeSearchText(v.name)===normalizeSearchText(chosen[0]?.supplier_name??''))?.id??'':''));setVendorSearch('');setFormal(purchase?.formal_document??encomenda);setExpected(purchase?.supplier_due_date??'');setDate(today());setDue(encomenda?'':today());setDeferred(encomenda);setReceived(today());setPaidDate(today());setMethod('PIX');setInstallments(1);setPaid(false);setCompleted(kind==='receive'||(kind==='create'&&!encomenda));setExternal(purchase?.external_number??'');setReason('');setCosts(Object.fromEntries((kind==='edit'?purchase!.purchase_items:chosen).map(n=>[n.id,Number(n.unit_cost)])));setQuantities(Object.fromEntries((purchase?.purchase_items??[]).map(n=>[n.id,Number(n.quantity)])))}
  const openMaterial=(r:typeof materialRows[number])=>{
   if(r.need){if(canReview&&['awaiting_purchase','awaiting_finance'].includes(r.need.status))setEditing({need:r.need,itemId:r.order_item_id});else setExpanded(r.order_item_id)}
-  else if(r.purchase){if(!r.purchase.workspace_managed)setLegacy(r.purchase);else open(r.purchase.status==='draft'&&canBuy?'edit':'details',r.purchase)}
+  else if(r.purchase){if(r.purchase.status==='draft'&&canBuy)open('edit',r.purchase);else if(!r.purchase.workspace_managed)setLegacy(r.purchase);else open('details',r.purchase)}
  }
  const changeMaterialStatus=(r:typeof materialRows[number],next:string)=>{
   if(!canBuy)return
