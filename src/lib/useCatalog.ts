@@ -5,7 +5,7 @@ import { catalogPayload } from './catalog'
 import {loadAllPages} from './loadAllPages'
 import {catalogSearchFilter} from './catalogSearch'
 
-export function useCatalog<T extends { id: string; name: string }>(table: 'clients' | 'supplies', columns: string, options?:{enabled?:boolean;page?:number;pageSize?:number;search?:string;order?:string;ascending?:boolean}) {
+export function useCatalog<T extends { id: string; name: string }>(table: 'clients' | 'supplies', columns: string, options?:{enabled?:boolean;page?:number;pageSize?:number;search?:string;category?:string;order?:string;ascending?:boolean}) {
   const access = useAccess()
   const [items, setItems] = useState<T[]>([])
   const [loading, setLoading] = useState(false)
@@ -30,6 +30,7 @@ export function useCatalog<T extends { id: string; name: string }>(table: 'clien
           let request=supabase!.from(table).select(columns,{count:'exact'}).eq('organization_id',access.organizationId)
           const term=options?.search?.trim()
           if(term)request=request.or(catalogSearchFilter(term))
+          if(table==='supplies'&&options?.category)request=request.eq('category',options.category)
           return request.order(options?.order??'name',{ascending:options?.ascending??true}).order('id').range(from,to).abortSignal(controller.signal) as unknown as PromiseLike<{data:T[]|null;error:unknown;count:number|null}>
         }
         const result=options?.page!==undefined?await query(options.page*(options.pageSize??50),(options.page+1)*(options.pageSize??50)-1):await loadAllPages<T>(query,1000)
@@ -41,7 +42,7 @@ export function useCatalog<T extends { id: string; name: string }>(table: 'clien
     }
     void load()
     return () => { cancelled = true; clearTimeout(timer); controller.abort() }
-  }, [table, columns, access?.organizationId, revision,options?.enabled,options?.page,options?.pageSize,options?.search,options?.order,options?.ascending])
+  }, [table, columns, access?.organizationId, revision,options?.enabled,options?.page,options?.pageSize,options?.search,options?.category,options?.order,options?.ascending])
 
   async function save(input: unknown): Promise<boolean> {
     if (lock.current) return false
