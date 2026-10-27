@@ -12,6 +12,7 @@ import { DecimalInput } from './DecimalInput'
 import {OrderPaymentPlanEditor} from './OrderPaymentPlanEditor'
 import type {PaymentGroup} from '../lib/orderPaymentPlan'
 import { ReviseOrderReceivables } from './ReviseOrderReceivables'
+import { routeHash } from '../lib/navigation'
 
 export type DetailOrder = {
   id:string; display_number:string; status:string; payment_terms:string|null; promised_date:string|null; client_address:string|null; notes:string|null; total:number; created_at:string
@@ -129,6 +130,7 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
 <small role="status">{autoState==='saving'?'Salvando automaticamente…':autoState==='waiting'?'Rascunho protegido neste navegador':autoState==='error'?'Falha ao sincronizar; rascunho protegido neste navegador':'Alterações salvas'}</small>
 </div>
 <div className="order-header-actions">
+{order.budget&&<a className="button secondary" href={routeHash('orcamentos',order.budget.id)} target="_blank" rel="noopener noreferrer" title="Abrir orçamento em nova aba">Abrir {order.budget.display_number} ↗</a>}
 <button className="button secondary" onClick={() => setActionsOpen(true)}>
 <ClipboardList/>Ações</button>
 <button className="button secondary" onClick={onBack}>

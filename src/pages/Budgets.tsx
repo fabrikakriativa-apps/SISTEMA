@@ -13,7 +13,7 @@ import { extractPdfText } from '../lib/pdfText'
 import { parseManufacturerText, type ParsedManufacturerDocument } from '../lib/manufacturerPdf'
 import { BudgetPreview } from '../components/BudgetPreview'
 import { budgetStatusLabels as labels, budgetStatusOptions, statusNeedsReason, type BudgetStatus } from '../lib/budgetStatus'
-import { navigateTo, readRoute } from '../lib/navigation'
+import { navigateTo, readRoute, routeHash } from '../lib/navigation'
 import { ItemCostComposition, type SupplyLine, type SupplyOption } from '../components/ItemCostComposition'
 import { ItemLaborComposition, laborCostTotal, type LaborLine, type ProviderOption } from '../components/ItemLaborComposition'
 import { ItemPaymentOptions } from '../components/ItemPaymentOptions'
@@ -258,6 +258,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     }catch(error){show(errorMessage(error,'Não foi possível duplicar o orçamento. Nenhuma cópia foi concluída.'),'error');setWorkflowBusy(false)}
   }
   const [hasCancelledOrder,setHasCancelledOrder]=useState(false)
+  const [linkedOrders,setLinkedOrders]=useState<{id:string;display_number:string;status:string}[]>([])
   const [specOpen,setSpecOpen]=useState(false),[specNotes,setSpecNotes]=useState(''),[specItems,setSpecItems]=useState<{id:string;description:string}[]>([])
   const itemDraftKey=`${budgetOrganizationId}:budget-item:${budget.id}:${budget.current_revision}:${itemForm.id??'new'}`
   useRecoveryDraft(itemDraftKey,{itemForm,supplyLines,laborLines,paymentOptions,upholsteryEstimate},itemOpen&&canEditItems)
@@ -280,9 +281,13 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 
   useEffect(()=>{
     let cancelled=false
+    setLinkedOrders([])
     if(!supabase||budget.status!=='approved'){setHasCancelledOrder(false);return}
-    void supabase.from('orders').select('id').eq('organization_id',budgetOrganizationId).eq('budget_id',budget.id).eq('status','cancelled').limit(1).then(({data})=>{
-      if(!cancelled)setHasCancelledOrder(Boolean(data?.length))
+    void supabase.from('orders').select('id,display_number,status').eq('organization_id',budgetOrganizationId).eq('budget_id',budget.id).order('created_at',{ascending:false}).then(({data,error})=>{
+      if(cancelled)return
+      if(error){show('Não foi possível carregar o pedido vinculado. Reabra o orçamento para tentar novamente.','error');return}
+      setHasCancelledOrder(Boolean(data?.some(order=>order.status==='cancelled')))
+      setLinkedOrders(data??[])
     })
     return()=>{cancelled=true}
   },[budget.id,budget.status,budgetOrganizationId])
@@ -612,6 +617,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     return failed
   }
   return <Page title={isPreBudget?'Construção do pré-orçamento':'Construção do orçamento'} description={isPreBudget?'Registre a estimativa e as referências. Valor, medidas e materiais serão confirmados depois.':'Monte os dados comerciais e os itens que o cliente receberá.'} action={<div className="page-actions">
+{linkedOrders.map(order=><a key={order.id} className="button secondary" href={routeHash('pedidos',order.id)} target="_blank" rel="noopener noreferrer" title="Abrir pedido em nova aba">Abrir {order.display_number}{order.status==='cancelled'?' (cancelado)':''} ↗</a>)}
 {['admin','comercial'].includes(access.role)&&<button className="button secondary" disabled={workflowBusy||saveState!=='saved'} onClick={()=>setConfirmDuplicate(true)}><Copy/>Duplicar orçamento</button>}
 <button className="button secondary" onClick={()=>setPreviewOpen(true)}>Prévia do cliente</button>
 {canStartRevision&&<button className="button secondary" disabled={workflowBusy} onClick={()=>void startRevision()}><GitBranch/>{workflowBusy?'Criando revisão…':'Criar revisão'}</button>}
