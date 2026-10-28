@@ -12,6 +12,8 @@ export type UpholsteryPiece={
   cost_per_square_meter?:number
   foam_quantity_manual?:number|null
   foam_quantity_unit?:'m2'|'m3'
+  module_count?:number
+  back_upholstered?:boolean
 }
 
 export type UpholsteryEstimate={
@@ -44,6 +46,13 @@ export type UpholsteryPieceResult=UpholsteryPiece & {foam_area:number;foam_quant
 export type FabricGroup={reference:string;meters:number;piece_count:number}
 export type UpholsteryEstimateResult={pieces:UpholsteryPieceResult[];fabric_groups:FabricGroup[];fabric_meters:number;suggested_fabric_meters:number;fabric_cost:number;upholstery_cost:number;pricing_ready:boolean;foam_quantity:number;base_total:number;sale_total:number}
 
+export function headboardFabric(piece:UpholsteryPiece){
+  if(piece.module_count==null||!Number.isInteger(piece.module_count)||piece.module_count<1||positive(piece.width)<=0||positive(piece.height)<=0)return null
+  const count=piece.module_count,width=positive(piece.width),side=positive(piece.piece_thickness??0)/100
+  const module_width=width/count,front=width,sides=count*side*2,finish=count*.08,back=piece.back_upholstered?width:0
+  return {count,module_width:round(module_width,6),front:round(front,3),sides:round(sides,3),finish:round(finish,3),back:round(back,3),meters:Math.ceil((front+sides+finish+back)*1000-1e-8)/1000,cut_height:round(positive(piece.height)+2*side+.08,3)}
+}
+
 export function calculateUpholsteryEstimate(estimate:UpholsteryEstimate):UpholsteryEstimateResult{
   const fabricWidth=positive(estimate.fabric_width)||1.4
   const pieces=estimate.pieces.filter(piece=>positive(piece.width)>0&&positive(piece.height)>0).map(piece=>{
@@ -57,14 +66,16 @@ export function calculateUpholsteryEstimate(estimate:UpholsteryEstimate):Upholst
     grouped.set(reference,[...(grouped.get(reference)??[]),piece])
   }
   const fabric_groups=[...grouped].map(([reference,groupPieces])=>{
-    let accumulatedWidth=0,largestLength=0,meters=0
+    let accumulatedWidth=0,largestLength=0,meters=0,modularMeters=0
     for(const piece of groupPieces){
+      const modular=headboardFabric(piece)
+      if(modular){modularMeters+=modular.meters;continue}
       if(accumulatedWidth>0&&accumulatedWidth+piece.cut_width>fabricWidth){meters+=largestLength;accumulatedWidth=0;largestLength=0}
       accumulatedWidth+=piece.cut_width
       largestLength=Math.max(largestLength,piece.cut_length)
     }
     if(accumulatedWidth>0)meters+=largestLength
-    return {reference,meters:Math.ceil(meters*2)/2,piece_count:groupPieces.length}
+    return {reference,meters:round(Math.ceil(meters*2)/2+modularMeters,3),piece_count:groupPieces.length}
   })
   const upholstery_cost=round(pieces.reduce((total,piece)=>total+piece.upholstery_cost,0))
   const pricing_ready=pieces.length>0&&pieces.every(piece=>piece.cost_per_square_meter!=null&&Number.isFinite(piece.cost_per_square_meter)&&piece.cost_per_square_meter>=0)
@@ -83,6 +94,7 @@ export function upholsteryDescription(estimate:UpholsteryEstimate,result=calcula
     `Item: ${piece.name.trim()||'Peça'}`,
     `Medidas aproximadas: ${meter(piece.width)} m x ${meter(piece.height)} m${positive(piece.piece_thickness??0)>0?` x ${meter(piece.piece_thickness!/100)} m`:''}`,
     `Espuma: ${foamDensityLabels[piece.density]} — espessura: ${meter(piece.thickness)} cm`,
+    piece.module_count!=null?`Módulos: ${piece.module_count}${piece.back_upholstered?' · verso tapeçado':''}`:'',
     piece.fabric_reference.trim()?`Tecido: ${piece.fabric_reference.trim()}`:''
   ].filter(Boolean).join('\n')).join('\n\n')
 }

@@ -131,16 +131,18 @@ export function Budgets() {
     saveTimer.current=window.setTimeout(()=>{void persist(form)},700)
   },[form,persist,selected?.id])
 
+  const [creationOpen,setCreationOpen]=useState(false),[creationType,setCreationType]=useState<DocumentType|null>(null)
+  const creatingLock=useRef(false)
   const create = async (documentType:DocumentType) => {
-    if(!supabase||!access||creating) return
-    setCreating(true)
+    if(!supabase||!access||creatingLock.current) return
+    creatingLock.current=true;setCreating(true)
     try {
       const {data,error}=await supabase.rpc('create_commercial_draft',{org_id:access.organizationId,new_document_type:documentType})
       if(error) throw error
       const budget={...(data as Omit<Budget,'client'>),client:null} as Budget
-      setItems(current=>[budget,...current]); openEditor(budget); show(`${documentType==='pre_budget'?'Pré-orçamento':'Orçamento'} criado como rascunho.`, 'success')
+      setCreationOpen(false);setItems(current=>[budget,...current]); openEditor(budget); show(`${documentType==='pre_budget'?'Pré-orçamento':'Orçamento'} criado como rascunho.`, 'success')
     } catch(reason){show(errorMessage(reason,'Não foi possível criar o registro.'),'error')}
-    finally{setCreating(false)}
+    finally{creatingLock.current=false;setCreating(false)}
   }
 
   const matching=useMemo(()=>items.filter(item=>matchesDashboardFocus(item.id,dashboardFocus,item)&&item.document_type===documentFilter&&inDateRange(item.created_at,dateRange)&&`${item.display_number} ${item.client?.name??''} ${labels[item.status]}`.toLowerCase().includes(search.toLowerCase())),[items,search,documentFilter,dateRange,dashboardFocus])
@@ -150,8 +152,8 @@ export function Budgets() {
   if(selected) return <BudgetEditor access={access!} budget={selected} setBudget={budget=>{const updated=withClient(budget,clients);selectedRef.current=updated;setSelected(updated);setItems(current=>current.map(item=>item.id===updated.id?updated:item))}} form={form} setForm={setForm} clients={clients} saveState={saveState} close={()=>{initialized.current=false;selectedRef.current=null;setSelected(null);navigateTo('orcamentos')}}/>
 
   return <Page title={documentFilter==='pre_budget'?'Pré-orçamentos':'Orçamentos'} description={documentFilter==='pre_budget'?'Estimativas rápidas, sem compromisso de valor final, para evoluir com o cliente.':'Propostas formais, revisões preservadas e uma única versão para tela, PDF e WhatsApp.'} action={<div className="page-actions">
-<button className="button secondary" disabled={creating} onClick={()=>void create('pre_budget')}><Plus/>{creating?'Criando…':'Novo pré-orçamento'}</button>
-<button className="button primary" disabled={creating} onClick={()=>void create('budget')}><Plus/>Novo orçamento</button></div>}>
+<button className="button primary" disabled={creating} onClick={()=>{setCreationType(null);setCreationOpen(true)}}><Plus/>Novo documento</button></div>}>
+    {creationOpen&&<div className="dialog-backdrop"><section className="dialog budget-creation-dialog" role="dialog" aria-modal="true" aria-labelledby="budget-creation-title"><header><div><span className="eyebrow">Nova negociação</span><h2 id="budget-creation-title">O que você deseja criar?</h2><p>Escolha o tipo antes de gerar um número. Nada é criado apenas ao abrir esta janela.</p></div><button className="icon-button" aria-label="Fechar criação" disabled={creating} onClick={()=>setCreationOpen(false)}><X/></button></header><fieldset className="budget-creation-options" disabled={creating}><legend>Tipo de documento</legend><label className={creationType==='pre_budget'?'selected':''}><input type="radio" name="new-document-type" value="pre_budget" checked={creationType==='pre_budget'} onChange={()=>setCreationType('pre_budget')}/><span><strong>Pré-orçamento</strong><small>Estimativa inicial</small><p>Valores e medidas de referência para iniciar a negociação.</p></span></label><label className={creationType==='budget'?'selected':''}><input type="radio" name="new-document-type" value="budget" checked={creationType==='budget'} onChange={()=>setCreationType('budget')}/><span><strong>Orçamento</strong><small>Proposta formal</small><p>Composição e condições comerciais para aprovação do cliente.</p></span></label></fieldset><footer><button className="button secondary" disabled={creating} onClick={()=>setCreationOpen(false)}>Cancelar</button><button className="button primary" disabled={creating||!creationType} onClick={()=>creationType&&void create(creationType)}>{creating?'Criando…':creationType==='pre_budget'?'Criar pré-orçamento':creationType==='budget'?'Criar orçamento':'Selecione o tipo'}</button></footer></section></div>}
     {loading&&<p role="status">Carregando orçamentos…</p>}{error&&<p role="alert">{error} <button className="button secondary" onClick={load}>Tentar novamente</button>
 </p>}
     <DashboardFocusNotice focus={dashboardFocus}/><div className="segmented-control" role="tablist" aria-label="Tipo de documento"><button className={documentFilter==='pre_budget'?'active':''} onClick={()=>{setDocumentFilter('pre_budget');setStatusFilter(null)}}>Pré-orçamentos</button><button className={documentFilter==='budget'?'active':''} onClick={()=>{setDocumentFilter('budget');setStatusFilter(null)}}>Orçamentos</button></div>
@@ -863,6 +865,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 {isPreBudget&&selectedFormKey==='wallpaper'&&<WallpaperEstimateCalculator organizationId={budgetOrganizationId} value={(itemForm.initial_configuration.wallpaper_estimate as WallpaperEstimate)??blankWallpaperEstimate} onChange={value=>setItemForm(current=>({...current,...wallpaperItemCosts(value),initial_configuration:{...current.initial_configuration,wallpaper_estimate:value}}))} onApply={(sale,description)=>setItemForm(current=>({...current,...wallpaperItemCosts((current.initial_configuration.wallpaper_estimate as WallpaperEstimate)??blankWallpaperEstimate),sale_total:sale,description}))}/>}
 {isPreBudget&&supportsUpholsteryCalculator&&<UpholsteryEstimateCalculator
   estimate={upholsteryEstimate}
+  headboard={itemForm.confection_subitem==='Cabeceira'}
   onChange={setUpholsteryEstimate}
   onApplyValue={value=>setItemForm(current=>{const sale=itemSaleTotal(value,current.quantity);return {...current,sale_total:sale,margin_percent:marginFromSalePrice(costOf(current),sale)}})}
   onInsertDescription={summary=>setItemForm(current=>({
