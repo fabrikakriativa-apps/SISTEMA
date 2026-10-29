@@ -13,6 +13,8 @@ import {OrderPaymentPlanEditor} from './OrderPaymentPlanEditor'
 import type {PaymentGroup} from '../lib/orderPaymentPlan'
 import { ReviseOrderReceivables } from './ReviseOrderReceivables'
 import { routeHash } from '../lib/navigation'
+import {AppointmentEditor} from './AppointmentEditor'
+import {useAccess} from './AuthorizedAccess'
 
 export type DetailOrder = {
   id:string; display_number:string; status:string; payment_terms:string|null; promised_date:string|null; client_address:string|null; notes:string|null; total:number; created_at:string
@@ -26,6 +28,7 @@ const date = (value:string|null) => value ? new Date(`${value.slice(0,10)}T12:00
 
 export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved}:{organizationId:string;order:DetailOrder;onBack:()=>void;onReviewBudget:()=>void;onSaved:()=>Promise<void>}) {
   const {show} = useToast()
+  const appointmentAccess=useAccess(),[appointmentOpen,setAppointmentOpen]=useState(false)
   const [choices,setChoices]=useState<{label:string;total:number}[]>([])
   const [condition,setCondition]=useState(order.commercial_terms?.condition??'Valor original do orçamento')
   const [discount,setDiscount]=useState(Number(order.commercial_terms?.additional_discount??0))
@@ -121,6 +124,7 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
     setRevisionSaving(false)
   }
   return <>
+    {appointmentOpen&&<AppointmentEditor organizationId={organizationId} initialSource={{kind:'order',id:order.id,label:[order.display_number,order.client?.name].filter(Boolean).join(' · '),address}} onClose={()=>setAppointmentOpen(false)} onSaved={async()=>{}}/>}
     <section className="panel order-detail-header" aria-label="Identificação do pedido">
 <div className="order-identity">
 <span className="eyebrow">Número do pedido</span>
@@ -130,6 +134,7 @@ export function OrderDetails({organizationId,order,onBack,onReviewBudget,onSaved
 <small role="status">{autoState==='saving'?'Salvando automaticamente…':autoState==='waiting'?'Rascunho protegido neste navegador':autoState==='error'?'Falha ao sincronizar; rascunho protegido neste navegador':'Alterações salvas'}</small>
 </div>
 <div className="order-header-actions">
+{appointmentAccess&&['admin','comercial','operacao'].includes(appointmentAccess.role)&&order.status!=='cancelled'&&<button className="button secondary" onClick={()=>setAppointmentOpen(true)}>Agendar</button>}
 {order.budget&&<a className="button secondary" href={routeHash('orcamentos',order.budget.id)} target="_blank" rel="noopener noreferrer" title="Abrir orçamento em nova aba">Abrir {order.budget.display_number} ↗</a>}
 <button className="button secondary" onClick={() => setActionsOpen(true)}>
 <ClipboardList/>Ações</button>

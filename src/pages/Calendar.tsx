@@ -10,9 +10,13 @@ import { supabase } from '../lib/supabase';
 import { calendarSyncStatuses, needsCalendarSync } from '../lib/calendarStatus';
 import { applicationRedirectUrl } from '../lib/authUrl';
 import './Calendar.css';
+import {AppointmentEditor,type EditableAppointment} from '../components/AppointmentEditor';
+import {navigateTo,routeHash} from '../lib/navigation';
 import { DashboardFocusNotice, useDashboardFocus } from '../components/DashboardFocusNotice';
 import { matchesDashboardFocus } from '../lib/dashboardFocus';
 type Event = SyncEvent & {
+    order_id:string|null;
+    budget_id:string|null;
     sync_status: string;
     event_type: string;
     client: {
@@ -42,10 +46,11 @@ const visitFormFromEvent = (event: Event): VisitForm => {
 export function Calendar() {
     const dashboardFocus=useDashboardFocus();
     const access = useAccess(), { show } = useToast(), [events, setEvents] = useState<Event[]>([]), [loading, setLoading] = useState(true), [error, setError] = useState(''), [search, setSearch] = useState(''), [dateRange, setDateRange] = useState<DateRange>({ from: '', to: '' }), [sort, setSort] = useState<SortState<'date' | 'event' | 'client' | 'origin' | 'sync'>>({ key: 'date', direction: 'asc' }), [cardFilter, setCardFilter] = useState<'all' | 'today' | 'pending'>('all'), [history, setHistory] = useState(false), [syncing, setSyncing] = useState(false), [editing, setEditing] = useState<Event | null>(null), [visitForm, setVisitForm] = useState<VisitForm | null>(null), [savingVisit, setSavingVisit] = useState(false), [deleting, setDeleting] = useState<Event | null>(null), [deletingVisit, setDeletingVisit] = useState(false);
+    const [appointmentEditor,setAppointmentEditor]=useState<{event?:EditableAppointment}|null>(null);
     const canSync = access?.role === 'admin' || access?.role === 'operacao', connected = Boolean(sessionStorage.getItem('fk_google_provider_token'));
     const canEditVisits = access?.role === 'admin' || access?.role === 'comercial' || access?.role === 'operacao';
     const load = useCallback(async () => { if (!supabase || !access)
-        return; setLoading(true); setError(''); let query = supabase.from('calendar_events').select('id,title,description,starts_at,ends_at,cancelled_at,google_event_id,sync_status,event_type,client:clients!calendar_events_client_id_fkey(name),order:orders!calendar_events_order_id_fkey(display_number),budget:budgets!calendar_events_budget_id_fkey(display_number,document_type)').eq('organization_id', access.organizationId).order('starts_at', { ascending: true }).limit(300); if (!history||dashboardFocus)
+        return; setLoading(true); setError(''); let query = supabase.from('calendar_events').select('id,order_id,budget_id,title,description,starts_at,ends_at,cancelled_at,google_event_id,sync_status,event_type,client:clients!calendar_events_client_id_fkey(name),order:orders!calendar_events_order_id_fkey(display_number),budget:budgets!calendar_events_budget_id_fkey(display_number,document_type)').eq('organization_id', access.organizationId).order('starts_at', { ascending: true }).limit(300); if (!history||dashboardFocus)
         query = dashboardFocus ? query.is('cancelled_at',null).in('id',dashboardFocus.ids).limit(Math.max(300,dashboardFocus.ids.length)) : query.is('cancelled_at', null).gte('starts_at', new Date(new Date().setHours(0, 0, 0, 0)).toISOString()); const { data, error } = await query.abortSignal(AbortSignal.timeout(15000)); if (error)
         setError('Não foi possível carregar a agenda.');
     else
@@ -81,10 +86,10 @@ export function Calendar() {
         show('Agenda sincronizada com o Google Calendar.', 'success');
     else
         show(`${failures} compromisso(s) não puderam ser sincronizados. A próxima sincronização tentará novamente.`, 'error'); };
-    const matching = useMemo(() => { const term = search.trim().toLocaleLowerCase('pt-BR'); return events.filter(x => matchesDashboardFocus(x.id,dashboardFocus,x) && (!term || `${x.title} ${x.description ?? ''} ${x.client?.name ?? ''}`.toLocaleLowerCase('pt-BR').includes(term)) && inDateRange(x.starts_at, dateRange)); }, [events, search, dateRange,dashboardFocus]);
+    const matching = useMemo(() => { const term = search.trim().toLocaleLowerCase('pt-BR'); return events.filter(x => matchesDashboardFocus(x.id,dashboardFocus,x) && (!term || `${x.title} ${x.description ?? ''} ${x.client?.name ?? ''} ${x.order?.display_number??''} ${x.budget?.display_number??''}`.toLocaleLowerCase('pt-BR').includes(term)) && inDateRange(x.starts_at, dateRange)); }, [events, search, dateRange,dashboardFocus]);
     const filtered = useMemo(() => { const selected = cardFilter === 'today' ? matching.filter(x => new Date(x.starts_at).toDateString() === new Date().toDateString() && !x.cancelled_at) : cardFilter === 'pending' ? matching.filter(x => needsCalendarSync(x.sync_status) && !x.cancelled_at) : matching; return [...selected].sort((a, b) => { const values = { date: [a.starts_at, b.starts_at], event: [a.title, b.title], client: [a.client?.name ?? '', b.client?.name ?? ''], origin: [a.order?.display_number ?? a.budget?.display_number ?? '', b.order?.display_number ?? b.budget?.display_number ?? ''], sync: [a.sync_status, b.sync_status] }[sort.key]; return compareValues(values[0], values[1]) * (sort.direction === 'asc' ? 1 : -1); }); }, [matching, cardFilter, sort]);
     const today = new Date().toDateString(), todayCount = matching.filter(x => new Date(x.starts_at).toDateString() === today && !x.cancelled_at).length, pending = matching.filter(x => needsCalendarSync(x.sync_status) && !x.cancelled_at).length;
-    const openVisitEditor = (event: Event) => { setEditing(event); setVisitForm(visitFormFromEvent(event)); };
+    const openVisitEditor = (event: Event) => { if(event.event_type==='appointment'){setAppointmentEditor({event});return}setEditing(event); setVisitForm(visitFormFromEvent(event)); };
     const saveVisit = async (event: FormEvent) => { event.preventDefault(); if (!supabase || !access || !editing || !visitForm || savingVisit)
         return; const startsAt = new Date(`${visitForm.date}T${visitForm.time}:00`), endsAt = new Date(startsAt.getTime() + visitForm.duration * 60000); if (Number.isNaN(startsAt.getTime()) || visitForm.duration < 15) {
         show('Informe data, horário e duração válidos.', 'error');
@@ -98,15 +103,14 @@ export function Calendar() {
         show('Visita técnica atualizada. Ela será atualizada no Google na próxima sincronização.', 'success');
     } setSavingVisit(false); };
     const deleteVisit = async () => { if (!supabase || !access || !deleting || deletingVisit)
-        return; setDeletingVisit(true); const { error } = await supabase.rpc('cancel_technical_visit', { org_id: access.organizationId, target_event_id: deleting.id }); if (error)
-        show(error.code === '42501' ? 'Seu perfil não pode excluir esta visita.' : 'Não foi possível excluir a visita técnica.', 'error');
+        return; setDeletingVisit(true); const { error } = await (deleting.event_type==='appointment'?supabase.rpc('manage_calendar_appointment',{org_id:access.organizationId,request_id:deleting.id,action:'cancel',payload:{}}):supabase.rpc('cancel_technical_visit', { org_id: access.organizationId, target_event_id: deleting.id })); if (error)
+        show(error.code === '42501' ? 'Seu perfil não pode cancelar este compromisso.' : 'Não foi possível cancelar o compromisso.', 'error');
     else {
         setDeleting(null);
         await load();
-        show('Visita técnica excluída da Agenda. Ela será removida do Google na próxima sincronização.', 'success');
+        show('Compromisso cancelado na Agenda. O Google será atualizado na próxima sincronização.', 'success');
     } setDeletingVisit(false); };
-    const action = canSync ? <button className="button primary" disabled={syncing} onClick={() => void (connected ? sync() : connect())}>
-<RefreshCw />{syncing ? 'Sincronizando…' : connected ? 'Sincronizar Google' : 'Conectar Google Calendar'}</button> : undefined;
+    const action = <div className="calendar-header-actions">{canEditVisits&&<button type="button" className="button primary" onClick={()=>setAppointmentEditor({})}><CalendarDays/>Novo compromisso</button>}{canSync&&<button className="button secondary" disabled={syncing} onClick={()=>void (connected?sync():connect())}><RefreshCw/>{syncing?'Sincronizando…':connected?'Sincronizar Google':'Conectar Google Calendar'}</button>}</div>;
     return <Page title="Agenda" description="Visitas técnicas e compromissos operacionais vinculados ao cliente." action={action}>
 <DashboardFocusNotice focus={dashboardFocus}/><section className="status-grid">
 <button type="button" className={`status-filter-card ${cardFilter === 'all' ? 'active' : ''}`} aria-pressed={cardFilter === 'all'} onClick={() => setCardFilter('all')}>
@@ -161,10 +165,10 @@ export function Calendar() {
 <small className="table-subline">{event.description || 'Sem observações'}</small>
 </td>
 <td>{event.client?.name ?? '—'}</td>
-<td>{event.order?.display_number ?? event.budget?.display_number ?? '—'}</td>
+<td>{event.order_id||event.budget_id?<a className="calendar-origin-link" href={routeHash(event.order_id?'pedidos':'orcamentos',event.order_id??event.budget_id)} target="_blank" rel="noopener noreferrer">{event.order?.display_number??event.budget?.display_number??'Abrir documento'} ↗</a>:'—'}</td>
 <td>
-<span className="badge">{event.cancelled_at ? 'Cancelamento pendente' : event.sync_status === 'synced' ? 'Sincronizado' : event.sync_status === 'error' ? 'Falha' : 'Pendente'}</span>
-</td>{canEditVisits && <td>{event.event_type === 'technical_visit' && !event.cancelled_at ? <div className="calendar-actions">
+<span className="badge">{event.cancelled_at ? event.sync_status==='synced'?'Cancelado':'Cancelamento pendente' : event.sync_status === 'synced' ? 'Sincronizado' : event.sync_status === 'error' ? 'Falha' : 'Pendente'}</span>
+</td>{canEditVisits && <td>{['technical_visit','appointment'].includes(event.event_type) && !event.cancelled_at ? <div className="calendar-actions">
 <button type="button" className="button secondary compact-button" onClick={() => openVisitEditor(event)}>
 <Pencil />Editar</button>
 <button type="button" className="button danger compact-button" onClick={() => setDeleting(event)}>
@@ -174,7 +178,7 @@ export function Calendar() {
 </div> : <div className="empty-state">
 <CalendarDays />
 <strong>Nenhum compromisso encontrado</strong>
-<span>Clique novamente no card selecionado para exibir todos os compromissos.</span>
+<span>Use Novo compromisso para agendar ou revise os filtros selecionados.</span>
 </div>}</section>{editing && visitForm && <div className="dialog-backdrop">
 <form className="dialog" onSubmit={saveVisit}>
 <header>
@@ -210,7 +214,7 @@ export function Calendar() {
 <div>
 <span className="eyebrow">Visita técnica</span>
 <h2>Excluir compromisso?</h2>
-<p>Esta visita sairá da Agenda e será removida do Google Calendar na próxima sincronização.</p>
+<p>Este compromisso sairá da lista ativa e será removido do Google Calendar na próxima sincronização. O histórico será preservado.</p>
 </div>
 <button type="button" className="icon-button" aria-label="Fechar" onClick={() => setDeleting(null)}>
 <X />
@@ -219,9 +223,8 @@ export function Calendar() {
 <footer>
 <button type="button" className="button secondary" disabled={deletingVisit} onClick={() => setDeleting(null)}>Voltar</button>
 <button type="button" className="button danger" disabled={deletingVisit} onClick={() => void deleteVisit()}>
-<Trash2 />{deletingVisit ? 'Excluindo…' : 'Excluir visita'}</button>
+<Trash2 />{deletingVisit ? 'Excluindo…' : 'Cancelar compromisso'}</button>
 </footer>
 </section>
-</div>}</Page>;
+</div>}{appointmentEditor&&access&&<AppointmentEditor organizationId={access.organizationId} event={appointmentEditor.event} onClose={()=>setAppointmentEditor(null)} onSaved={async saved=>{setSearch('');setDateRange({from:'',to:''});setCardFilter('all');setHistory(new Date(saved.starts_at)<new Date(new Date().setHours(0,0,0,0)));navigateTo('agenda');await load()}}/>}</Page>;
 }
-
