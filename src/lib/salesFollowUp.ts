@@ -7,8 +7,11 @@ export function phaseForLead(lead:FollowUpLead,orders:SalesOrder[],budgets:Sales
  const ids=linkedBudgetIds(lead)
  if(orders.some(o=>o.status!=='cancelled'&&ids.includes(o.budget_id)))return 'won'
  if(lead.stage==='lost')return 'lost'
- if(lead.commercial_phase)return lead.commercial_phase
+ // An explicit closing/negotiation must survive automatic document updates.
+ if(lead.stage==='won')return 'won'
+ if(lead.commercial_phase&&['won','lost','negotiating','proposal_sent'].includes(lead.commercial_phase))return lead.commercial_phase
  if(budgets.some(b=>ids.includes(b.id)&&['sent','no_response','approved'].includes(b.status)))return 'proposal_sent'
+ if(lead.commercial_phase)return lead.commercial_phase
  if(ids.length||lead.stage==='budgeting')return 'preparing'
  return lead.stage==='new'?'new':lead.stage==='won'?'won':'contacted'
 }
@@ -28,3 +31,4 @@ export function matchesFollowUp(lead:FollowUpLead,phase:CommercialPhase,filter:F
 }
 export const channelLabels:Record<string,string>={whatsapp:'WhatsApp',email:'E-mail',phone:'Ligação',meeting:'Reunião',other:'Outro',system:'Sistema'}
 export const outcomeLabels:Record<string,string>={answered:'Houve resposta',no_response:'Sem resposta',requested_return:'Pediu retorno',stage:'Atualização automática'}
+

@@ -2,6 +2,19 @@ import {describe,it,expect} from 'vitest'
 import {phaseForLead,contactSummary,matchesFollowUp,type FollowUpLead,type ContactActivity} from './salesFollowUp'
 const lead:FollowUpLead={id:'l',name:'Lead',received_on:'2026-10-01',customer_kind:'new_lead',profile_status:'unassessed',profile_reason:null,capture_source:null,campaign:null,response_status:'active',stage:'new',budget_id:'b',related_budget_ids:[],origin:null,next_follow_up_at:'2026-10-21T12:00:00Z'}
 describe('follow-up comercial',()=>{
+ it('uma proposta enviada avança uma etapa desatualizada e considera todos os vínculos',()=>{
+  const sent={id:'b2',display_number:'PRE2',client_id:null,status:'sent',created_at:'2026-10-26',total:100}
+  const stale={...lead,commercial_phase:'preparing' as const,related_budget_ids:['b2']}
+  expect(phaseForLead(stale,[],[sent])).toBe('proposal_sent')
+  expect(phaseForLead({...stale,commercial_phase:'negotiating'},[],[sent])).toBe('negotiating')
+  expect(phaseForLead({...stale,stage:'lost'},[],[sent])).toBe('lost')
+  expect(phaseForLead(stale,[],[{...sent,id:'unrelated'}])).toBe('preparing')
+ })
+ it('uma revisão em rascunho não desfaz uma proposta já enviada',()=>{
+  const draft={id:'b',display_number:'PRE1',client_id:null,status:'draft',created_at:'2026-10-26',total:100}
+  expect(phaseForLead({...lead,commercial_phase:'proposal_sent'},[],[draft])).toBe('proposal_sent')
+  expect(phaseForLead({...lead,commercial_phase:'preparing'},[],[{...draft,status:'no_response'}])).toBe('proposal_sent')
+ })
  it('pedido confirmado prevalece sem mudar perfil, orçamento ou contato',()=>{
   expect(phaseForLead(lead,[{id:'o',display_number:'PED1',budget_id:'b',status:'awaiting_finance',created_at:'2026-10-21',total:100}],[])).toBe('won')
   expect(lead.profile_status).toBe('unassessed')
@@ -28,3 +41,4 @@ describe('follow-up comercial',()=>{
   expect(phaseForLead(pending,[],[{id:'b',display_number:'ORC1',client_id:null,status:'no_response',created_at:'2026-10-01',total:100}])).toBe('proposal_sent')
  })
 })
+

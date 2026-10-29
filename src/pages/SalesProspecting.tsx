@@ -51,6 +51,13 @@ export function SalesProspecting(){
   }catch(e){setError(e instanceof Error?e.message:'Falha de carregamento.')}finally{setLoading(false)}
  },[access])
  useEffect(()=>{void load()},[load])
+ // Returning from a document tab must show its latest commercial progress.
+ // Do not reload while the operator is editing an opportunity or follow-up rules.
+ useEffect(()=>{
+  const refresh=()=>{if(document.visibilityState==='visible'&&!open&&!rulesOpen)void load()}
+  window.addEventListener('focus',refresh)
+  return()=>window.removeEventListener('focus',refresh)
+ },[load,open,rulesOpen])
  const won=(lead:SalesLead)=>orders.some(o=>o.status!=='cancelled'&&linkedBudgetIds(lead).includes(o.budget_id))
  const column=(lead:Lead|Form)=>phaseForLead(lead,orders,budgets)
  const edit=(lead?:Lead)=>{const source=rawItems.find(item=>item.id===lead?.id)??lead;setCancelling(false);setCancelReason('');setForm(source?{...source,commercial_phase:column(source),estimated_value:source.estimated_value??'',next_follow_up_at:source.next_follow_up_at?.slice(0,16)??''}:{...fresh(),assigned_to:access?.userId??null});setClientSearch(allClients.find(c=>c.id===source?.client_id)?.name??'');setBudgetSearch('');setOpen(true)}
