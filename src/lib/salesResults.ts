@@ -1,6 +1,6 @@
 export type LeadProfile='unassessed'|'in_profile'|'out_of_profile'
 export const profileLabels:Record<LeadProfile,string>={unassessed:'Em avaliação',in_profile:'Dentro do perfil',out_of_profile:'Fora de perfil'}
-export type SalesLead={id:string;name:string;received_on:string|null;profile_status:LeadProfile;profile_reason:string|null;capture_source:string|null;campaign:string|null;customer_kind:'unknown'|'new_lead'|'repeat';response_status:'active'|'waiting'|'no_response';stage:string;budget_id:string|null;related_budget_ids:string[];origin:string|null;archived_at?:string|null}
+export type SalesLead={id:string;name:string;received_on:string|null;profile_status:LeadProfile;profile_reason:string|null;capture_source:string|null;campaign:string|null;capture_kind?:'unknown'|'organic'|'paid';customer_kind:'unknown'|'new_lead'|'repeat';response_status:'active'|'waiting'|'no_response';stage:string;budget_id:string|null;related_budget_ids:string[];origin:string|null;archived_at?:string|null}
 export type SalesBudget={id:string;display_number:string;client_id:string|null;status:string;created_at:string;total:number|string}
 export type SalesOrder={id:string;display_number:string;budget_id:string;status:string;created_at:string;total:number|string}
 export type SalesHistory={id:string;entity_type:'opportunity'|'budget'|'order';entity_id:string;recorded_at:string;state:{profile_status?:LeadProfile;stage?:string;response_status?:SalesLead['response_status'];archived_at?:string|null;status?:string;total?:number|string;baseline?:boolean}}

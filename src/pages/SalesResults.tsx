@@ -8,6 +8,7 @@ import {loadAllPages} from '../lib/loadAllPages'
 import {money} from '../lib/format'
 import {navigateTo} from '../lib/navigation'
 import {calculateSalesResults,salesOrderIssue,inSalesRange,linkedBudgetIds,profileLabels,salesDay,type SalesLead,type SalesBudget,type SalesOrder,type SalesHistory} from '../lib/salesResults'
+import {captureKindLabels,matchesAcquisition} from '../lib/leadAcquisition'
 import './SalesResultsTheme.css'
 
 type Props<T extends SalesLead>={leads:T[];budgets:SalesBudget[];orders:SalesOrder[];onOpenLead:(lead:T)=>void}
@@ -17,15 +18,15 @@ const date=(day:string)=>day?day.split('-').reverse().join('/'):'Não informada'
 const groupLabels:Record<string,string>={current:'Leads recebidos no período',previous:'Leads de períodos anteriores',repeat:'Recompras',unknown:'Pedidos com dados pendentes'}
 export function SalesResults<T extends SalesLead>({leads,budgets,orders,onOpenLead}:Props<T>){
  const access=useAccess(),today=salesDay(new Date().toISOString())
- const [range,setRange]=useState(()=>monthRange(today.slice(0,7))),[preset,setPreset]=useState('month'),[until,setUntil]=useState<'today'|'end'>('today'),[capture,setCapture]=useState(''),[origin,setOrigin]=useState(''),[campaign,setCampaign]=useState(''),[history,setHistory]=useState<SalesHistory[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState(''),[detail,setDetail]=useState<{title:string;ids:string[];orderIds?:string[]}|null>(null),[mode,setMode]=useState<'cohort'|'activity'>('cohort')
+ const [range,setRange]=useState(()=>monthRange(today.slice(0,7))),[preset,setPreset]=useState('month'),[until,setUntil]=useState<'today'|'end'>('today'),[capture,setCapture]=useState(''),[captureType,setCaptureType]=useState(''),[origin,setOrigin]=useState(''),[campaign,setCampaign]=useState(''),[history,setHistory]=useState<SalesHistory[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState(''),[detail,setDetail]=useState<{title:string;ids:string[];orderIds?:string[]}|null>(null),[mode,setMode]=useState<'cohort'|'activity'>('cohort')
  const load=useCallback(async()=>{if(!supabase||!access){setLoading(false);return}setLoading(true);setError('');try{const r=await loadAllPages<SalesHistory>((from,to)=>supabase!.from('sales_tracking_history').select('id,entity_type,entity_id,recorded_at,state',{count:'exact'}).eq('organization_id',access.organizationId).order('recorded_at').order('id').range(from,to));if(r.error)throw r.error;setHistory(r.data??[])}catch{setError('Não foi possível carregar o histórico. Os resultados não serão exibidos incompletos.')}finally{setLoading(false)}},[access])
  useEffect(()=>{void load()},[load])
  const detailRef=useRef<HTMLElement>(null)
  useEffect(()=>{if(detail)detailRef.current?.scrollIntoView({behavior:'smooth',block:'start'})},[detail])
  const valid=Boolean(range.from&&range.to&&range.from<=range.to&&range.from<=today)
  const cutoff=until==='today'?today:(range.to<today?range.to:today)
- const selected=useMemo(()=>leads.filter(l=>(!l.archived_at||salesDay(l.archived_at)>cutoff)&&(!capture||l.capture_source===capture)&&(!origin||l.origin===origin)&&(!campaign||l.campaign===campaign)),[leads,capture,origin,campaign,cutoff])
- const filteredOrders=useMemo(()=>capture||origin||campaign?orders.filter(o=>selected.some(l=>linkedBudgetIds(l).includes(o.budget_id))):orders,[orders,selected,capture,origin,campaign])
+ const selected=useMemo(()=>leads.filter(l=>(!l.archived_at||salesDay(l.archived_at)>cutoff)&&matchesAcquisition(l,captureType)&&(!capture||l.capture_source===capture)&&(!origin||l.origin===origin)&&(!campaign||l.campaign===campaign)),[leads,capture,captureType,origin,campaign,cutoff])
+ const filteredOrders=useMemo(()=>capture||captureType||origin||campaign?orders.filter(o=>selected.some(l=>linkedBudgetIds(l).includes(o.budget_id))):orders,[orders,selected,capture,captureType,origin,campaign])
  const data=useMemo(()=>calculateSalesResults(selected,budgets,filteredOrders,history,range,cutoff),[selected,budgets,filteredOrders,history,range,cutoff])
  const choose=(value:string)=>{setPreset(value);setDetail(null);if(value==='month')setRange(monthRange(today.slice(0,7)));if(value==='last'){const d=new Date(today+'T12:00:00');d.setMonth(d.getMonth()-1);setRange(monthRange(d.toISOString().slice(0,7)))}if(value==='year')setRange({from:today.slice(0,4)+'-01-01',to:today.slice(0,4)+'-12-31'})}
  const showLeads=(title:string,rows:SalesLead[])=>setDetail({title,ids:rows.map(r=>r.id)})
@@ -54,7 +55,8 @@ export function SalesResults<T extends SalesLead>({leads,budgets,orders,onOpenLe
   <section className="panel sales-results-filters"><div className="sales-filter-heading"><div><h2>Resultados da captação</h2><p>Perfil, propostas e compras — sem contar o mesmo lead duas vezes.</p></div><button className="button secondary compact-button" onClick={()=>void load()} disabled={loading}><RefreshCw/>Atualizar histórico</button></div><div className="sales-filter-controls">
    <label className="field">Período rápido<select value={preset} onChange={e=>choose(e.target.value)}><option value="month">Esse mês</option><option value="last">Mês passado</option><option value="year">Esse ano</option><option value="custom">Personalizado</option></select></label>
    <label className="field">De<input type="date" value={range.from} onChange={e=>chooseRange('from',e.target.value)}/></label><label className="field">Até<input type="date" value={range.to} onChange={e=>chooseRange('to',e.target.value)}/></label>
-   <label className="field">Captação<select value={capture} onChange={e=>{setCapture(e.target.value);setDetail(null)}}><option value="">Todas</option>{options('capture_source').map(v=><option key={v}>{v}</option>)}</select></label>
+   <label className="field">Tipo de captação<select aria-label="Filtrar tipo de captação" value={captureType} onChange={e=>{setCaptureType(e.target.value);setDetail(null)}}><option value="">Todos</option>{Object.entries(captureKindLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
+   <label className="field">Equipe / agência<select value={capture} onChange={e=>{setCapture(e.target.value);setDetail(null)}}><option value="">Todas</option>{options('capture_source').map(v=><option key={v}>{v}</option>)}</select></label>
    <label className="field">Origem<select value={origin} onChange={e=>{setOrigin(e.target.value);setDetail(null)}}><option value="">Todas</option>{options('origin').map(v=><option key={v}>{v}</option>)}</select></label>
    <label className="field">Campanha<select value={campaign} onChange={e=>{setCampaign(e.target.value);setDetail(null)}}><option value="">Todas</option>{options('campaign').map(v=><option key={v}>{v}</option>)}</select></label>
   </div></section>
@@ -80,3 +82,4 @@ export function SalesResults<T extends SalesLead>({leads,budgets,orders,onOpenLe
   </>}
  </section>
 }
+
