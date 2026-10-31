@@ -881,10 +881,12 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 </select></label>
 {['curtain','blind','decoration'].includes(selectedFormKey??'')?<>
 <label className="field">Custo do fabricante<DecimalInput ariaLabel="Custo do fabricante" value={itemForm.manufacturer_cost} decimalScale={2} onValueChange={value=>setItemForm(current=>withMargin({...current,manufacturer_cost:value}))}/></label>
+<div className="pre-budget-cost-row">
 <label className="field">Custos adicionais<DecimalInput ariaLabel="Custos adicionais" value={itemForm.additional_cost} decimalScale={2} onValueChange={value=>setItemForm(current=>withMargin({...current,additional_cost:value}))}/></label>
 <label className="field">Custo total<input readOnly aria-label="Custo total" value={money.format(costOf(itemForm))}/></label>
 <label className="field">Margem (%)<DecimalInput ariaLabel="Margem (%)" value={itemForm.margin_percent} decimalScale={3} onValueChange={value=>setItemForm(current=>withMargin({...current,margin_percent:value}))}/><small className="field-note">Percentual aplicado sobre o custo total.</small></label>
 <label className="field pre-budget-value">Valor unitário de venda<DecimalInput ariaLabel="Valor unitário de venda" value={itemUnitSalePrice(itemForm.sale_total,itemForm.quantity)} decimalScale={2} onValueChange={changeUnitSale}/><small className="field-note">Total = valor unitário × quantidade. O custo do PDF é preservado.</small></label>
+</div>
 </>:<label className="field pre-budget-value">Valor unitário estimado<DecimalInput ariaLabel="Valor unitário de venda" value={itemUnitSalePrice(itemForm.sale_total,itemForm.quantity)} decimalScale={2} onValueChange={changeUnitSale}/><small className="field-note">Multiplicado pela quantidade no total do item.</small></label>}
 </div>:<>
 <label className="field">Quantidade<input type="number" min="0.001" step="0.001" value={itemForm.quantity} onChange={e=>changeItemQuantity(Number(e.target.value))}/></label>
@@ -921,3 +923,4 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 </div>}
   </Page>
 }
+
