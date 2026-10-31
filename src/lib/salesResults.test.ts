@@ -6,6 +6,18 @@ const orders:SalesOrder[]=[{id:'o',display_number:'PED1',budget_id:'b',status:'a
 const history=[event('opportunity','l','2026-10-05T12:00:00Z',{profile_status:'unassessed',stage:'new'}),event('opportunity','l','2026-11-10T12:00:00Z',{profile_status:'in_profile',stage:'budgeting'}),...orders.map(o=>event('order',o.id,o.created_at,{status:o.status,total:o.total}))]
 const range={from:'2026-10-01',to:'2026-10-31'}
 describe('resultados comerciais',()=>{
+ it('separa retorno sem misturar perfil, compradores e encerrados e respeita a fotografia histórica',()=>{
+  const statuses=['no_interaction','pre_proposal_no_response','proposal_no_response','no_response','active'] as const
+  const leads=statuses.map((response_status,i)=>({...lead,id:'r'+i,budget_id:null,response_status}))
+  const h=leads.map(l=>event('opportunity',l.id,'2026-10-10T12:00:00Z',{response_status:l.response_status,stage:'contacted',profile_status:'in_profile'}))
+  h.push(event('opportunity','r0','2026-11-01T12:00:00Z',{response_status:'active',stage:'contacted'}))
+  const r=calculateSalesResults(leads,[],[],h,range,'2026-10-31')
+  expect(r.responseGroups.map(g=>g.leads.length)).toEqual([1,1,1,1]);expect(r.rows).toHaveLength(5);expect(r.qualified).toHaveLength(5)
+  expect(calculateSalesResults(leads,[],[],h,range,'2026-11-02').responseGroups[0].leads).toHaveLength(0)
+  const closed=leads.map(l=>({...l,stage:'lost'}))
+  const lost=closed.map(l=>event('opportunity',l.id,'2026-10-20T12:00:00Z',{stage:'lost',response_status:l.response_status}))
+  expect(calculateSalesResults(closed,[],[],lost,range,'2026-10-31').responseGroups.flatMap(g=>g.leads)).toHaveLength(0)
+ })
  it('explica entrada posterior ao pedido sem confundir com origem comercial',()=>{
   const o={...orders[0],created_at:'2026-10-08T12:00:00Z'}
   const late={...lead,origin:'Indicação',received_on:'2026-10-19'}
@@ -79,4 +91,3 @@ describe('resultados comerciais',()=>{
   const r=calculateSalesResults([lead],[],orders,h,range,'2026-12-31');expect(r.noResponse).toHaveLength(0);expect(r.buyers).toHaveLength(1)
  })
 })
-

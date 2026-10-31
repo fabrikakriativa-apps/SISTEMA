@@ -1,6 +1,7 @@
+import {resolvedResponse,type LeadResponse} from './leadResponse'
 export type LeadProfile='unassessed'|'in_profile'|'out_of_profile'
 export const profileLabels:Record<LeadProfile,string>={unassessed:'Em avaliação',in_profile:'Dentro do perfil',out_of_profile:'Fora de perfil'}
-export type SalesLead={id:string;name:string;received_on:string|null;profile_status:LeadProfile;profile_reason:string|null;capture_source:string|null;campaign:string|null;capture_kind?:'unknown'|'organic'|'paid';customer_kind:'unknown'|'new_lead'|'repeat';response_status:'active'|'waiting'|'no_response';stage:string;budget_id:string|null;related_budget_ids:string[];origin:string|null;archived_at?:string|null}
+export type SalesLead={id:string;name:string;received_on:string|null;profile_status:LeadProfile;profile_reason:string|null;capture_source:string|null;campaign:string|null;capture_kind?:'unknown'|'organic'|'paid';customer_kind:'unknown'|'new_lead'|'repeat';response_status:LeadResponse;stage:string;budget_id:string|null;related_budget_ids:string[];origin:string|null;archived_at?:string|null}
 export type SalesBudget={id:string;display_number:string;client_id:string|null;status:string;created_at:string;total:number|string}
 export type SalesOrder={id:string;display_number:string;budget_id:string;status:string;created_at:string;total:number|string}
 export type SalesHistory={id:string;entity_type:'opportunity'|'budget'|'order';entity_id:string;recorded_at:string;state:{profile_status?:LeadProfile;stage?:string;response_status?:SalesLead['response_status'];archived_at?:string|null;status?:string;total?:number|string;baseline?:boolean}}
@@ -66,6 +67,6 @@ export function calculateSalesResults(leads:SalesLead[],budgets:SalesBudget[],or
   })
   return {key,orders:deals,buyers:new Set(deals.map(o=>orderOwners.get(o.budget_id)?.id).filter(Boolean)).size,value:deals.reduce((s,o)=>s+Number(o.total),0)}
  })
- return {rows,buyers,immediate,proposals:rows.filter(l=>l.proposals.length),qualified:rows.filter(l=>l.profile_status==='in_profile'),outside:rows.filter(l=>l.profile_status==='out_of_profile'),unassessed:rows.filter(l=>l.profile_status==='unassessed'),noResponse:rows.filter(l=>l.response_status==='no_response'&&!l.deals.length),lost:rows.filter(l=>l.stage==='lost'&&l.response_status!=='no_response'&&!l.deals.length),groups,closed,unknownEntry:activeLeads.filter(l=>!l.received_on).length,historyStarts:history.map(e=>salesDay(e.recorded_at)).sort()[0]??null}
+ const responseGroups=(['no_interaction','pre_proposal_no_response','proposal_no_response','no_response'] as const).map(key=>({key,leads:rows.filter(l=>!l.deals.length&&l.stage!=='won'&&l.stage!=='lost'&&resolvedResponse(l.response_status,l.proposals.length>0)===key)}))
+ return {responseGroups,rows,buyers,immediate,proposals:rows.filter(l=>l.proposals.length),qualified:rows.filter(l=>l.profile_status==='in_profile'),outside:rows.filter(l=>l.profile_status==='out_of_profile'),unassessed:rows.filter(l=>l.profile_status==='unassessed'),noResponse:rows.filter(l=>l.response_status==='no_response'&&!l.deals.length),lost:rows.filter(l=>l.stage==='lost'&&l.response_status!=='no_response'&&!l.deals.length),groups,closed,unknownEntry:activeLeads.filter(l=>!l.received_on).length,historyStarts:history.map(e=>salesDay(e.recorded_at)).sort()[0]??null}
 }
-

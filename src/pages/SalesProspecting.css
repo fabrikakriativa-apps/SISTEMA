@@ -1,4 +1,5 @@
 .sales-board-panel .sales-kanban{display:flex;flex-wrap:nowrap;align-items:stretch;gap:8px;padding:12px;overflow-x:auto;overscroll-behavior-x:contain}
+.sales-kanban .sales-kanban-card>small.sales-card-response{white-space:normal;font-size:9px;font-weight:600;line-height:1.35;color:#8b5f27;background:#fbf1df;border-radius:4px;padding:3px 4px}
 .sales-kanban>.opportunity-column{flex:1 0 116px;min-width:116px;min-height:220px;max-height:62vh;overflow-y:auto;scrollbar-width:thin;padding:6px;border-radius:10px}
 .sales-kanban>.opportunity-column>header{position:sticky;top:-7px;z-index:1;align-items:center;gap:6px;background:#f6f2ea;padding:6px 2px 10px;font-size:11px;line-height:1.25}
 .sales-kanban>.opportunity-column>header strong{font-weight:600}
@@ -25,4 +26,3 @@
 .sales-contact-history{border:1px solid var(--line);border-radius:12px;padding:14px;background:#f5f8fb;grid-column:1/-1}.sales-contact-history summary{cursor:pointer;font-size:12px;font-weight:700}.sales-contact-history>p{font-size:11px;line-height:1.5;margin:12px 0}.sales-contact-form{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:14px 0}.sales-contact-form .span-2{grid-column:1/-1}.sales-contact-timeline{padding:0 0 0 15px;margin:16px 0 0;border-left:2px solid #c7d8e5;list-style:none}.sales-contact-timeline li{padding:0 0 14px 8px}.sales-contact-timeline strong{display:block;font-size:12px}.sales-contact-timeline small{display:block;font-size:10px;color:var(--muted);margin-top:4px}.sales-contact-timeline p{font-size:12px;margin:5px 0;white-space:pre-wrap}.sales-contact-timeline .system{color:#55718a}
 @media(max-width:760px){.sales-kanban>.opportunity-column{flex-basis:170px;min-width:170px}.sales-lead-dialog>footer{padding:10px 14px}.sales-cancel-confirm{margin:14px}}
 .sales-kanban .sales-kanban-card>small.sales-card-acquisition{display:block;font-size:10px;line-height:1.35;white-space:normal;overflow-wrap:anywhere;overflow:visible;text-overflow:clip;color:#766b5a}.sales-kanban-card .sales-card-acquisition.paid{color:#285d91;font-weight:600}.sales-kanban-card .sales-card-acquisition.organic{color:#28765c}
-
