@@ -8,6 +8,8 @@
 .sales-results .sales-profile-branches button:first-child{background:#e0f0e9;color:#245e4e}
 .sales-results .sales-profile-branches button:nth-child(2){background:#f7e9e5;color:var(--sales-coral)}
 .sales-results .sales-profile-branches button:last-child{background:#edf0f4;color:var(--sales-slate)}
+.sales-results .sales-profile-branches.sales-response-branches button{background:#f0f0ee;color:#565b60}
+.sales-results .sales-profile-branches.sales-response-branches button:hover{background:#e7e7e4}
 .sales-results .sales-order-origin .sales-origin-current{background:#254d72;color:#fff}
 .sales-results .sales-order-origin .sales-origin-previous{background:#dde8f2;color:#254d72}
 .sales-results .sales-order-origin .sales-origin-repeat{background:#e0f0e9;color:#245e4e}
