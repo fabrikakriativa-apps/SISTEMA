@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 330" role="img" aria-labelledby="title desc">
+<title id="title">Kiara — atendente digital da Fábrika Kriativa</title>
+<desc id="desc">Ilustração de personagem feminina sorridente, com cabelos castanhos e blusa clara com monograma colorido</desc>
+<defs>
+<linearGradient id="bg" x1="0" x2="1" y2="1"><stop stop-color="#eee1ff"/><stop offset="1" stop-color="#d1c1fc"/></linearGradient>
+<linearGradient id="hair" x1="0" x2="1" y2="1"><stop stop-color="#684031"/><stop offset=".55" stop-color="#33202c"/><stop offset="1" stop-color="#1d202c"/></linearGradient>
+<linearGradient id="skin" x1="0" x2=".8" y2="1"><stop stop-color="#ffd4ae"/><stop offset=".8" stop-color="#f5aa86"/><stop offset="1" stop-color="#e18e77"/></linearGradient>
+<linearGradient id="shirt" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fffefb"/><stop offset="1" stop-color="#e9e3f5"/></linearGradient>
+<filter id="shadow" x="-25%" y="-25%" width="150%" height="150%"><feDropShadow dx="0" dy="7" stdDeviation="9" flood-opacity=".13"/></filter>
+</defs>
+<path fill="url(#bg)" d="M43 96C38 34 106 18 170 25c66 7 103 42 111 104 8 61 13 128-41 171H84C30 268 17 167 43 96Z"/>
+<path fill="#f6efff" d="M30 112c-13 66 5 151 62 182h150c50-43 60-114 35-169-24-51-65-73-128-75C79 48 46 64 30 112Z" opacity=".62"/>
+<g filter="url(#shadow)">
+<path fill="url(#hair)" d="M92 120C60 102 58 65 85 41c12-30 54-34 77-26 46-8 86 22 92 63 26 21 25 61 9 90 17 40 12 99-23 124-23 11-47 7-75-1-54 20-99-3-106-49-7-43 3-90 33-122Z"/>
+<path fill="#f4b093" d="M127 221h62l10 40-41 34-40-31Z"/>
+<path fill="url(#shirt)" d="M52 314c3-48 27-66 71-71l38 35 36-35c47 8 76 31 78 71Z"/>
+<path fill="#e8dcea" d="M114 248c11 15 23 27 46 29 22-2 39-19 43-30l-8-8-36 23-35-25Z"/>
+<path fill="url(#skin)" d="M104 91c-13 24-14 78 2 109 12 24 37 45 60 46 27 1 53-26 64-55 9-26 4-76-11-99-29-38-81-36-115-1Z"/>
+<path fill="#efaa86" d="M109 149c-13-12-23-4-19 15 2 14 12 24 22 18ZM224 147c11-10 22-3 18 13-2 13-11 22-18 20Z"/>
+<path fill="#3c2731" d="M106 117c8-35 26-39 49-53 26 16 49 17 76 41-5-53-37-76-79-71-37-1-59 31-56 64Z"/>
+<path fill="#4c2d33" d="M81 122c-12 31-20 75 1 113-30-28-21-83-14-109 12-43 34-78 77-83-20 20-50 39-64 79ZM230 102c18 23 21 61 12 89 17-31 12-78-7-106Z"/>
+<path d="M119 143c10-10 23-11 32-5M177 139c11-7 24-6 32 3" fill="none" stroke="#53353a" stroke-width="6" stroke-linecap="round"/>
+<path d="M120 157c9-5 18-4 24 1M185 158c8-5 17-4 23 2" fill="none" stroke="#36272d" stroke-width="5" stroke-linecap="round"/>
+<path d="M135 157c0 9-9 9-9 0M200 158c0 9-9 9-9 0" fill="none" stroke="#3c2c35" stroke-width="6" stroke-linecap="round"/>
+<path d="M162 158c-2 15-9 25-2 27" fill="none" stroke="#d88e76" stroke-width="3.5" stroke-linecap="round"/>
+<ellipse cx="118" cy="182" rx="14" ry="7" fill="#f28c8f" opacity=".56"/>
+<ellipse cx="209" cy="181" rx="14" ry="7" fill="#f28c8f" opacity=".5"/>
+<path d="M132 198c11 26 42 33 62 1-19 3-41 4-62-1Z" fill="#762f46"/>
+<path d="M140 203c12 9 32 9 45 0Z" fill="#fff5ee"/>
+<path d="M148 218q15 6 27-2" stroke="#ed7486" stroke-width="3" fill="none" stroke-linecap="round"/>
+<circle cx="96" cy="183" r="11" fill="none" stroke="#e9a61f" stroke-width="5"/>
+<circle cx="233" cy="182" r="11" fill="none" stroke="#e9a61f" stroke-width="5"/>
+<path fill="#f05176" d="m152 292 11-15 10 15-10 12Z"/>
+<path fill="#19b4e1" d="m163 277 18 6-8 10-10-1Z"/>
+<path fill="#f9bd22" d="m152 292-13-6 4-10 20 1Z"/>
+</g>
+<path fill="#ffc331" d="m50 72 23 13-7 10-22-13ZM47 106l20-4 3 10-21 5Z"/>
+<path fill="#a54cef" d="m260 55 7 16 17 4-17 7-6 17-7-17-16-5 16-6Z"/>
+<path fill="#ffffff" d="m241 35 4 8 9 3-9 3-4 9-3-9-9-3 9-3Z"/>
+</svg>
