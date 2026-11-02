@@ -51,7 +51,7 @@ begin
   end if;
 
   -- When an active opportunity already uses this phone, reuse it.
-  select count(*),min(s.id) into match_count,matched_opp
+  select count(*),(array_agg(s.id order by s.created_at desc))[1] into match_count,matched_opp
     from public.sales_opportunities s
     where s.organization_id=org_id and s.archived_at is null
       and pg_catalog.regexp_replace(coalesce(s.phone,''),'[^0-9]','','g')=normalized_phone;
@@ -63,7 +63,7 @@ begin
     result_id:=matched_opp;
     linked:=true;
   else
-    select count(*),min(c.id) into match_count,client_match
+    select count(*),(array_agg(c.id order by c.created_at desc))[1] into match_count,client_match
       from public.clients c
       where c.organization_id=org_id and c.archived_at is null
         and pg_catalog.regexp_replace(coalesce(c.phone,''),'[^0-9]','','g')=normalized_phone;
