@@ -94,7 +94,7 @@ create or replace function public.kiara_operator_action(
 )
 returns jsonb
 language plpgsql security definer set search_path=''
-as $
+as $kiara_fn$
 declare
   affected uuid;
   resulting_status text;
@@ -130,7 +130,7 @@ begin
   values(org_id,auth.uid(),'kiara',affected,action_name,
          jsonb_build_object('conversation_id',target_conversation_id,'status',resulting_status));
   return jsonb_build_object('ok',true,'action',action_name,'conversation_id',target_conversation_id);
-end $;
+end $kiara_fn$;
 
 revoke all on function public.kiara_operator_action(uuid,text,uuid) from public,anon;
 grant execute on function public.kiara_operator_action(uuid,text,uuid) to authenticated;
