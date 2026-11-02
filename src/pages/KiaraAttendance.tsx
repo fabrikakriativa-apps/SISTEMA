@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { commandKiara, kiaraControlConfigured, readKiaraControl, type KiaraOperatorAction } from '../lib/kiaraControl'
 import { useAccess } from '../components/AuthorizedAccess'
 import { formatLeadResponseTime, leadResponseStats, leadAwaitingResponseMs, leadLastInboundMs } from '../lib/kiaraMetrics'
+import { KiaraCoaching } from './KiaraCoaching'
 import './KiaraAttendance.css'
 
 const labels: Record<KiaraConversation['status'], string> = {
@@ -19,6 +20,8 @@ export function KiaraAttendance() {
   const access = useAccess()
   const [conversations, setConversations] = useState<KiaraConversation[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [coachingMessage, setCoachingMessage] = useState<KiaraMessage|null>(null)
+  const [showCoaching,setShowCoaching] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [refresh, setRefresh] = useState(0)
@@ -189,7 +192,7 @@ export function KiaraAttendance() {
         <button className="kiara-refresh" type="button" onClick={()=>setRefresh(value=>value+1)} disabled={loading}>Atualizar atendimentos</button>
         {filtered.length === 0 ? <div className="kiara-empty"><MessageCircle size={34}/><strong>Nenhum atendimento sincronizado ainda</strong>
           <p>A lista mostrará os atendimentos reais assim que a sincronização segura estiver configurada. Nenhum contato fictício será exibido.</p></div> :
-          <div className="kiara-lead-list">{filtered.map(item=><button key={item.id} className={selected?.id===item.id?'selected':''} onClick={()=>setSelectedId(item.id)}>
+          <div className="kiara-lead-list">{filtered.map(item=><button key={item.id} className={selected?.id===item.id?'selected':''} onClick={()=>{setSelectedId(item.id);setCoachingMessage(null)}}>
             <span className="kiara-initial">{(item.name||item.phone).slice(0,2).toUpperCase()}</span>
             <span className="kiara-lead-main"><strong>{item.name||item.phone}</strong><small>{item.campaign||item.origin||'Origem não identificada'} · {item.region||'Região não informada'}</small></span>
             <span className="kiara-lead-meta"><span className={`kiara-status ${item.status}`}>{labels[item.status]}</span><small>{new Date(item.lastInteractionAt).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</small></span>
@@ -214,8 +217,10 @@ export function KiaraAttendance() {
         <div className="kiara-chat" aria-label="Histórico da conversa">
           {messagesLoading && <p className="kiara-chat-loading" role="status">Atualizando mensagens…</p>}
           {!selected ? <div className="kiara-chat-placeholder"><MessageCircle size={34}/><p>As mensagens recebidas, respostas da Kiara e intervenções humanas aparecerão aqui.</p></div> :
-          selected.messages.length===0 && !messagesLoading ? <div className="kiara-chat-placeholder"><MessageCircle size={26}/><p>Sem mensagens registradas para esta conversa.</p></div> : selected.messages.map(msg=><div key={msg.id} className={`kiara-bubble ${msg.direction}`}><span>{msg.text}</span><small>{msg.sender === 'kiara' ? 'Kiara · ' : msg.sender === 'human' ? 'Equipe · ' : ''}{new Date(msg.createdAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</small></div>)}
+          selected.messages.length===0 && !messagesLoading ? <div className="kiara-chat-placeholder"><MessageCircle size={26}/><p>Sem mensagens registradas para esta conversa.</p></div> : selected.messages.map(msg=><div key={msg.id} className={`kiara-bubble ${msg.direction}`}><span>{msg.text}</span><small>{msg.sender === 'kiara' ? 'Kiara · ' : msg.sender === 'human' ? 'Equipe · ' : ''}{new Date(msg.createdAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</small>{msg.sender==='kiara'&&<button type="button" className="kiara-correct-msg" onClick={()=>{setCoachingMessage(msg);setShowCoaching(true)}}><Sparkles size={13}/> Corrigir resposta</button>}</div>)}
         </div>
+        <div className="kiara-coach-toggle"><button type="button" onClick={()=>setShowCoaching(value=>!value)}><Sparkles size={17}/> {showCoaching?'Fechar orientação':'Orientar Kiara'} <span>Interno</span></button></div>
+        {showCoaching&&<KiaraCoaching conversationId={selectedId} selectedMessage={coachingMessage} clearSelectedMessage={()=>setCoachingMessage(null)}/>}
         <div className="kiara-chat-actions">
           <button disabled={!selected || !controlReady || controlBusy || selected.status==='human'} onClick={()=>selected && void runCommand('assume',selected.id)}><Hand size={16}/> Assumir</button>
           <button disabled={!selected || !controlReady || controlBusy || selected.status==='ai'} onClick={()=>selected && void runCommand('return_to_ai',selected.id)}><RefreshCcw size={16}/> Devolver à Kiara</button>
