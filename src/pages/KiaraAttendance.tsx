@@ -1,6 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Activity, BarChart3, Bot, CalendarDays, Clock3, ExternalLink, Hand, MessageCircle, PauseCircle, RefreshCcw, Search, ShieldAlert, Sparkles, Users, UserRoundCheck } from 'lucide-react'
-import type { KiaraConversation } from '../lib/kiaraMetrics'
+import type { KiaraConversation, KiaraMessage } from '../lib/kiaraMetrics'
+import { supabase } from '../lib/supabase'
+import { useAccess } from '../components/AuthorizedAccess'
 import { formatLeadResponseTime, leadResponseStats } from '../lib/kiaraMetrics'
 import './KiaraAttendance.css'
 
@@ -13,7 +15,52 @@ const dateOnly = (iso: string) => iso.slice(0, 10)
 export function KiaraAttendance() {
   // V1: interface segura, sem simular dados como se viessem do WhatsApp.
   // As conversas serão carregadas pelo serviço autenticado da Kiara na próxima etapa.
-  const [conversations] = useState<KiaraConversation[]>([])
+  const access = useAccess()
+  const [conversations, setConversations] = useState<KiaraConversation[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [refresh, setRefresh] = useState(0)
+  useEffect(() => {
+    if (!supabase || !access || !['admin','comercial'].includes(access.role)) return
+    let cancelled = false
+    const load = async () => {
+      setLoading(true)
+      try {
+        const { data, error: fetchError } = await supabase!.from('kiara_conversations')
+          .select('id,contact_name,contact_phone,status,origin,campaign,region,last_interaction_at')
+          .eq('organization_id', access.organizationId)
+          .order('last_interaction_at', { ascending: false }).limit(100)
+        if (fetchError) throw fetchError
+        const mapped: KiaraConversation[] = (data ?? []).map(row => ({
+          id: row.id, name: row.contact_name, phone: row.contact_phone,
+          status: row.status as KiaraConversation['status'], origin: row.origin,
+          campaign: row.campaign, region: row.region, lastInteractionAt: row.last_interaction_at,
+          messages: []
+        }))
+        if (!cancelled) { setConversations(mapped); setError('') }
+      } catch {
+        if (!cancelled) setError('Ainda não foi possível consultar as conversas. A estrutura do banco deve ser revisada e ativada antes da sincronização.')
+      } finally { if (!cancelled) setLoading(false) }
+    }
+    void load()
+    return () => { cancelled = true }
+  }, [access?.organizationId, access?.role, refresh])
+  useEffect(() => {
+    if (!selectedId || !access || !supabase) return
+    let cancelled = false
+    const loadMessages = async () => {
+      const { data, error: fetchError } = await supabase!.from('kiara_messages')
+        .select('id,direction,sender,occurred_at,text_body')
+        .eq('organization_id',access.organizationId)
+        .eq('conversation_id',selectedId)
+        .order('occurred_at',{ascending:false}).limit(100)
+      if (cancelled || fetchError) return
+      const messages: KiaraMessage[] = (data??[]).map(row=>({id:row.id,direction:row.direction,sender:row.sender,createdAt:row.occurred_at,text:row.text_body||'[Mensagem não textual]'})).reverse()
+      setConversations(current=>current.map(item=>item.id===selectedId?{...item,messages}:item))
+    }
+    void loadMessages()
+    return ()=>{cancelled=true}
+  },[selectedId,access?.organizationId,refresh])
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('all')
   const [from, setFrom] = useState('')
@@ -37,7 +84,7 @@ export function KiaraAttendance() {
         <h1>Atendimento IA</h1>
         <p>Acompanhe conversas e leads, e saiba quando sua equipe precisa intervir.</p>
       </div>
-      <span className="kiara-mode"><span/> Integração em preparação</span>
+      <span className="kiara-mode"><span/> {loading ? 'Atualizando…' : 'Integração em preparação'}</span>
     </header>
 
     <div className="kiara-kpis">
@@ -82,8 +129,10 @@ export function KiaraAttendance() {
           <label className="kiara-date"><CalendarDays size={16}/> De <input type="date" value={from} onChange={event=>setFrom(event.target.value)}/></label>
           <label className="kiara-date">Até <input type="date" value={to} min={from||undefined} onChange={event=>setTo(event.target.value)}/></label>
         </div>
+        {error && <p role="alert" className="kiara-data-error">{error}</p>}
+        <button className="kiara-refresh" type="button" onClick={()=>setRefresh(value=>value+1)} disabled={loading}>Atualizar atendimentos</button>
         {filtered.length === 0 ? <div className="kiara-empty"><MessageCircle size={34}/><strong>Nenhum atendimento sincronizado ainda</strong>
-          <p>Esta primeira versão prepara a interface. Não há dados fictícios nem acesso ao WhatsApp habilitado.</p></div> :
+          <p>A lista mostrará os atendimentos reais assim que a sincronização segura estiver configurada. Nenhum contato fictício será exibido.</p></div> :
           <div className="kiara-lead-list">{filtered.map(item=><button key={item.id} className={selected?.id===item.id?'selected':''} onClick={()=>setSelectedId(item.id)}>
             <span className="kiara-initial">{(item.name||item.phone).slice(0,2).toUpperCase()}</span>
             <span className="kiara-lead-main"><strong>{item.name||item.phone}</strong><small>{item.campaign||item.origin||'Origem não identificada'} · {item.region||'Região não informada'}</small></span>
