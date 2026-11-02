@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Activity, BarChart3, Bot, CalendarDays, Clock3, ExternalLink, Hand, MessageCircle, PauseCircle, RefreshCcw, Search, ShieldAlert, Sparkles, Users, UserRoundCheck } from 'lucide-react'
 import type { KiaraConversation, KiaraMessage } from '../lib/kiaraMetrics'
 import { supabase } from '../lib/supabase'
+import { commandKiara, kiaraControlConfigured, readKiaraControl, type KiaraOperatorAction } from '../lib/kiaraControl'
 import { useAccess } from '../components/AuthorizedAccess'
 import { formatLeadResponseTime, leadResponseStats } from '../lib/kiaraMetrics'
 import './KiaraAttendance.css'
@@ -21,6 +22,31 @@ export function KiaraAttendance() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [refresh, setRefresh] = useState(0)
+  const [controlReady, setControlReady] = useState(false)
+  const [kiaraEnabled, setKiaraEnabled] = useState(false)
+  const [controlBusy, setControlBusy] = useState(false)
+  const [controlFeedback, setControlFeedback] = useState('')
+  useEffect(() => {
+    if (!kiaraControlConfigured || !access || !['admin','comercial'].includes(access.role)) return
+    let cancelled=false
+    void readKiaraControl().then(result=>{if(!cancelled){setControlReady(true);setKiaraEnabled(result.enabled);setControlFeedback('')}})
+      .catch(()=>{if(!cancelled){setControlReady(false);setControlFeedback('Controle operacional indisponível. Nenhuma ação foi habilitada.')}})
+    return ()=>{cancelled=true}
+  },[access?.organizationId,access?.role,refresh])
+  const runCommand = async (action:KiaraOperatorAction,id?:string) => {
+    if(!controlReady || controlBusy) return
+    if(action==='pause_all' && !window.confirm('Parar todas as respostas automáticas da Kiara, inclusive as que estiverem na fila?')) return
+    if(action==='resume_all' && !window.confirm('Reativar o atendimento automático da Kiara para conversas liberadas?')) return
+    setControlBusy(true);setControlFeedback('')
+    try {
+      await commandKiara(action,id)
+      if(action==='pause_all') setKiaraEnabled(false)
+      if(action==='resume_all') setKiaraEnabled(true)
+      setControlFeedback('Comando confirmado pelo servidor.')
+      setRefresh(value=>value+1)
+    } catch(error){setControlFeedback(error instanceof Error ? error.message : 'Não foi possível confirmar a alteração.')}
+    finally{setControlBusy(false)}
+  }
   // Atualiza somente enquanto este módulo está montado e a aba visível.
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -113,8 +139,10 @@ export function KiaraAttendance() {
         <div className="kiara-avatar"><Sparkles size={32}/><Bot size={44}/></div>
         <div className="kiara-control-copy"><h2>Kiara <span className="kiara-preview-badge">Painel em desenvolvimento</span></h2>
           <p>Um lugar para acompanhar a triagem, identificar oportunidades e controlar a atuação da IA.</p>
-          <button disabled title="Será habilitado após conexão segura com o Worker" className="kiara-danger"><PauseCircle size={17}/> Parar Kiara</button>
-          <small>O botão de emergência só será liberado após o bloqueio real de envios estar implementado e testado.</small>
+          <button disabled={!controlReady || controlBusy || !kiaraEnabled} onClick={()=>void runCommand('pause_all')} className="kiara-danger"><PauseCircle size={17}/> Parar Kiara</button>
+          {controlReady && !kiaraEnabled && <button disabled={controlBusy || access?.role !== 'admin'} onClick={()=>void runCommand('resume_all')} className="kiara-refresh">Reativar Kiara</button>}
+          <small>{controlReady ? (kiaraEnabled ? 'Controle geral confirmado pelo servidor.' : 'Atendimento automático desativado.') : 'O controle será liberado depois da integração segura.'}</small>
+          {controlFeedback && <small role="status">{controlFeedback}</small>}
         </div>
       </div>
       <div className="kiara-funnel-card">
@@ -170,10 +198,10 @@ export function KiaraAttendance() {
           selected.messages.map(msg=><div key={msg.id} className={`kiara-bubble ${msg.direction}`}><span>{msg.text}</span><small>{msg.sender === 'kiara' ? 'Kiara · ' : msg.sender === 'human' ? 'Equipe · ' : ''}{new Date(msg.createdAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</small></div>)}
         </div>
         <div className="kiara-chat-actions">
-          <button disabled title="Aguardando implementação do bloqueio por cliente"><Hand size={16}/> Assumir</button>
-          <button disabled title="Aguardando implementação da liberação por cliente"><RefreshCcw size={16}/> Devolver à Kiara</button>
+          <button disabled={!selected || !controlReady || controlBusy || selected.status==='human'} onClick={()=>selected && void runCommand('assume',selected.id)}><Hand size={16}/> Assumir</button>
+          <button disabled={!selected || !controlReady || controlBusy || selected.status==='ai'} onClick={()=>selected && void runCommand('return_to_ai',selected.id)}><RefreshCcw size={16}/> Devolver à Kiara</button>
         </div>
-        <p className="kiara-security"><ShieldAlert size={16}/> Os controles permanecerão desabilitados até poderem parar mensagens pendentes na fila com segurança.</p>
+        <p className="kiara-security"><ShieldAlert size={16}/> As ações só são liberadas após confirmação da autorização pelo servidor. A proteção contra envios pendentes também precisa ser validada.</p>
       </aside>
     </div>
     <p className="kiara-footnote"><Activity size={15}/> Primeira etapa de desenvolvimento: layout integrado ao SISTEMA. A conexão com WhatsApp, banco e os botões operacionais virão em uma etapa separada e testada.</p>
