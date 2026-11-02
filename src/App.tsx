@@ -7,6 +7,7 @@ import { navigateTo, readRoute } from './lib/navigation'
 import { FormDraftProtection } from './components/FormDraftProtection'
 
 const Dashboard=lazy(()=>import('./pages/Dashboard').then(module=>({default:module.Dashboard})))
+const KiaraAttendance=lazy(()=>import('./pages/KiaraAttendance').then(module=>({default:module.KiaraAttendance})))
 const Prospecting=lazy(()=>import('./pages/SalesProspecting').then(module=>({default:module.SalesProspecting})))
 const Clients=lazy(()=>import('./pages/Clients').then(module=>({default:module.Clients})))
 const Supplies=lazy(()=>import('./pages/Supplies').then(module=>({default:module.Supplies})))
@@ -26,6 +27,7 @@ export function App() {
   const navigate=(module:ModuleKey,recordId?:string|null)=>navigateTo(module,recordId)
   const content = active === 'inicio' ? <Dashboard navigate={navigate}/>
     : active === 'prospeccao' ? <Prospecting/>
+    : active === 'atendimento-ia' ? <KiaraAttendance/>
     : active === 'clientes' ? <Clients/>
     : active === 'insumos' ? <Supplies/>
     : active === 'orcamentos' ? <Budgets/>

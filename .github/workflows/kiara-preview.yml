@@ -1,0 +1,46 @@
+name: Prévia isolada Kiara (sem publicar)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/pages/KiaraAttendance.tsx'
+      - 'src/pages/KiaraAttendance.css'
+      - 'src/lib/kiaraMetrics.ts'
+      - 'src/lib/kiaraMetrics.test.ts'
+      - 'src/lib/kiaraControl.ts'
+      - '.github/workflows/kiara-preview.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - name: Instalar dependências
+        run: pnpm install --frozen-lockfile
+      - name: Validar testes
+        run: pnpm test
+      - name: Gerar prévia do SISTEMA
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_KIARA_COACH_URL: ${{ vars.VITE_KIARA_COACH_URL }}
+        run: pnpm run build:test
+      - name: Guardar pacote de prévia sem publicar no Pages
+        uses: actions/upload-artifact@v4
+        with:
+          name: kiara-preview-${{ github.sha }}
+          path: dist
+          retention-days: 7
