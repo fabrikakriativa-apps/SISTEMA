@@ -17,6 +17,7 @@ export function KiaraAttendance() {
   // As conversas serão carregadas pelo serviço autenticado da Kiara na próxima etapa.
   const access = useAccess()
   const [conversations, setConversations] = useState<KiaraConversation[]>([])
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [refresh, setRefresh] = useState(0)
@@ -65,7 +66,6 @@ export function KiaraAttendance() {
   const [status, setStatus] = useState('all')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
-  const [selectedId, setSelectedId] = useState<string | null>(null)
   const selected = conversations.find(item => item.id === selectedId) ?? null
   const filtered = useMemo(() => conversations.filter(item => {
     const query = search.trim().toLocaleLowerCase('pt-BR')
