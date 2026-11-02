@@ -8,6 +8,7 @@ import { formatLeadResponseTime, leadResponseStats, leadAwaitingResponseMs, lead
 import { KiaraCoaching } from './KiaraCoaching'
 import { kiaraCoachConfigured, readKiaraHold, setKiaraHold } from '../lib/kiaraCoachingControl'
 import './KiaraAttendance.css'
+import './KiaraVisual.css'
 
 const labels: Record<KiaraConversation['status'], string> = {
   ai: 'Kiara atendendo', waiting_human: 'Aguardando humano',
