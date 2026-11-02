@@ -51,3 +51,22 @@ export function formatLeadResponseTime(ms: number | null) {
   const hours = Math.floor(minutes / 60), remaining = minutes % 60
   return remaining ? `${hours}h ${remaining}min` : `${hours}h`
 }
+
+/**
+ * Duração desde a última mensagem da loja que ainda não teve resposta do cliente.
+ * Retorna null se não há mensagem pendente ou se o cliente já respondeu.
+ */
+export function leadAwaitingResponseMs(messages: KiaraMessage[], nowMs: number = Date.now()): number | null {
+  const valid = messages.filter(message => Number.isFinite(Date.parse(message.createdAt)))
+    .sort((a,b) => Date.parse(a.createdAt)-Date.parse(b.createdAt))
+  const last = valid[valid.length - 1]
+  if (!last || last.direction !== 'outgoing') return null
+  const diff = nowMs - Date.parse(last.createdAt)
+  return diff >= 0 ? diff : null
+}
+
+export function leadLastInboundMs(messages: KiaraMessage[], nowMs: number = Date.now()): number | null {
+  const latest = messages.filter(message => message.direction === 'incoming' && Number.isFinite(Date.parse(message.createdAt)))
+    .reduce<number | null>((max, message) => Math.max(max ?? -Infinity, Date.parse(message.createdAt)),null)
+  return latest === null || nowMs < latest ? null : nowMs - latest
+}
