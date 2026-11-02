@@ -21,6 +21,7 @@ export function KiaraAttendance() {
   const access = useAccess()
   const [conversations, setConversations] = useState<KiaraConversation[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [refresh, setRefresh] = useState(0)
   const [coachingMessage, setCoachingMessage] = useState<KiaraMessage|null>(null)
   const [showCoaching,setShowCoaching] = useState(false)
   const [holdReady,setHoldReady] = useState(false)
@@ -47,7 +48,6 @@ export function KiaraAttendance() {
   }
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [refresh, setRefresh] = useState(0)
   const [nowMs, setNowMs] = useState(() => Date.now())
   const [messagesLoading, setMessagesLoading] = useState(false)
   const [messagesError, setMessagesError] = useState('')
