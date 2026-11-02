@@ -38,7 +38,7 @@ begin
 
   -- Serials concurrent promotion requests for one phone per organization.
   perform pg_catalog.pg_advisory_xact_lock(
-    pg_catalog.hashtextextended(org_id::text||':kiara:'+normalized_phone,0)
+    pg_catalog.hashtextextended(org_id::text||':kiara:'||normalized_phone,0)
   );
 
   if chat.lead_opportunity_id is not null then
