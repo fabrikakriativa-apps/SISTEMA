@@ -2,6 +2,8 @@ name: Publicar ambiente de testes
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
 
 permissions:
   contents: read
@@ -36,7 +38,7 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
-          VITE_KIARA_COACH_URL: ${{ vars.VITE_KIARA_COACH_URL }}
+          VITE_KIARA_COACH_URL: https://fabrika-atendimento-ia-homologacao.fabrikakriativa.workers.dev/kiara/coach
       - name: Preparar GitHub Pages
         uses: actions/configure-pages@v5
       - name: Enviar versão compilada
