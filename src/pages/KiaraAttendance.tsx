@@ -6,6 +6,7 @@ import { commandKiara, kiaraControlConfigured, readKiaraControl, type KiaraOpera
 import { useAccess } from '../components/AuthorizedAccess'
 import { formatLeadResponseTime, leadResponseStats, leadAwaitingResponseMs, leadLastInboundMs } from '../lib/kiaraMetrics'
 import { KiaraCoaching } from './KiaraCoaching'
+import { kiaraCoachConfigured, readKiaraHold, setKiaraHold } from '../lib/kiaraCoachingControl'
 import './KiaraAttendance.css'
 
 const labels: Record<KiaraConversation['status'], string> = {
@@ -22,6 +23,28 @@ export function KiaraAttendance() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [coachingMessage, setCoachingMessage] = useState<KiaraMessage|null>(null)
   const [showCoaching,setShowCoaching] = useState(false)
+  const [holdReady,setHoldReady] = useState(false)
+  const [replyHeld,setReplyHeld] = useState(false)
+  const [holdBusy,setHoldBusy] = useState(false)
+  const [holdFeedback,setHoldFeedback] = useState('')
+  useEffect(()=>{
+    setHoldReady(false);setReplyHeld(false)
+    if(!selectedId || !kiaraCoachConfigured || !access || !['admin','comercial'].includes(access.role)) return
+    let cancelled=false
+    void readKiaraHold(selectedId).then(result=>{if(!cancelled){setReplyHeld(result.held);setHoldReady(true)}})
+      .catch(()=>{if(!cancelled)setHoldFeedback('Segurar resposta ainda não está habilitado no servidor.')})
+    return ()=>{cancelled=true}
+  },[selectedId,access?.organizationId,access?.role,refresh])
+  const toggleHold=async()=>{
+    if(!selectedId || !holdReady || holdBusy) return
+    setHoldBusy(true);setHoldFeedback('')
+    try{
+      const result=await setKiaraHold(selectedId,!replyHeld)
+      setReplyHeld(result.held)
+      setHoldFeedback(result.held?'Kiara aguardando sua orientação.':'Resposta liberada para a fila da Kiara.')
+    }catch(err){setHoldFeedback(err instanceof Error?err.message:'Não foi possível confirmar a alteração.')}
+    finally{setHoldBusy(false)}
+  }
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [refresh, setRefresh] = useState(0)
@@ -219,7 +242,13 @@ export function KiaraAttendance() {
           {!selected ? <div className="kiara-chat-placeholder"><MessageCircle size={34}/><p>As mensagens recebidas, respostas da Kiara e intervenções humanas aparecerão aqui.</p></div> :
           selected.messages.length===0 && !messagesLoading ? <div className="kiara-chat-placeholder"><MessageCircle size={26}/><p>Sem mensagens registradas para esta conversa.</p></div> : selected.messages.map(msg=><div key={msg.id} className={`kiara-bubble ${msg.direction}`}><span>{msg.text}</span><small>{msg.sender === 'kiara' ? 'Kiara · ' : msg.sender === 'human' ? 'Equipe · ' : ''}{new Date(msg.createdAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</small>{msg.sender==='kiara'&&<button type="button" className="kiara-correct-msg" onClick={()=>{setCoachingMessage(msg);setShowCoaching(true)}}><Sparkles size={13}/> Corrigir resposta</button>}</div>)}
         </div>
-        <div className="kiara-coach-toggle"><button type="button" onClick={()=>setShowCoaching(value=>!value)}><Sparkles size={17}/> {showCoaching?'Fechar orientação':'Orientar Kiara'} <span>Interno</span></button></div>
+        <div className="kiara-coach-toggle"><div className="kiara-coach-control">
+          <button type="button" disabled={!selected || !holdReady || holdBusy} className={replyHeld?'kiara-hold-on':''} onClick={()=>void toggleHold()}>
+            <PauseCircle size={17}/>{replyHeld?'Liberar resposta':'Segurar próxima resposta'}
+          </button>
+          {replyHeld&&<strong className="kiara-hold-warning">Resposta automática suspensa nesta conversa</strong>}
+          {holdFeedback&&<small role="status">{holdFeedback}</small>}
+        </div><button type="button" onClick={()=>setShowCoaching(value=>!value)}><Sparkles size={17}/> {showCoaching?'Fechar orientação':'Orientar Kiara'} <span>Interno</span></button></div>
         {showCoaching&&<KiaraCoaching conversationId={selectedId} selectedMessage={coachingMessage} clearSelectedMessage={()=>setCoachingMessage(null)}/>}
         <div className="kiara-chat-actions">
           <button disabled={!selected || !controlReady || controlBusy || selected.status==='human'} onClick={()=>selected && void runCommand('assume',selected.id)}><Hand size={16}/> Assumir</button>
