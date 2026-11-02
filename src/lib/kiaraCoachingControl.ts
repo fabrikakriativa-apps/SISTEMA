@@ -19,6 +19,6 @@ async function request<T>(method:'GET'|'POST',conversationId:string,action?:'hol
  }
  return response.json()
 }
-export const readKiaraHold = (conversationId:string)=>request<{held:boolean}>('GET',conversationId)
+export const readKiaraHold = (conversationId:string)=>request<{held:boolean;writable?:boolean;environment?:string;status?:string}>('GET',conversationId)
 export const setKiaraHold = (conversationId:string,held:boolean)=>
  request<{ok:boolean;held:boolean}>('POST',conversationId,held?'hold':'release')
