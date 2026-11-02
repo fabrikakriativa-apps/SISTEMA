@@ -23,6 +23,8 @@ export function KiaraAttendance() {
   const [error, setError] = useState('')
   const [refresh, setRefresh] = useState(0)
   const [nowMs, setNowMs] = useState(() => Date.now())
+  const [messagesLoading, setMessagesLoading] = useState(false)
+  const [messagesError, setMessagesError] = useState('')
   const [controlReady, setControlReady] = useState(false)
   const [kiaraEnabled, setKiaraEnabled] = useState(false)
   const [controlBusy, setControlBusy] = useState(false)
@@ -72,7 +74,11 @@ export function KiaraAttendance() {
           campaign: row.campaign, region: row.region, lastInteractionAt: row.last_interaction_at,
           messages: []
         }))
-        if (!cancelled) { setConversations(mapped); setError('') }
+        if (!cancelled) {
+          setConversations(previous => mapped.map(item => ({...item, messages: previous.find(old => old.id === item.id)?.messages ?? []})))
+          setSelectedId(current => current && mapped.some(item=>item.id===current) ? current : mapped[0]?.id ?? null)
+          setError('')
+        }
       } catch {
         if (!cancelled) setError('Ainda não foi possível consultar as conversas. A estrutura do banco deve ser revisada e ativada antes da sincronização.')
       } finally { if (!cancelled) setLoading(false) }
@@ -84,12 +90,16 @@ export function KiaraAttendance() {
     if (!selectedId || !access || !supabase) return
     let cancelled = false
     const loadMessages = async () => {
+      setMessagesLoading(true)
+      setMessagesError('')
       const { data, error: fetchError } = await supabase!.from('kiara_messages')
         .select('id,direction,sender,occurred_at,text_body')
         .eq('organization_id',access.organizationId)
         .eq('conversation_id',selectedId)
         .order('occurred_at',{ascending:false}).limit(100)
-      if (cancelled || fetchError) return
+      if (cancelled) return
+      setMessagesLoading(false)
+      if (fetchError) { setMessagesError('Não foi possível atualizar as mensagens desta conversa.'); return }
       const messages: KiaraMessage[] = (data??[]).map(row=>({id:row.id,direction:row.direction,sender:row.sender,createdAt:row.occurred_at,text:row.text_body||'[Mensagem não textual]'})).reverse()
       setConversations(current=>current.map(item=>item.id===selectedId?{...item,messages}:item))
     }
@@ -126,7 +136,7 @@ export function KiaraAttendance() {
         <h1>Atendimento IA</h1>
         <p>Acompanhe conversas e leads, e saiba quando sua equipe precisa intervir.</p>
       </div>
-      <span className="kiara-mode"><span/> {loading ? 'Atualizando…' : 'Integração em preparação'}</span>
+      <span className="kiara-mode"><span/> {loading ? 'Atualizando…' : error ? 'Falha ao sincronizar' : conversations.length ? 'Conversas sincronizadas' : 'Aguardando conversas'}</span>
     </header>
 
     <div className="kiara-kpis">
@@ -156,7 +166,7 @@ export function KiaraAttendance() {
           <div><span>Aguardando humano</span><strong>{count('waiting_human')}</strong></div>
           <div><span>Assumidos</span><strong>{count('human')}</strong></div>
         </div>
-        <p>Indicadores reais serão exibidos após a sincronização da Kiara.</p>
+        <p>Indicadores baseados nos registros sincronizados. O funil comercial completo permanece no módulo Prospecção.</p>
       </div>
     </div>
 
@@ -182,7 +192,7 @@ export function KiaraAttendance() {
           <div className="kiara-lead-list">{filtered.map(item=><button key={item.id} className={selected?.id===item.id?'selected':''} onClick={()=>setSelectedId(item.id)}>
             <span className="kiara-initial">{(item.name||item.phone).slice(0,2).toUpperCase()}</span>
             <span className="kiara-lead-main"><strong>{item.name||item.phone}</strong><small>{item.campaign||item.origin||'Origem não identificada'} · {item.region||'Região não informada'}</small></span>
-            <span className={`kiara-status ${item.status}`}>{labels[item.status]}</span>
+            <span className="kiara-lead-meta"><span className={`kiara-status ${item.status}`}>{labels[item.status]}</span><small>{new Date(item.lastInteractionAt).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</small></span>
           </button>)}</div>}
       </div>
 
@@ -200,9 +210,11 @@ export function KiaraAttendance() {
           <strong>{pendingMs !== null ? formatLeadResponseTime(pendingMs) : lastInboundMs !== null ? `há ${formatLeadResponseTime(lastInboundMs)}` : 'Sem dados'}</strong>
           <small>{pendingMs !== null ? 'Contagem desde a última mensagem enviada pela Kiara ou pela equipe.' : 'O cliente não tem uma resposta pendente à última mensagem da loja.'}</small>
         </div>
+        {messagesError && <p className="kiara-data-error" role="alert">{messagesError}</p>}
         <div className="kiara-chat" aria-label="Histórico da conversa">
+          {messagesLoading && <p className="kiara-chat-loading" role="status">Atualizando mensagens…</p>}
           {!selected ? <div className="kiara-chat-placeholder"><MessageCircle size={34}/><p>As mensagens recebidas, respostas da Kiara e intervenções humanas aparecerão aqui.</p></div> :
-          selected.messages.map(msg=><div key={msg.id} className={`kiara-bubble ${msg.direction}`}><span>{msg.text}</span><small>{msg.sender === 'kiara' ? 'Kiara · ' : msg.sender === 'human' ? 'Equipe · ' : ''}{new Date(msg.createdAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</small></div>)}
+          selected.messages.length===0 && !messagesLoading ? <div className="kiara-chat-placeholder"><MessageCircle size={26}/><p>Sem mensagens registradas para esta conversa.</p></div> : selected.messages.map(msg=><div key={msg.id} className={`kiara-bubble ${msg.direction}`}><span>{msg.text}</span><small>{msg.sender === 'kiara' ? 'Kiara · ' : msg.sender === 'human' ? 'Equipe · ' : ''}{new Date(msg.createdAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</small></div>)}
         </div>
         <div className="kiara-chat-actions">
           <button disabled={!selected || !controlReady || controlBusy || selected.status==='human'} onClick={()=>selected && void runCommand('assume',selected.id)}><Hand size={16}/> Assumir</button>
