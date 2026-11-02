@@ -134,6 +134,8 @@ export function KiaraAttendance() {
   },[selectedId,access?.organizationId,refresh])
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('all')
+  const [period,setPeriod] = useState<'all'|'7d'|'30d'>('all')
+  const [showAdvancedFilters,setShowAdvancedFilters] = useState(false)
   const [campaignFilter, setCampaignFilter] = useState('all')
   const [regionFilter, setRegionFilter] = useState('all')
   const campaigns = useMemo(() => [...new Set(conversations.map(item => item.campaign).filter((value): value is string => Boolean(value)))].sort(), [conversations])
@@ -145,6 +147,7 @@ export function KiaraAttendance() {
     const query = search.trim().toLocaleLowerCase('pt-BR')
     return (!query || [item.name, item.phone, item.campaign, item.origin, item.region].some(value => (value || '').toLocaleLowerCase('pt-BR').includes(query)))
       && (status === 'all' || item.status === status)
+      && (period==='all' || (Number.isFinite(Date.parse(item.lastInteractionAt)) && Date.parse(item.lastInteractionAt)>=nowMs-(period==='7d'?7:30)*86400000))
       && (campaignFilter === 'all' || item.campaign === campaignFilter)
       && (regionFilter === 'all' || item.region === regionFilter)
       && (!from || dateOnly(item.lastInteractionAt) >= from)
@@ -207,28 +210,39 @@ export function KiaraAttendance() {
 
     <div className="kiara-workspace">
       <div className="kiara-list-card">
-        <div className="kiara-list-header"><h2>Atendimentos <span>{filtered.length}</span></h2>
-          <p>Selecione um contato para acompanhar a conversa.</p></div>
-        <div className="kiara-filters">
-          <label className="kiara-search"><Search size={17}/><input aria-label="Buscar atendimentos" placeholder="Buscar nome, número, campanha ou região" value={search} onChange={event=>setSearch(event.target.value)}/></label>
-          <select aria-label="Filtrar por status" value={status} onChange={event=>setStatus(event.target.value)}>
-            <option value="all">Todos os status</option>
-            {Object.entries(labels).map(([key, value])=><option key={key} value={key}>{value}</option>)}
-          </select>
-          <select aria-label="Filtrar por campanha" value={campaignFilter} onChange={event=>setCampaignFilter(event.target.value)}><option value="all">Todas as campanhas</option>{campaigns.map(value=><option key={value} value={value}>{value}</option>)}</select>
-          <select aria-label="Filtrar por região" value={regionFilter} onChange={event=>setRegionFilter(event.target.value)}><option value="all">Todas as regiões</option>{regions.map(value=><option key={value} value={value}>{value}</option>)}</select>
-          <label className="kiara-date"><CalendarDays size={16}/> De <input type="date" value={from} onChange={event=>setFrom(event.target.value)}/></label>
-          <label className="kiara-date">Até <input type="date" value={to} min={from||undefined} onChange={event=>setTo(event.target.value)}/></label>
+        <div className="kiara-list-toolbar">
+          <label className="kiara-toolbar-select"><CalendarDays size={17}/><span>Período</span>
+            <select aria-label="Selecionar período" value={period} onChange={event=>setPeriod(event.target.value as 'all'|'7d'|'30d')}>
+              <option value="all">Todo o histórico</option><option value="7d">Últimos 7 dias</option><option value="30d">Últimos 30 dias</option>
+            </select>
+          </label>
+          <label className="kiara-toolbar-select"><span>Status</span>
+            <select aria-label="Filtrar por status" value={status} onChange={event=>setStatus(event.target.value)}>
+              <option value="all">Todos os status</option>{Object.entries(labels).map(([key,value])=><option key={key} value={key}>{value}</option>)}
+            </select>
+          </label>
+          <button type="button" className="kiara-toolbar-more" aria-expanded={showAdvancedFilters} onClick={()=>setShowAdvancedFilters(v=>!v)}><Filter size={16}/> {showAdvancedFilters?'Ocultar filtros':'Mais filtros'}</button>
+          <span className="kiara-record-count">{filtered.length} conversa{filtered.length===1?'':'s'} encontrada{filtered.length===1?'':'s'}</span>
         </div>
-        {error && <p role="alert" className="kiara-data-error">{error}</p>}
-        <button className="kiara-refresh" type="button" onClick={()=>setRefresh(value=>value+1)} disabled={loading}>Atualizar atendimentos</button>
-        {filtered.length === 0 ? <div className="kiara-empty"><MessageCircle size={34}/><strong>Nenhum atendimento sincronizado ainda</strong>
-          <p>A lista mostrará os atendimentos reais assim que a sincronização segura estiver configurada. Nenhum contato fictício será exibido.</p></div> :
-          <div className="kiara-lead-list">{filtered.map(item=><button key={item.id} className={selected?.id===item.id?'selected':''} onClick={()=>{setSelectedId(item.id);setCoachingMessage(null)}}>
-            <span className="kiara-initial">{(item.name||item.phone).slice(0,2).toUpperCase()}</span>
-            <span className="kiara-lead-main"><strong>{item.name||item.phone}</strong><small>{item.campaign||item.origin||'Origem não identificada'} · {item.region||'Região não informada'}</small></span>
-            <span className="kiara-lead-meta"><span className={`kiara-status ${item.status}`}>{labels[item.status]}</span><small>{new Date(item.lastInteractionAt).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</small></span>
-          </button>)}</div>}
+        {showAdvancedFilters&&<div id="kiara-filter-area" className="kiara-advanced-filters">
+          <select aria-label="Filtrar por campanha" value={campaignFilter} onChange={event=>setCampaignFilter(event.target.value)}><option value="all">Todas as campanhas</option>{campaigns.map(v=><option key={v} value={v}>{v}</option>)}</select>
+          <select aria-label="Filtrar por região" value={regionFilter} onChange={event=>setRegionFilter(event.target.value)}><option value="all">Todas as regiões</option>{regions.map(v=><option key={v} value={v}>{v}</option>)}</select>
+          <label>De <input type="date" value={from} onChange={event=>setFrom(event.target.value)}/></label>
+          <label>Até <input type="date" min={from||undefined} value={to} onChange={event=>setTo(event.target.value)}/></label>
+          <button type="button" onClick={()=>{setPeriod('all');setStatus('all');setCampaignFilter('all');setRegionFilter('all');setFrom('');setTo('');setSearch('')}}>Limpar filtros</button>
+        </div>}
+        {error&&<p role="alert" className="kiara-data-error">{error}</p>}
+        <div className="kiara-lead-table-header" aria-hidden="true"><span>Contato</span><span>Origem / Campanha</span><span>Região</span><span>Status</span><span>Última interação</span><span/></div>
+        {filtered.length===0?<div className="kiara-empty"><MessageCircle size={34}/><strong>{conversations.length?'Nenhuma conversa corresponde aos filtros':'Nenhum atendimento sincronizado ainda'}</strong><p>{conversations.length?'Experimente outro período ou remova os filtros.':'Os contatos aparecerão aqui à medida que forem sincronizados pelo WhatsApp. Nenhum contato fictício é exibido.'}</p></div>:
+        <div className="kiara-lead-list">{filtered.map(item=><button type="button" key={item.id} className={selected?.id===item.id?'selected':''} onClick={()=>{setSelectedId(item.id);setCoachingMessage(null)}} aria-label={'Abrir conversa de '+(item.name||item.phone)}>
+          <span className="kiara-lead-contact"><span className="kiara-initial">{(item.name||item.phone).slice(0,2).toUpperCase()}</span><span className="kiara-lead-main"><strong>{item.name||item.phone}</strong><small>{item.phone}</small></span></span>
+          <span className="kiara-lead-origin"><strong>{item.campaign||item.origin||'Não identificada'}</strong><small>{item.origin||'Sem origem registrada'}</small></span>
+          <span className="kiara-lead-region">{item.region||'Não informada'}</span>
+          <span className={`kiara-status ${item.status}`}><span className="kiara-status-dot"/>{labels[item.status]}</span>
+          <span className="kiara-lead-date">{new Date(item.lastInteractionAt).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</span>
+          <ChevronRight size={17} className="kiara-lead-chevron"/>
+        </button>)}</div>}
+        <div className="kiara-list-bottom"><span>Atualização automática a cada 30 segundos</span><button type="button" disabled={loading} onClick={()=>setRefresh(v=>v+1)}><RefreshCcw size={15}/> Atualizar</button></div>
       </div>
 
       <aside className="kiara-conversation-card">
