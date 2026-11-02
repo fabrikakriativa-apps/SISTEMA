@@ -64,6 +64,10 @@ export function KiaraAttendance() {
   },[selectedId,access?.organizationId,refresh])
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('all')
+  const [campaignFilter, setCampaignFilter] = useState('all')
+  const [regionFilter, setRegionFilter] = useState('all')
+  const campaigns = useMemo(() => [...new Set(conversations.map(item => item.campaign).filter((value): value is string => Boolean(value)))].sort(), [conversations])
+  const regions = useMemo(() => [...new Set(conversations.map(item => item.region).filter((value): value is string => Boolean(value)))].sort(), [conversations])
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const selected = conversations.find(item => item.id === selectedId) ?? null
@@ -71,9 +75,11 @@ export function KiaraAttendance() {
     const query = search.trim().toLocaleLowerCase('pt-BR')
     return (!query || [item.name, item.phone, item.campaign, item.origin, item.region].some(value => (value || '').toLocaleLowerCase('pt-BR').includes(query)))
       && (status === 'all' || item.status === status)
+      && (campaignFilter === 'all' || item.campaign === campaignFilter)
+      && (regionFilter === 'all' || item.region === regionFilter)
       && (!from || dateOnly(item.lastInteractionAt) >= from)
       && (!to || dateOnly(item.lastInteractionAt) <= to)
-  }), [conversations, search, status, from, to])
+  }), [conversations, search, status, campaignFilter, regionFilter, from, to])
   const count = (key: KiaraConversation['status']) => conversations.filter(item => item.status === key).length
   const stats = selected ? leadResponseStats(selected.messages) : null
   const waLink = selected ? `https://wa.me/${selected.phone.replace(/\D/g, '')}` : ''
@@ -126,6 +132,8 @@ export function KiaraAttendance() {
             <option value="all">Todos os status</option>
             {Object.entries(labels).map(([key, value])=><option key={key} value={key}>{value}</option>)}
           </select>
+          <select aria-label="Filtrar por campanha" value={campaignFilter} onChange={event=>setCampaignFilter(event.target.value)}><option value="all">Todas as campanhas</option>{campaigns.map(value=><option key={value} value={value}>{value}</option>)}</select>
+          <select aria-label="Filtrar por região" value={regionFilter} onChange={event=>setRegionFilter(event.target.value)}><option value="all">Todas as regiões</option>{regions.map(value=><option key={value} value={value}>{value}</option>)}</select>
           <label className="kiara-date"><CalendarDays size={16}/> De <input type="date" value={from} onChange={event=>setFrom(event.target.value)}/></label>
           <label className="kiara-date">Até <input type="date" value={to} min={from||undefined} onChange={event=>setTo(event.target.value)}/></label>
         </div>
