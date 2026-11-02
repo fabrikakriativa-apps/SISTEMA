@@ -21,6 +21,13 @@ export function KiaraAttendance() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [refresh, setRefresh] = useState(0)
+  // Atualiza somente enquanto este módulo está montado e a aba visível.
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') setRefresh(value => value + 1)
+    }, 30_000)
+    return () => window.clearInterval(timer)
+  }, [])
   useEffect(() => {
     if (!supabase || !access || !['admin','comercial'].includes(access.role)) return
     let cancelled = false
