@@ -91,14 +91,14 @@ export function KiaraAttendance() {
       setLoading(true)
       try {
         const { data, error: fetchError } = await supabase!.from('kiara_conversations')
-          .select('id,contact_name,contact_phone,status,origin,campaign,region,last_interaction_at')
+          .select('id,contact_name,contact_phone,status,origin,campaign,region,last_interaction_at,created_at')
           .eq('organization_id', access.organizationId)
           .order('last_interaction_at', { ascending: false }).limit(100)
         if (fetchError) throw fetchError
         const mapped: KiaraConversation[] = (data ?? []).map(row => ({
-          id: row.id, name: row.contact_name, phone: row.contact_phone,
+          id: row.id, name: row.contact_name, phone: row.contact_phone||'',
           status: row.status as KiaraConversation['status'], origin: row.origin,
-          campaign: row.campaign, region: row.region, lastInteractionAt: row.last_interaction_at,
+          campaign: row.campaign, region: row.region, lastInteractionAt: row.last_interaction_at||row.created_at,
           messages: []
         }))
         if (!cancelled) {
@@ -170,7 +170,7 @@ export function KiaraAttendance() {
       </div>
       <div className="kiara-head-actions">
         <label className="kiara-head-search"><Search size={18}/><input aria-label="Buscar contato, campanha ou região" placeholder="Buscar contato, campanha, região..." value={search} onChange={event=>setSearch(event.target.value)}/></label>
-        <button type="button" className="kiara-filter-jump" onClick={()=>document.getElementById('kiara-filter-area')?.scrollIntoView({behavior:'smooth',block:'center'})}><Filter size={18}/> Filtros</button>
+        <button type="button" className="kiara-filter-jump" onClick={()=>setShowAdvancedFilters(v=>!v)}><Filter size={18}/> Filtros</button>
         <button type="button" className="kiara-top-refresh" onClick={()=>setRefresh(value=>value+1)} aria-label="Atualizar dados" title="Atualizar dados"><RefreshCcw size={18}/></button>
       </div>
     </header>
