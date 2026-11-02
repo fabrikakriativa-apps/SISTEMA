@@ -84,6 +84,57 @@ create policy kiara_control_org_read
  on public.kiara_operational_control for select to authenticated
  using (private.has_org_role(organization_id,array['admin','comercial']::public.app_role[]));
 
+-- Authenticated operator commands. No direct browser writes to Kiara tables.
+-- These actions MUST remain hidden/disabled until the Worker checks state
+-- before every API send; changing this table alone does not stop the Worker.
+create or replace function public.kiara_operator_action(
+  org_id uuid,
+  action_name text,
+  target_conversation_id uuid default null
+)
+returns jsonb
+language plpgsql security definer set search_path=''
+as $
+declare
+  affected uuid;
+  resulting_status text;
+begin
+  if auth.uid() is null or
+     not private.has_org_role(org_id,array['admin','comercial']::public.app_role[]) then
+    raise exception 'Not authorized' using errcode='42501';
+  end if;
+  if action_name in ('pause_all','resume_all') then
+    if target_conversation_id is not null then
+      raise exception 'Global action does not accept a conversation';
+    end if;
+    if action_name = 'resume_all' and
+       not private.has_org_role(org_id,array['admin']::public.app_role[]) then
+      raise exception 'Only admin can reactivate Kiara' using errcode='42501';
+    end if;
+    insert into public.kiara_operational_control(organization_id,enabled,updated_at,updated_by)
+    values(org_id,action_name='resume_all',now(),auth.uid())
+    on conflict(organization_id) do update set enabled=excluded.enabled,updated_at=now(),updated_by=auth.uid();
+    affected := org_id;
+  elsif action_name in ('assume','return_to_ai') then
+    if target_conversation_id is null then raise exception 'Select a conversation'; end if;
+    update public.kiara_conversations
+      set status=case when action_name='assume' then 'human' else 'ai' end,
+          updated_at=now()
+    where id=target_conversation_id and organization_id=org_id
+    returning id,status into affected,resulting_status;
+    if affected is null then raise exception 'Conversation not found' using errcode='P0002'; end if;
+  else
+    raise exception 'Unknown action' using errcode='22023';
+  end if;
+  insert into public.audit_log(organization_id,actor_id,entity_type,entity_id,action,after_data)
+  values(org_id,auth.uid(),'kiara',affected,action_name,
+         jsonb_build_object('conversation_id',target_conversation_id,'status',resulting_status));
+  return jsonb_build_object('ok',true,'action',action_name,'conversation_id',target_conversation_id);
+end $;
+
+revoke all on function public.kiara_operator_action(uuid,text,uuid) from public,anon;
+grant execute on function public.kiara_operator_action(uuid,text,uuid) to authenticated;
+
 -- Only the trusted server-side ingestion may INSERT/UPDATE these tables
 -- using its secret service_role credential. Never expose it in the browser.
 
