@@ -25,16 +25,16 @@ export function leadResponseStats(messages: KiaraMessage[]) {
     .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))
   const delays: number[] = []
   let lastBusinessAt: number | null = null
-  let customerResponded = false
   for (const message of chronological) {
     const at = Date.parse(message.createdAt)
     if (message.direction === 'outgoing') {
-      if (lastBusinessAt === null || customerResponded) lastBusinessAt = at
-      customerResponded = false
-    } else if (lastBusinessAt !== null && !customerResponded) {
+      // Se a loja enviar mais de uma mensagem, conta a partir da última.
+      lastBusinessAt = at
+    } else if (lastBusinessAt !== null) {
       const delay = at - lastBusinessAt
       if (delay >= 0 && delay <= 7 * 24 * 60 * 60 * 1000) delays.push(delay)
-      customerResponded = true
+      // Mensagens consecutivas do cliente não contam como novas respostas.
+      lastBusinessAt = null
     }
   }
   return {
