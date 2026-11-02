@@ -119,3 +119,11 @@
 .kiara-coach-review button:disabled{opacity:.5}
 .kiara-coach-no-items{color:#939bad;text-align:center;padding:25px 0;font-size:12px}
 .kiara-coach-feedback{padding:8px 10px;background:#f1f5ff;border-radius:8px;color:#5a6a8d;font-size:11px;line-height:1.5;margin:9px 0 0}
+
+
+.kiara-coach-control{display:flex;flex-direction:column;gap:7px;margin-bottom:9px}
+.kiara-coach-control>button{display:flex;justify-content:center;align-items:center;gap:8px;width:100%;background:#fff8e9;color:#8a5a18;border:1px solid #f2ddb3;border-radius:10px;padding:10px 13px;font-size:12px;font-weight:750;cursor:pointer}
+.kiara-coach-control>button.kiara-hold-on{background:#eaf6ee;color:#247648;border-color:#b6e2c6}
+.kiara-coach-control>button:disabled{opacity:.45;cursor:not-allowed}
+.kiara-coach-control>small{color:#657287;font-size:11px}
+.kiara-hold-warning{display:block;font-size:11px;color:#27734b;background:#eef9f2;padding:7px 9px;border-radius:8px}
