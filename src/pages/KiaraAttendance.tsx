@@ -247,9 +247,16 @@ export function KiaraAttendance() {
 
       <aside className="kiara-conversation-card">
         <div className="kiara-conversation-head">
-          <div><h2><MessageCircle size={19}/> Conversa espelhada</h2><p>{selected ? selected.name||selected.phone : 'Selecione um atendimento para visualizar'}</p></div>
-          {selected && <a href={waLink} target="_blank" rel="noopener noreferrer" aria-label="Abrir no WhatsApp"><ExternalLink size={20}/></a>}
+          <div className="kiara-chat-person">
+            <span className="kiara-chat-person-avatar">{selected?(selected.name||selected.phone).slice(0,2).toUpperCase():<MessageCircle size={19}/>}</span>
+            <div><h2>{selected ? selected.name||selected.phone : 'Selecione uma conversa'}</h2><p>{selected?.phone||'Espelhamento do WhatsApp Business'}</p></div>
+          </div>
+          <div className="kiara-chat-head-actions">
+            {selected&&<a href={waLink} target="_blank" rel="noopener noreferrer" aria-label="Abrir contato no WhatsApp" title="Abrir WhatsApp"><ExternalLink size={18}/></a>}
+            <button type="button" aria-label="Atualizar mensagens" title="Atualizar mensagens" onClick={()=>setRefresh(n=>n+1)}><MoreVertical size={20}/></button>
+          </div>
         </div>
+        {selected?.campaign&&<div className="kiara-campaign-banner"><span><MessageCircleMore size={18}/> Lead vindo de campanha</span><strong>{selected.campaign}</strong><small>{selected.origin||'Origem não identificada'}{selected.region?' · '+selected.region:''}</small></div>}
         <div className="kiara-time-card">
           <span><Clock3 size={16}/> Tempo médio de resposta do lead</span>
           <strong>{formatLeadResponseTime(stats?.averageMs??null)}</strong>
@@ -264,6 +271,11 @@ export function KiaraAttendance() {
           {messagesLoading && <p className="kiara-chat-loading" role="status">Atualizando mensagens…</p>}
           {!selected ? <div className="kiara-chat-placeholder"><MessageCircle size={34}/><p>As mensagens recebidas, respostas da Kiara e intervenções humanas aparecerão aqui.</p></div> :
           selected.messages.length===0 && !messagesLoading ? <div className="kiara-chat-placeholder"><MessageCircle size={26}/><p>Sem mensagens registradas para esta conversa.</p></div> : selected.messages.map(msg=><div key={msg.id} className={`kiara-bubble ${msg.direction}`}><span>{msg.text}</span><small>{msg.sender === 'kiara' ? 'Kiara · ' : msg.sender === 'human' ? 'Equipe · ' : ''}{new Date(msg.createdAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</small>{msg.sender==='kiara'&&<button type="button" className="kiara-correct-msg" onClick={()=>{setCoachingMessage(msg);setShowCoaching(true)}}><Sparkles size={13}/> Corrigir resposta</button>}</div>)}
+        </div>
+        <div className="kiara-message-composer" aria-label="Envio de mensagens indisponível na homologação">
+          <span className="kiara-composer-emoticon">☺</span>
+          <input type="text" disabled value="" placeholder="Envio pelo painel disponível após validação" aria-label="Envio de mensagens desativado"/>
+          <button type="button" disabled title="Envio pelo painel não habilitado" aria-label="Enviar mensagem desativado"><Send size={18}/></button>
         </div>
         <div className="kiara-coach-toggle"><div className="kiara-coach-control">
           <button type="button" disabled={!selected || !holdReady || holdBusy} className={replyHeld?'kiara-hold-on':''} onClick={()=>void toggleHold()}>
