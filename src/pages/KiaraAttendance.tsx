@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Activity, BarChart3, Bot, CalendarDays, Clock3, ExternalLink, Hand, MessageCircle, PauseCircle, RefreshCcw, Search, ShieldAlert, Sparkles, Users, UserRoundCheck } from 'lucide-react'
+import { Activity, BarChart3, Bot, CalendarDays, ChevronRight, Clock3, ExternalLink, Filter, Hand, Headset, MessageCircle, MessageCircleMore, MoreVertical, PauseCircle, RefreshCcw, Search, Send, ShieldAlert, Sparkles, UserRound, UserRoundCheck } from 'lucide-react'
 import type { KiaraConversation, KiaraMessage } from '../lib/kiaraMetrics'
 import { supabase } from '../lib/supabase'
 import { commandKiara, kiaraControlConfigured, readKiaraControl, type KiaraOperatorAction } from '../lib/kiaraControl'
@@ -154,45 +154,54 @@ export function KiaraAttendance() {
   const stats = selected ? leadResponseStats(selected.messages) : null
   const pendingMs = selected ? leadAwaitingResponseMs(selected.messages, nowMs) : null
   const lastInboundMs = selected ? leadLastInboundMs(selected.messages, nowMs) : null
+  const kiaraAvatar = import.meta.env.BASE_URL + 'kiara-avatar.svg'
   const waLink = selected ? `https://wa.me/${selected.phone.replace(/\D/g, '')}` : ''
 
-  return <section className="kiara-page">
+  return <section className="kiara-page kiara-visual-v2">
     <header className="kiara-page-head">
-      <div><span className="kiara-eyebrow"><Sparkles size={16}/> Fábrika Kriativa · Kiara</span>
-        <h1>Atendimento IA</h1>
-        <p>Acompanhe conversas e leads, e saiba quando sua equipe precisa intervir.</p>
+      <div className="kiara-title-group">
+        <span className="kiara-title-spark"><Sparkles size={27}/></span>
+        <div><h1>Atendimento IA</h1>
+          <p>Gerencie os atendimentos da Kiara, acompanhe os leads e assuma conversas quando necessário.</p></div>
       </div>
-      <span className="kiara-mode"><span/> {loading ? 'Atualizando…' : error ? 'Falha ao sincronizar' : conversations.length ? 'Conversas sincronizadas' : 'Aguardando conversas'}</span>
+      <div className="kiara-head-actions">
+        <label className="kiara-head-search"><Search size={18}/><input aria-label="Buscar contato, campanha ou região" placeholder="Buscar contato, campanha, região..." value={search} onChange={event=>setSearch(event.target.value)}/></label>
+        <button type="button" className="kiara-filter-jump" onClick={()=>document.getElementById('kiara-filter-area')?.scrollIntoView({behavior:'smooth',block:'center'})}><Filter size={18}/> Filtros</button>
+        <button type="button" className="kiara-top-refresh" onClick={()=>setRefresh(value=>value+1)} aria-label="Atualizar dados" title="Atualizar dados"><RefreshCcw size={18}/></button>
+      </div>
     </header>
 
-    <div className="kiara-kpis">
-      <div className="kiara-kpi"><span className="kiara-kpi-icon blue"><Users/></span><div><small>Leads recebidos</small><strong>{conversations.length}</strong></div></div>
-      <div className="kiara-kpi"><span className="kiara-kpi-icon green"><Bot/></span><div><small>Kiara atendendo</small><strong>{count('ai')}</strong></div></div>
-      <div className="kiara-kpi"><span className="kiara-kpi-icon amber"><Hand/></span><div><small>Aguardando humano</small><strong>{count('waiting_human')}</strong></div></div>
-      <div className="kiara-kpi"><span className="kiara-kpi-icon purple"><UserRoundCheck/></span><div><small>Assumidos</small><strong>{count('human')}</strong></div></div>
-      <div className="kiara-kpi"><span className="kiara-kpi-icon gray"><Clock3/></span><div><small>Sem interação</small><strong>{count('no_interaction')}</strong></div></div>
+    <div className="kiara-kpis" aria-label="Indicadores dos atendimentos sincronizados">
+      <div className="kiara-kpi"><span className="kiara-kpi-icon green"><MessageCircleMore/></span><div><small>IA atendendo</small><strong>{count('ai')}</strong><span className="kiara-kpi-caption">conversas em atendimento</span></div></div>
+      <div className="kiara-kpi"><span className="kiara-kpi-icon amber"><UserRound/></span><div><small>Aguardando humano</small><strong>{count('waiting_human')}</strong><span className="kiara-kpi-caption">precisam de atenção</span></div></div>
+      <div className="kiara-kpi"><span className="kiara-kpi-icon blue"><Headset/></span><div><small>Assumidas</small><strong>{count('human')}</strong><span className="kiara-kpi-caption">atendimentos humanos</span></div></div>
+      <div className="kiara-kpi"><span className="kiara-kpi-icon gray"><Clock3/></span><div><small>Sem interação</small><strong>{count('no_interaction')}</strong><span className="kiara-kpi-caption">sem atividade registrada</span></div></div>
     </div>
 
     <div className="kiara-top-row">
       <div className="kiara-control-card">
-        <div className="kiara-avatar"><Sparkles size={32}/><Bot size={44}/></div>
-        <div className="kiara-control-copy"><h2>Kiara <span className="kiara-preview-badge">Painel em desenvolvimento</span></h2>
-          <p>Um lugar para acompanhar a triagem, identificar oportunidades e controlar a atuação da IA.</p>
-          <button disabled={!controlReady || controlBusy || !kiaraEnabled} onClick={()=>void runCommand('pause_all')} className="kiara-danger"><PauseCircle size={17}/> Parar Kiara</button>
-          {controlReady && !kiaraEnabled && <button disabled={controlBusy || access?.role !== 'admin'} onClick={()=>void runCommand('resume_all')} className="kiara-refresh">Reativar Kiara</button>}
-          <small>{controlReady ? (kiaraEnabled ? 'Controle geral confirmado pelo servidor.' : 'Atendimento automático desativado.') : 'O controle será liberado depois da integração segura.'}</small>
-          {controlFeedback && <small role="status">{controlFeedback}</small>}
+        <div className="kiara-avatar"><img src={kiaraAvatar} alt="Kiara, atendente digital da Fábrika Kriativa"/></div>
+        <div className="kiara-control-copy">
+          <div className="kiara-name-line"><h2><Sparkles size={20}/> Kiara</h2><span className={controlReady && kiaraEnabled?'kiara-live-pill':'kiara-preview-badge'}><span className="kiara-pill-dot"/> {controlReady ? (kiaraEnabled ? 'Kiara ativa' : 'Kiara pausada') : 'Controle em homologação'}</span></div>
+          <p>Sua atendente digital acolhe, qualifica e direciona os leads da Fábrika Kriativa.</p>
+          <div className="kiara-hero-actions">
+            <button type="button" className="kiara-hero-pause" disabled={!controlReady || controlBusy || !kiaraEnabled} onClick={()=>void runCommand('pause_all')}><PauseCircle size={18}/> Pausar Kiara</button>
+            <button type="button" className="kiara-hero-assume" disabled={!selected || !controlReady || controlBusy || selected.status==='human'} onClick={()=>selected&&void runCommand('assume',selected.id)}><UserRoundCheck size={18}/> Assumir conversa</button>
+            <button type="button" className="kiara-hero-return" disabled={!selected || !controlReady || controlBusy || selected.status==='ai'} onClick={()=>selected&&void runCommand('return_to_ai',selected.id)}><RefreshCcw size={18}/> Devolver à Kiara</button>
+            {controlReady && !kiaraEnabled && <button type="button" className="kiara-hero-return" disabled={controlBusy || access?.role!=='admin'} onClick={()=>void runCommand('resume_all')}><RefreshCcw size={18}/> Reativar</button>}
+          </div>
+          {controlFeedback&&<small role="status">{controlFeedback}</small>}
         </div>
       </div>
       <div className="kiara-funnel-card">
-        <h2><BarChart3 size={18}/> Fluxo de atendimento</h2>
+        <h2><Filter size={20}/> Funil de atendimento <small>(conversas sincronizadas)</small></h2>
         <div className="kiara-funnel-steps">
-          <div><span>Recebidos</span><strong>{conversations.length}</strong></div>
-          <div><span>IA atendendo</span><strong>{count('ai')}</strong></div>
-          <div><span>Aguardando humano</span><strong>{count('waiting_human')}</strong></div>
-          <div><span>Assumidos</span><strong>{count('human')}</strong></div>
+          <div className="kiara-funnel-contact"><span><MessageCircleMore size={18}/> Primeiro contato</span><strong>{conversations.length}</strong><small>100% do histórico exibido</small></div>
+          <span className="kiara-funnel-arrow"><ChevronRight size={25}/></span>
+          <div className="kiara-funnel-ai"><span><Bot size={18}/> IA atendendo</span><strong>{count('ai')}</strong><small>{conversations.length?Math.round(count('ai')/conversations.length*100):0}% dos contatos</small></div>
+          <span className="kiara-funnel-arrow"><ChevronRight size={25}/></span>
+          <div className="kiara-funnel-human"><span><Headset size={18}/> Atendimento humano</span><strong>{count('human')}</strong><small>{conversations.length?Math.round(count('human')/conversations.length*100):0}% dos contatos</small></div>
         </div>
-        <p>Indicadores baseados nos registros sincronizados. O funil comercial completo permanece no módulo Prospecção.</p>
       </div>
     </div>
 
