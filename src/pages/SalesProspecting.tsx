@@ -1,4 +1,4 @@
-import {useCallback,useEffect,useMemo,useState,type FormEvent} from 'react'
+import {useCallback,useEffect,useMemo,useRef,useState,type FormEvent} from 'react'
 import {Plus,Search,X,BarChart3,RefreshCw} from 'lucide-react'
 import {Page} from '../components/Page'
 import {useAccess} from '../components/AuthorizedAccess'
@@ -27,13 +27,14 @@ type Form=Omit<Lead,'estimated_value'>&{estimated_value:number|''}
 const fresh=():Form=>({id:'',name:'',phone:'',email:'',notes:'',origin:'',stage:'new',estimated_value:'',next_follow_up_at:'',lost_reason:'',client_id:null,budget_id:null,related_budget_ids:[],received_on:salesDay(new Date().toISOString()),profile_status:'unassessed',profile_reason:'',capture_source:'',campaign:'',capture_kind:'unknown',customer_kind:'new_lead',response_status:'active',commercial_phase:'new',assigned_to:null})
 const localDateTime=(value:string)=>{const d=new Date(value);return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16)}
 const columns=Object.entries(commercialLabels) as [CommercialPhase,string][]
-export function SalesProspecting(){
+export function SalesProspecting({initialOpportunityId=null}:{initialOpportunityId?:string|null}){
  const access=useAccess(),{show}=useToast()
  const [rawItems,setItems]=useState<Lead[]>([]),[allClients,setClients]=useState<Client[]>([]),[budgets,setBudgets]=useState<SalesBudget[]>([]),[orders,setOrders]=useState<SalesOrder[]>([])
  const items=useMemo(()=>resolveOpportunityOrigins(rawItems,allClients),[rawItems,allClients])
  const clients=useMemo(()=>allClients.filter(client=>!client.archived_at),[allClients])
  const [loading,setLoading]=useState(true),[error,setError]=useState(''),[saving,setSaving]=useState(false),[open,setOpen]=useState(false),[form,setForm]=useState<Form>(fresh),[search,setSearch]=useState(''),[clientSearch,setClientSearch]=useState(''),[budgetSearch,setBudgetSearch]=useState(''),[results,setResults]=useState(false)
  const canEdit=Boolean(access&&['admin','comercial'].includes(access.role))
+ const openedKiaraLead=useRef<string|null>(null)
  const [cancelled,setCancelled]=useState(false),[cancelling,setCancelling]=useState(false),[cancelReason,setCancelReason]=useState('')
  const [kiaraLinks,setKiaraLinks]=useState<Record<string,string>>({})
  const [activities,setActivities]=useState<ContactActivity[]>([]),[assignees,setAssignees]=useState<{user_id:string;full_name:string}[]>([]),[followFilter,setFollowFilter]=useState<FollowUpFilter>('all'),[owner,setOwner]=useState(''),[rulesOpen,setRulesOpen]=useState(false),[firstDays,setFirstDays]=useState(1),[followDays,setFollowDays]=useState(3)
@@ -66,6 +67,13 @@ export function SalesProspecting(){
  const won=(lead:SalesLead)=>orders.some(o=>o.status!=='cancelled'&&linkedBudgetIds(lead).includes(o.budget_id))
  const column=(lead:Lead|Form)=>phaseForLead(lead,orders,budgets)
  const edit=(lead?:Lead)=>{const source=rawItems.find(item=>item.id===lead?.id)??lead;setCancelling(false);setCancelReason('');setForm(source?{...source,commercial_phase:column(source),estimated_value:source.estimated_value??'',response_status:resolvedResponse(source.response_status,column(source)==='proposal_sent'||budgets.some(b=>linkedBudgetIds(source).includes(b.id)&&['sent','no_response','approved'].includes(b.status))),next_follow_up_at:source.next_follow_up_at?localDateTime(source.next_follow_up_at):''}:{...fresh(),assigned_to:access?.userId??null});setClientSearch(allClients.find(c=>c.id===source?.client_id)?.name??'');setBudgetSearch('');setOpen(true)}
+ useEffect(()=>{
+  if(!initialOpportunityId||loading||openedKiaraLead.current===initialOpportunityId)return
+  const lead=rawItems.find(item=>item.id===initialOpportunityId)
+  if(!lead)return
+  openedKiaraLead.current=initialOpportunityId
+  edit(lead)
+ },[initialOpportunityId,loading,rawItems])
  const archive=async(restore=false)=>{
   if(!supabase||!access||!canEdit||saving||!form.id)return
   setSaving(true)
