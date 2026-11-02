@@ -36,6 +36,7 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_KIARA_COACH_URL: ${{ vars.VITE_KIARA_COACH_URL }}
         run: pnpm run build:test
       - name: Guardar pacote de prévia sem publicar no Pages
         uses: actions/upload-artifact@v4
