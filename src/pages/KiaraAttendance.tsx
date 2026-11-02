@@ -4,7 +4,7 @@ import type { KiaraConversation, KiaraMessage } from '../lib/kiaraMetrics'
 import { supabase } from '../lib/supabase'
 import { commandKiara, kiaraControlConfigured, readKiaraControl, type KiaraOperatorAction } from '../lib/kiaraControl'
 import { useAccess } from '../components/AuthorizedAccess'
-import { formatLeadResponseTime, leadResponseStats } from '../lib/kiaraMetrics'
+import { formatLeadResponseTime, leadResponseStats, leadAwaitingResponseMs, leadLastInboundMs } from '../lib/kiaraMetrics'
 import './KiaraAttendance.css'
 
 const labels: Record<KiaraConversation['status'], string> = {
@@ -22,6 +22,7 @@ export function KiaraAttendance() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [refresh, setRefresh] = useState(0)
+  const [nowMs, setNowMs] = useState(() => Date.now())
   const [controlReady, setControlReady] = useState(false)
   const [kiaraEnabled, setKiaraEnabled] = useState(false)
   const [controlBusy, setControlBusy] = useState(false)
@@ -50,7 +51,7 @@ export function KiaraAttendance() {
   // Atualiza somente enquanto este módulo está montado e a aba visível.
   useEffect(() => {
     const timer = window.setInterval(() => {
-      if (document.visibilityState === 'visible') setRefresh(value => value + 1)
+      if (document.visibilityState === 'visible') { setNowMs(Date.now());setRefresh(value => value + 1) }
     }, 30_000)
     return () => window.clearInterval(timer)
   }, [])
@@ -115,6 +116,8 @@ export function KiaraAttendance() {
   }), [conversations, search, status, campaignFilter, regionFilter, from, to])
   const count = (key: KiaraConversation['status']) => conversations.filter(item => item.status === key).length
   const stats = selected ? leadResponseStats(selected.messages) : null
+  const pendingMs = selected ? leadAwaitingResponseMs(selected.messages, nowMs) : null
+  const lastInboundMs = selected ? leadLastInboundMs(selected.messages, nowMs) : null
   const waLink = selected ? `https://wa.me/${selected.phone.replace(/\D/g, '')}` : ''
 
   return <section className="kiara-page">
@@ -191,7 +194,11 @@ export function KiaraAttendance() {
         <div className="kiara-time-card">
           <span><Clock3 size={16}/> Tempo médio de resposta do lead</span>
           <strong>{formatLeadResponseTime(stats?.averageMs??null)}</strong>
-          <small>{stats?.samples ? `Calculado com ${stats.samples} resposta(s) do cliente após mensagem da loja.` : 'Aparecerá após haver respostas suficientes para calcular.'}</small>
+          <small>{stats?.samples ? `Calculado com ${stats.samples} resposta(s) do cliente após mensagem da loja (últimas 100 mensagens sincronizadas).` : 'Aparecerá quando houver respostas registradas.'}</small>
+          <div className="kiara-time-divider"/>
+          <span><Clock3 size={16}/> {pendingMs !== null ? 'Aguardando resposta do lead há' : 'Última mensagem do cliente'}</span>
+          <strong>{pendingMs !== null ? formatLeadResponseTime(pendingMs) : lastInboundMs !== null ? `há ${formatLeadResponseTime(lastInboundMs)}` : 'Sem dados'}</strong>
+          <small>{pendingMs !== null ? 'Contagem desde a última mensagem enviada pela Kiara ou pela equipe.' : 'O cliente não tem uma resposta pendente à última mensagem da loja.'}</small>
         </div>
         <div className="kiara-chat" aria-label="Histórico da conversa">
           {!selected ? <div className="kiara-chat-placeholder"><MessageCircle size={34}/><p>As mensagens recebidas, respostas da Kiara e intervenções humanas aparecerão aqui.</p></div> :
@@ -204,6 +211,6 @@ export function KiaraAttendance() {
         <p className="kiara-security"><ShieldAlert size={16}/> As ações só são liberadas após confirmação da autorização pelo servidor. A proteção contra envios pendentes também precisa ser validada.</p>
       </aside>
     </div>
-    <p className="kiara-footnote"><Activity size={15}/> Primeira etapa de desenvolvimento: layout integrado ao SISTEMA. A conexão com WhatsApp, banco e os botões operacionais virão em uma etapa separada e testada.</p>
+    <p className="kiara-footnote"><Activity size={15}/> O espelhamento depende de mensagens sincronizadas pelo Worker; a autorização dos comandos também depende da configuração segura do servidor.</p>
   </section>
 }
