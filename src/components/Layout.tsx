@@ -21,7 +21,7 @@ export function Layout({ active, setActive, children }: { active: ModuleKey; set
   const [compact, setCompact] = useState(false)
   const [mobile, setMobile] = useState(false)
   const [open, setOpen] = useState<Record<string, boolean>>({ Principal:true, Operação:true, Financeiro:true, Cadastros:true, Administração:false })
-  return <div className={`app-shell ${compact ? 'compact' : ''} ${mobile ? 'mobile-open' : ''}`}>
+  return <div className={`app-shell ${active === 'atendimento-ia' ? 'kiara-shell' : ''} ${compact ? 'compact' : ''} ${mobile ? 'mobile-open' : ''}`}>
     <aside className="sidebar"><div className="brand"><div className="brand-mark small"><img src={brandMarkSrc} alt="Monograma Fábrika Kriativa"/></div><div><strong>Fábrika Kriativa</strong><span>Gestão comercial</span></div></div>
       <nav>{groups.map(group => <section className="nav-group" key={group.label}><button className="nav-group-title" onClick={() => setOpen(current => ({...current,[group.label]:!current[group.label]}))}><span>{group.label}</span>{open[group.label] ? <ChevronDown/> : <ChevronRight/>}</button>
         {open[group.label] && group.items.map(item => <button className={`nav-item ${active === item.key ? 'active' : ''}`} key={item.key} onClick={() => { setActive(item.key); setMobile(false) }}><item.icon/><span>{item.label}</span></button>)}</section>)}</nav>
