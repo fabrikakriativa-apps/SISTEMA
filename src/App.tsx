@@ -26,7 +26,7 @@ export function App() {
   useEffect(()=>{const sync=()=>setRoute(readRoute(window.location.hash));window.addEventListener('hashchange',sync);return()=>window.removeEventListener('hashchange',sync)},[])
   const navigate=(module:ModuleKey,recordId?:string|null)=>navigateTo(module,recordId)
   const content = active === 'inicio' ? <Dashboard navigate={navigate}/>
-    : active === 'prospeccao' ? <Prospecting/>
+    : active === 'prospeccao' ? <Prospecting initialOpportunityId={route.recordId}/>
     : active === 'atendimento-ia' ? <KiaraAttendance/>
     : active === 'clientes' ? <Clients/>
     : active === 'insumos' ? <Supplies/>
