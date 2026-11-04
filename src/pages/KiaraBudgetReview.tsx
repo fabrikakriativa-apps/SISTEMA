@@ -26,6 +26,7 @@ export function KiaraBudgetReview({conversationId}:{conversationId:string|null})
  const [busy,setBusy]=useState<string|null>(null)
  const [feedback,setFeedback]=useState('')
  const [refresh,setRefresh]=useState(0)
+ const [verified,setVerified]=useState<Record<string,boolean>>({})
  const reload=useCallback(()=>setRefresh(v=>v+1),[])
  const canView=Boolean(access&&['admin','comercial'].includes(access.role))
  const canReview=access?.role==='admin'
@@ -77,10 +78,11 @@ export function KiaraBudgetReview({conversationId}:{conversationId:string|null})
     </p>)}
     <p className="kiara-budget-price">{formatMoney(draft.structured_budget.price_brl)}</p>
     <small>Configuração comercial {draft.structured_budget.configuration_status||'não informada'} · Revisão {draft.structured_budget.configuration_revision??'—'}.
-      Valor preliminar sujeito à revisão humana e visita técnica.</small>
+      Valor preliminar sujeito à revisão humana e visita técnica. Trilho de referência interno: {draft.structured_budget.rail_type_for_review||'não identificado'} — confirme antes de aprovar.</small>
     {canReview&&kiaraBudgetReviewConfigured&&draft.structured_budget.test_only&&<div className="kiara-budget-actions">
       {draft.status==='pending_review'&&<>
-       <button type="button" disabled={busy===draft.id||!draft.structured_budget.price_brl} onClick={()=>void act(draft,'approve')}><CheckCircle2 size={16}/> Aprovar</button>
+       <label className="kiara-budget-verify"><input type="checkbox" checked={Boolean(verified[draft.id])} onChange={event=>setVerified(v=>({...v,[draft.id]:event.target.checked}))}/> Conferi o tecido, as medidas, o forro e o trilho de referência.</label>
+       <button type="button" disabled={busy===draft.id||!draft.structured_budget.price_brl||!verified[draft.id]} onClick={()=>void act(draft,'approve')}><CheckCircle2 size={16}/> Aprovar</button>
        <button type="button" disabled={busy===draft.id} onClick={()=>void act(draft,'reject')}><XCircle size={16}/> Rejeitar</button>
       </>}
       {draft.status==='approved'&&<button type="button" disabled={busy===draft.id} onClick={()=>void act(draft,'send')}><Send size={16}/> Enviar valor aprovado</button>}
