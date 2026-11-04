@@ -39,6 +39,7 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
           VITE_KIARA_COACH_URL: https://fabrika-atendimento-ia-homologacao.fabrikakriativa.workers.dev/kiara/coach
+          VITE_KIARA_BUDGET_URL: https://fabrika-atendimento-ia.fabrikakriativa.workers.dev/kiara/budget/review
       - name: Preparar GitHub Pages
         uses: actions/configure-pages@v5
       - name: Enviar versão compilada
