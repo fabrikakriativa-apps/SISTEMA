@@ -6,6 +6,7 @@ import { commandKiara, kiaraControlConfigured, readKiaraControl, type KiaraOpera
 import { useAccess } from '../components/AuthorizedAccess'
 import { formatLeadResponseTime, leadResponseStats, leadAwaitingResponseMs, leadLastInboundMs } from '../lib/kiaraMetrics'
 import { KiaraCoaching } from './KiaraCoaching'
+import { KiaraBudgetReview } from './KiaraBudgetReview'
 import { kiaraCoachConfigured, readKiaraHold, setKiaraHold } from '../lib/kiaraCoachingControl'
 import './KiaraAttendance.css'
 import './KiaraVisual.css'
@@ -286,6 +287,7 @@ export function KiaraAttendance() {
           {holdFeedback&&<small role="status">{holdFeedback}</small>}
         </div><button type="button" onClick={()=>setShowCoaching(value=>!value)}><Sparkles size={17}/> {showCoaching?'Fechar orientação':'Orientar Kiara'} <span>Interno</span></button></div>
         {showCoaching&&<KiaraCoaching conversationId={selectedId} selectedMessage={coachingMessage} clearSelectedMessage={()=>setCoachingMessage(null)}/>}
+        <KiaraBudgetReview conversationId={selectedId}/>
         <div className="kiara-chat-actions">
           <button disabled={!selected || !controlReady || controlBusy || selected.status==='human'} onClick={()=>selected && void runCommand('assume',selected.id)}><Hand size={16}/> Assumir</button>
           <button disabled={!selected || !controlReady || controlBusy || selected.status==='ai'} onClick={()=>selected && void runCommand('return_to_ai',selected.id)}><RefreshCcw size={16}/> Devolver à Kiara</button>
