@@ -127,3 +127,19 @@
 .kiara-coach-control>button:disabled{opacity:.45;cursor:not-allowed}
 .kiara-coach-control>small{color:#657287;font-size:11px}
 .kiara-hold-warning{display:block;font-size:11px;color:#27734b;background:#eef9f2;padding:7px 9px;border-radius:8px}
+
+/* Revisão humana das estimativas — somente contato de homologação */
+.kiara-budget-review{margin:16px 0;padding:16px;border:1px solid var(--border-color,#dedbd6);border-radius:12px;background:var(--surface,#fff)}
+.kiara-budget-heading,.kiara-budget-meta{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.kiara-budget-heading h3{display:flex;align-items:center;gap:8px;margin:0;font-size:1.02rem}
+.kiara-budget-heading button{border:1px solid #ddd;background:transparent;border-radius:8px;padding:6px;cursor:pointer}
+.kiara-budget-help{font-size:.81rem;line-height:1.45;color:var(--text-muted,#666)}
+.kiara-budget-item{margin-top:12px;padding:12px;border:1px solid #e4e4e4;border-radius:10px}
+.kiara-budget-item p{margin:7px 0}
+.kiara-budget-meta{font-size:.86rem}.kiara-budget-meta small{color:#777}
+.kiara-budget-line{font-size:.85rem;line-height:1.4}
+.kiara-budget-price{font-weight:700;font-size:1.12rem}
+.kiara-budget-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.kiara-budget-actions button{display:flex;gap:6px;align-items:center;padding:8px 11px;border:1px solid #bbb;border-radius:8px;background:#fafafa;cursor:pointer}
+.kiara-budget-actions button:disabled{opacity:.5;cursor:not-allowed}
+.kiara-budget-feedback{padding-top:8px;font-weight:600;font-size:.84rem}
