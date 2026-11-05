@@ -8,10 +8,11 @@ type Draft={
  id:string;status:'pending_review'|'approved'|'rejected'|'sent'|'cancelled';
  created_at:string;reviewed_at:string|null;sent_at:string|null;
  structured_budget:{
-  environment?:string;dimensions?:string;price_brl?:string|null;
+  environment?:string;dimensions?:string;price_brl?:string|null;product?:'persiana'|'cortina';
+  pricing?:{internalInstallationCost?:number};
   configuration_status?:string;configuration_revision?:number;
   rail_type_for_review?:string;test_only?:boolean;
-  items?:Array<{environment?:string;model?:string;width?:number;height?:number;frontCategory?:string;backCategory?:string;quantity?:number}>
+  items?:Array<{environment?:string;model?:string;width?:number;height?:number;frontCategory?:string;backCategory?:string;quantity?:number;dimensionScope?:'total'|'per_piece';modelDecision?:{kind?:string;description?:string;evidence?:string}}>
  };
 }
 const formatMoney=(v:string|number|null|undefined)=>v==null?'Valor pendente':Number(v).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})
@@ -73,15 +74,16 @@ export function KiaraBudgetReview({conversationId}:{conversationId:string|null})
     <div className="kiara-budget-meta"><strong>{statusText[draft.status]}</strong><small>{new Date(draft.created_at).toLocaleString('pt-BR')}</small></div>
     <p><strong>{draft.structured_budget.environment||'Ambiente não identificado'}</strong> · {draft.structured_budget.dimensions}</p>
     {(draft.structured_budget.items||[]).map((item,i)=><p key={i} className="kiara-budget-line">
-      {item.environment}: {item.model}, {item.frontCategory}, {item.width} × {item.height} m,
-      {item.backCategory==='Sem forro'?' sem forro':' forro: '+String(item.backCategory)}
+      {draft.structured_budget.product==='persiana'
+       ?<>{item.environment}: {item.modelDecision?.description||item.model}, {item.quantity} peças, {item.width} × {item.height} m ({item.dimensionScope==='total'?'medidas totais':'medidas por peça'}). {item.modelDecision?.kind==='reference'?'Referência comercial provisória, ainda não é modelo escolhido.':''}</>
+       :<>{item.environment}: {item.model}, {item.frontCategory}, {item.width} × {item.height} m, {item.backCategory==='Sem forro'?'sem forro':'forro: '+String(item.backCategory)}</>}
     </p>)}
     <p className="kiara-budget-price">{formatMoney(draft.structured_budget.price_brl)}</p>
     <small>Configuração comercial {draft.structured_budget.configuration_status||'não informada'} · Revisão {draft.structured_budget.configuration_revision??'—'}.
-      Valor preliminar sujeito à revisão humana e visita técnica. Trilho de referência interno: {draft.structured_budget.rail_type_for_review||'não identificado'} — confirme antes de aprovar.</small>
+      Valor preliminar sujeito à revisão humana e visita técnica. {draft.structured_budget.product==='persiana'?<>Custo interno de instalação: {formatMoney(draft.structured_budget.pricing?.internalInstallationCost)}; confira o tipo de tela, o percentual, a quantidade e se as medidas são totais ou por peça.</>:<>Trilho de referência interno: {draft.structured_budget.rail_type_for_review||'não identificado'} — confirme antes de aprovar.</>}</small>
     {canReview&&kiaraBudgetReviewConfigured&&draft.structured_budget.test_only&&<div className="kiara-budget-actions">
       {draft.status==='pending_review'&&<>
-       <label className="kiara-budget-verify"><input type="checkbox" checked={Boolean(verified[draft.id])} onChange={event=>setVerified(v=>({...v,[draft.id]:event.target.checked}))}/> Conferi o tecido, as medidas, o forro e o trilho de referência.</label>
+       <label className="kiara-budget-verify"><input type="checkbox" checked={Boolean(verified[draft.id])} onChange={event=>setVerified(v=>({...v,[draft.id]:event.target.checked}))}/> {draft.structured_budget.product==='persiana'?'Conferi o modelo, a quantidade, as medidas totais/por peça e a instalação.':'Conferi o tecido, as medidas, o forro e o trilho de referência.'}</label>
        <button type="button" disabled={busy===draft.id||!draft.structured_budget.price_brl||!verified[draft.id]} onClick={()=>void act(draft,'approve')}><CheckCircle2 size={16}/> Aprovar</button>
        <button type="button" disabled={busy===draft.id} onClick={()=>void act(draft,'reject')}><XCircle size={16}/> Rejeitar</button>
       </>}
