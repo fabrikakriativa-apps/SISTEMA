@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Plus, Search, Trash2, X } from 'lucide-react'
 import { DecimalInput } from './DecimalInput'
+import { QuickSupplierEditor } from './QuickSupplierEditor'
 import { PayableAllocationEditor } from './PayableAllocationEditor'
 import { allocationError, type PayableAllocation } from '../lib/payableAllocation'
 import { PayableAttachments, payableFileError, uploadPayableFiles } from './PayableAttachments'
@@ -74,6 +75,7 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
   const [dateRange, setDateRange] = useState<DateRange>({ from: '', to: '' })
   const [sort, setSort] = useState<SortState<'installment' | 'order' | 'due' | 'amount' | 'status'>>({ key: 'due', direction: 'asc' })
   const [open, setOpen] = useState(false)
+  const [supplierEditorOpen, setSupplierEditorOpen] = useState(false)
   const [selected, setSelected] = useState<Payable | null>(null)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null)
@@ -205,6 +207,7 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
   const renderAllocation=(row:PayableAllocation,index:number)=>{const order=orders.find(item=>item.id===row.order_id);const item=order?.order_items.find(item=>item.budget_item_id===row.budget_item_id);return <span key={row.order_id||index} style={{display:'block',marginBottom:8}}><strong>{order?.display_number??row.order_id}</strong><span className="table-subline">{order?.client?.name}</span>{item&&<span className="table-subline">{itemLabel(item.snapshot)}</span>}<span className="table-subline">Rateio da conta: {money.format(Number(row.amount))}</span></span>}
 
   return <>
+    {supplierEditorOpen && <QuickSupplierEditor organizationId={organizationId} onClose={()=>setSupplierEditorOpen(false)} onSaved={supplier=>{setSuppliers(current=>[...current.filter(item=>item.id!==supplier.id),supplier].sort((a,b)=>a.name.localeCompare(b.name,'pt-BR')));setForm(current=>({...current,supplierId:supplier.id}));setSupplierEditorOpen(false)}} />}
     <section className="panel">
       <div className="toolbar">
         <label className="search"><Search /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar fornecedor ou lançamento" /></label>
@@ -228,7 +231,7 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
       <header><div><span className="eyebrow">Contas a pagar</span><h2>{editingGroupId ? 'Editar conta a pagar' : 'Nova conta a pagar'}</h2><p>{editingGroupId ? 'Todas as parcelas vinculadas estão abaixo. Ajuste o que for necessário antes de salvar.' : 'Defina o fornecedor e ajuste o vencimento real de cada parcela antes de salvar.'}</p></div><button type="button" className="icon-button" onClick={() => { setOpen(false); setEditingGroupId(null) }}><X /></button></header>
       <div className="form-grid">
         <label className="field span-2">Descrição<input required value={form.description} onChange={event => setForm({ ...form, description: event.target.value })} placeholder="Ex.: Tecidos para cabeceira" /></label>
-        <label className="field span-2">Fornecedor<select required value={form.supplierId} onChange={event => setForm({ ...form, supplierId: event.target.value })}><option value="">Selecione o fornecedor</option>{suppliers.map(supplier => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}</select></label>
+        <div className="field span-2"><div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}><label htmlFor="payable-supplier">Fornecedor</label><button type="button" className="button secondary small" onClick={()=>setSupplierEditorOpen(true)}><Plus size={14}/> Novo fornecedor</button></div><select id="payable-supplier" required value={form.supplierId} onChange={event => setForm({ ...form, supplierId: event.target.value })}><option value="">Selecione o fornecedor</option>{suppliers.map(supplier => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}</select></div>
         <PayableAllocationEditor rows={allocations} orders={orders} total={form.total} onChange={setAllocations}/>
         <label className="field">Forma de pagamento<input required value={form.method} onChange={event => setForm({ ...form, method: event.target.value })} /></label>
         <label className="field">Valor total<DecimalInput value={form.total} decimalScale={2} onValueChange={value => setForm({ ...form, total: value })} /></label>
@@ -262,4 +265,3 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
     </form></div>}
   </>
 }
-
