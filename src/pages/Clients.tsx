@@ -1,3 +1,4 @@
+import {leadOrigins} from '../lib/leadAcquisition'
 import { matchesSearch } from '../lib/searchOptions'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Plus, Search, UsersRound, X } from 'lucide-react'
@@ -12,7 +13,7 @@ import {ClientPartnerSelect} from '../components/ClientPartnerSelect'
 type Client={crm_lifecycle:'legacy'|'lead'|'customer';customer_since:string|null;id:string;name:string;document:string|null;phone:string|null;address:string|null;city:string|null;origin:string|null;notes:string|null;client_type:string;master_client_id:string|null;archived_at:string|null}
 type ClientForm={id?:string;name:string;document:string;phone:string;address:string;city:string;origin:string;origin_notes:string;client_type:string;master_client_id:string}
 const empty:ClientForm={name:'',document:'',phone:'',address:'',city:'',origin:'',origin_notes:'',client_type:'Cliente final',master_client_id:''}
-const originOptions=['Porta de loja','Instagram','Google','Indicação']
+const originOptions=leadOrigins
 
 export function Clients(){
  const access=useAccess(),catalog=useCatalog<Client>('clients','id,name,document,phone,address,city,origin,notes,client_type,master_client_id,archived_at,crm_lifecycle,customer_since'),{items}=catalog,{show}=useToast()
@@ -107,7 +108,7 @@ export function Clients(){
 <label className="field span-2">Cidade/UF<input value={form.city} onChange={e=>setForm({...form,city:e.target.value})}/>
 </label>
 <label className="field">Origem<select value={form.origin} onChange={e=>setForm({...form,origin:e.target.value})}>
-<option value="">Não informada</option>{originOptions.map(origin=>
+<option value="">Não informada</option>{form.origin&&!originOptions.includes(form.origin)&&<option value={form.origin}>{form.origin}</option>}{originOptions.map(origin=>
 <option key={origin}>{origin}</option>)}</select>
 </label>
 <label className="field">Observação da origem<input value={form.origin_notes} onChange={e=>setForm({...form,origin_notes:e.target.value})} placeholder="Ex.: indicado por…"/>
