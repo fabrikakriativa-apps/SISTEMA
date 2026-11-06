@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Plus, Search, Trash2, X } from 'lucide-react'
 import { DecimalInput } from './DecimalInput'
+import { BankSelect } from './BankSelect'
 import { QuickSupplierEditor } from './QuickSupplierEditor'
 import { PayableAllocationEditor } from './PayableAllocationEditor'
 import { allocationError, type PayableAllocation } from '../lib/payableAllocation'
@@ -89,6 +90,7 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
   const [paymentAction,setPaymentAction]=useState<'pay'|'reverse'|null>(null)
   const [paymentAmount,setPaymentAmount]=useState(0)
   const [paymentDate,setPaymentDate]=useState(today())
+  const [paymentBankId,setPaymentBankId]=useState('')
   const [paymentReason,setPaymentReason]=useState('')
 
   const load = useCallback(async () => {
@@ -188,16 +190,18 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
 
   const canDelete = Boolean(selected && !selected.purchase_id && Number(selected.paid_amount) === 0 && ['open', 'overdue'].includes(selected.status))
   const beginPaymentAction=(item:Payable,action:'pay'|'reverse')=>{
+    setPaymentBankId('')
     setSelected(item);setPaymentAction(action);setPaymentAmount(rounded(Number(item.amount)-Number(item.paid_amount)));setPaymentDate(today());setPaymentReason('')
   }
   const savePaymentAction=async(event:FormEvent)=>{
     event.preventDefault()
     if(!supabase||!selected||!paymentAction||saving)return
+    if(paymentAction==='pay'&&!paymentBankId){show('Selecione o banco do pagamento.','error');return}
     if(paymentAction==='pay'&&(paymentAmount<=0||paymentAmount>rounded(Number(selected.amount)-Number(selected.paid_amount)))){show('Informe um valor maior que zero e dentro do saldo da parcela.','error');return}
     if(paymentAction==='reverse'&&paymentReason.trim().length<5)return
     setSaving(true)
     const {error}=paymentAction==='pay'
-      ?await supabase.rpc('register_payable_payment',{org_id:organizationId,target_payable_id:selected.id,payment_scope:'single',payment_amount:paymentAmount,payment_date:paymentDate})
+      ?await supabase.rpc('register_payable_payment_with_bank',{org_id:organizationId,target_payable_id:selected.id,payment_scope:'single',payment_amount:paymentAmount,payment_date:paymentDate,payment_bank_id:paymentBankId})
       :await supabase.rpc('reverse_payable_payment',{org_id:organizationId,target_payable_id:selected.id,reversal_scope:'single',reversal_reason:paymentReason})
     setSaving(false)
     if(error){show(error.code==='42501'?'Seu perfil não tem permissão para registrar pagamentos.':'Não foi possível atualizar o pagamento. Confira os dados e tente novamente.','error');return}
@@ -261,6 +265,7 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
     {selected&&paymentAction&&<div className="dialog-backdrop"><form className="dialog" role="dialog" aria-modal="true" aria-label={paymentAction==='pay'?'Registrar pagamento':'Estornar pagamento'} onSubmit={savePaymentAction}>
       <header><div><span className="eyebrow">Parcela {selected.installment}/{selected.installment_count}</span><h2>{paymentAction==='pay'?'Registrar pagamento':'Estornar pagamento'}</h2><p>{selected.description} · {selected.supplier?.name??selected.purchase?.supplier?.name}</p></div><button type="button" className="icon-button" aria-label="Fechar pagamento" disabled={saving} onClick={()=>setPaymentAction(null)}><X/></button></header>
       <div className="form-grid">{paymentAction==='pay'?<><p className="span-2">Saldo: {money.format(rounded(Number(selected.amount)-Number(selected.paid_amount)))}. Um valor menor registra pagamento parcial; o saldo integral marca como Pago.</p><label className="field">Data do pagamento<input required type="date" value={paymentDate} onChange={event=>setPaymentDate(event.target.value)}/></label><label className="field">Valor pago<DecimalInput ariaLabel="Valor pago" value={paymentAmount} decimalScale={2} onValueChange={setPaymentAmount}/></label></>:<label className="field span-2">Motivo do estorno<textarea required minLength={5} value={paymentReason} onChange={event=>setPaymentReason(event.target.value)}/><small>Remove a baixa registrada nesta parcela e reabre o saldo, mantendo o histórico.</small></label>}</div>
+      {paymentAction==='pay'&&<div className="form-grid" style={{paddingTop:0}}><BankSelect organizationId={organizationId} value={paymentBankId} onChange={setPaymentBankId} direction="out"/></div>}
       <footer><button type="button" className="button secondary" disabled={saving} onClick={()=>setPaymentAction(null)}>Voltar</button><button className="button primary" disabled={saving}>{saving?'Salvando…':paymentAction==='pay'?'Confirmar pagamento':'Confirmar estorno'}</button></footer>
     </form></div>}
   </>
