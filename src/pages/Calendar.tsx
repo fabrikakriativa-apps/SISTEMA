@@ -1,3 +1,4 @@
+import { matchesSearch } from '../lib/searchOptions'
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { CalendarDays, Pencil, RefreshCw, Search, Trash2, X } from 'lucide-react';
 import { Page } from '../components/Page';
@@ -86,7 +87,7 @@ export function Calendar() {
         show('Agenda sincronizada com o Google Calendar.', 'success');
     else
         show(`${failures} compromisso(s) não puderam ser sincronizados. A próxima sincronização tentará novamente.`, 'error'); };
-    const matching = useMemo(() => { const term = search.trim().toLocaleLowerCase('pt-BR'); return events.filter(x => matchesDashboardFocus(x.id,dashboardFocus,x) && (!term || `${x.title} ${x.description ?? ''} ${x.client?.name ?? ''} ${x.order?.display_number??''} ${x.budget?.display_number??''}`.toLocaleLowerCase('pt-BR').includes(term)) && inDateRange(x.starts_at, dateRange)); }, [events, search, dateRange,dashboardFocus]);
+    const matching = useMemo(() => { const term = search.trim().toLocaleLowerCase('pt-BR'); return events.filter(x => matchesDashboardFocus(x.id,dashboardFocus,x) && (!term || matchesSearch(`${x.title} ${x.description ?? ''} ${x.client?.name ?? ''} ${x.order?.display_number??''} ${x.budget?.display_number??''}`,term)) && inDateRange(x.starts_at, dateRange)); }, [events, search, dateRange,dashboardFocus]);
     const filtered = useMemo(() => { const selected = cardFilter === 'today' ? matching.filter(x => new Date(x.starts_at).toDateString() === new Date().toDateString() && !x.cancelled_at) : cardFilter === 'pending' ? matching.filter(x => needsCalendarSync(x.sync_status) && !x.cancelled_at) : matching; return [...selected].sort((a, b) => { const values = { date: [a.starts_at, b.starts_at], event: [a.title, b.title], client: [a.client?.name ?? '', b.client?.name ?? ''], origin: [a.order?.display_number ?? a.budget?.display_number ?? '', b.order?.display_number ?? b.budget?.display_number ?? ''], sync: [a.sync_status, b.sync_status] }[sort.key]; return compareValues(values[0], values[1]) * (sort.direction === 'asc' ? 1 : -1); }); }, [matching, cardFilter, sort]);
     const today = new Date().toDateString(), todayCount = matching.filter(x => new Date(x.starts_at).toDateString() === today && !x.cancelled_at).length, pending = matching.filter(x => needsCalendarSync(x.sync_status) && !x.cancelled_at).length;
     const openVisitEditor = (event: Event) => { if(event.event_type==='appointment'){setAppointmentEditor({event});return}setEditing(event); setVisitForm(visitFormFromEvent(event)); };

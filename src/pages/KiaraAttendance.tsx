@@ -1,3 +1,4 @@
+import { matchesSearch } from '../lib/searchOptions'
 import { useEffect, useMemo, useState } from 'react'
 import { Activity, BarChart3, Bot, CalendarDays, ChevronRight, Clock3, ExternalLink, Filter, Hand, Headset, MessageCircle, MessageCircleMore, MoreVertical, PauseCircle, RefreshCcw, Search, Send, ShieldAlert, Sparkles, UserRound, UserRoundCheck } from 'lucide-react'
 import type { KiaraConversation, KiaraMessage } from '../lib/kiaraMetrics'
@@ -147,7 +148,7 @@ export function KiaraAttendance() {
   const selected = conversations.find(item => item.id === selectedId) ?? null
   const filtered = useMemo(() => conversations.filter(item => {
     const query = search.trim().toLocaleLowerCase('pt-BR')
-    return (!query || [item.name, item.phone, item.campaign, item.origin, item.region].some(value => (value || '').toLocaleLowerCase('pt-BR').includes(query)))
+    return (!query || matchesSearch([item.name, item.phone, item.campaign, item.origin, item.region].filter(Boolean).join(' '),query))
       && (status === 'all' || item.status === status)
       && (period==='all' || (Number.isFinite(Date.parse(item.lastInteractionAt)) && Date.parse(item.lastInteractionAt)>=nowMs-(period==='7d'?7:30)*86400000))
       && (campaignFilter === 'all' || item.campaign === campaignFilter)

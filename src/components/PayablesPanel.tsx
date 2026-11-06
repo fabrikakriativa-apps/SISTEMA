@@ -1,3 +1,4 @@
+import { matchesSearch } from '../lib/searchOptions'
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Plus, Search, Trash2, X } from 'lucide-react'
 import { DecimalInput } from './DecimalInput'
@@ -116,7 +117,7 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
     const term = search.trim().toLowerCase()
     const dueMatchesPeriod = matchesPeriod(item.due_date, period)
     const linkedText=savedAllocations.filter(row=>row.group_id===item.group_id).map(row=>{const order=orders.find(order=>order.id===row.order_id);return `${order?.display_number??''} ${order?.client?.name??''}`}).join(' ')
-    return dueMatchesPeriod && inDateRange(item.due_date, dateRange) && (!term || `${linkedText} ${item.description} ${item.supplier?.name ?? ''} ${item.purchase?.supplier?.name ?? ''} ${item.order?.display_number ?? ''} ${item.budget_item?.description ?? ''}`.toLowerCase().includes(term))
+    return dueMatchesPeriod && inDateRange(item.due_date, dateRange) && (!term || matchesSearch(`${linkedText} ${item.description} ${item.supplier?.name ?? ''} ${item.purchase?.supplier?.name ?? ''} ${item.order?.display_number ?? ''} ${item.budget_item?.description ?? ''}`,term))
   }).sort((a, b) => {
     const values = { installment: [a.installment, b.installment], order: [a.purchase?.display_number ?? a.order?.display_number ?? a.supplier?.name ?? '', b.purchase?.display_number ?? b.order?.display_number ?? b.supplier?.name ?? ''], due: [a.due_date ?? '', b.due_date ?? ''], amount: [Number(a.amount), Number(b.amount)], status: [statusLabel[a.status] ?? a.status, statusLabel[b.status] ?? b.status] }[sort.key]
     return compareValues(values[0], values[1]) * (sort.direction === 'asc' ? 1 : -1)

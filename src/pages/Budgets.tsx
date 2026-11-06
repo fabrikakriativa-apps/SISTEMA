@@ -1,3 +1,4 @@
+import { matchesSearch } from '../lib/searchOptions'
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { GripVertical, ChevronUp, ChevronDown, ArrowLeft, CalendarPlus, Copy, FileText, GitBranch, ImagePlus, Plus, Search, Trash2, X } from 'lucide-react'
 import { Page } from '../components/Page'
@@ -145,7 +146,7 @@ export function Budgets() {
     finally{creatingLock.current=false;setCreating(false)}
   }
 
-  const matching=useMemo(()=>items.filter(item=>matchesDashboardFocus(item.id,dashboardFocus,item)&&item.document_type===documentFilter&&inDateRange(item.created_at,dateRange)&&`${item.display_number} ${item.client?.name??''} ${labels[item.status]}`.toLowerCase().includes(search.toLowerCase())),[items,search,documentFilter,dateRange,dashboardFocus])
+  const matching=useMemo(()=>items.filter(item=>matchesDashboardFocus(item.id,dashboardFocus,item)&&item.document_type===documentFilter&&inDateRange(item.created_at,dateRange)&&matchesSearch(`${item.display_number} ${item.client?.name??''} ${labels[item.status]}`,search)),[items,search,documentFilter,dateRange,dashboardFocus])
   const filtered=useMemo(()=>{const selected=statusFilter?matching.filter(item=>item.status===statusFilter):matching;const value=(item:Budget)=>sort.key==='number'?`${item.display_number} ${item.client?.name??''}`:sort.key==='type'?item.document_type:sort.key==='revision'?item.current_revision:sort.key==='created'?item.created_at:sort.key==='value'?Number(item.total):labels[item.status];return [...selected].sort((a,b)=>compareValues(value(a),value(b))*(sort.direction==='asc'?1:-1))},[matching,statusFilter,sort])
   const counts=useMemo(()=>({draft:matching.filter(x=>x.status==='draft').length,sent:matching.filter(x=>x.status==='sent').length,no_response:matching.filter(x=>x.status==='no_response').length,approved:matching.filter(x=>x.status==='approved').length,rejected:matching.filter(x=>x.status==='rejected').length,cancelled:matching.filter(x=>x.status==='cancelled').length}),[matching])
   const toggleStatusFilter=(status:BudgetStatus)=>setStatusFilter(current=>current===status?null:status)

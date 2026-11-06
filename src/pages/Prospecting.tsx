@@ -1,3 +1,4 @@
+import { matchesSearch } from '../lib/searchOptions'
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Clock3, Plus, Search, X } from 'lucide-react'
 import { Page } from '../components/Page'
@@ -62,7 +63,7 @@ export function Prospecting(){
       setOpen(false); await load(); navigateTo('orcamentos',(data as {id:string}).id)
     }catch(reason){show(reason instanceof Error?reason.message:'Não foi possível criar o orçamento a partir da oportunidade.','error')}finally{setSaving(false)}
   }
-  const filtered=useMemo(()=>{const term=search.trim().toLocaleLowerCase('pt-BR');return term?items.filter(x=>`${x.name} ${x.phone??''} ${x.origin??''}`.toLocaleLowerCase('pt-BR').includes(term)):items},[items,search])
+  const filtered=useMemo(()=>{const term=search.trim().toLocaleLowerCase('pt-BR');return term?items.filter(x=>matchesSearch(`${x.name} ${x.phone??''} ${x.origin??''}`,term)):items},[items,search])
   return <Page title="Prospecção" description="Contatos e parcerias B2B acompanhados até o orçamento." action={<button className="button primary" onClick={()=>edit()}><Plus/>Nova oportunidade</button>}>
     <section className="panel"><div className="toolbar"><label className="search"><Search/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Nome, telefone ou origem"/></label><span>{filtered.length} oportunidade(s)</span></div>
       {loading?<p className="panel-message">Carregando prospecção…</p>:<div className="opportunity-board">{opportunityStages.map(stage=><section className="opportunity-column" key={stage}><header><strong>{opportunityLabels[stage]}</strong><span>{filtered.filter(x=>x.stage===stage).length}</span></header>{filtered.filter(x=>x.stage===stage).map(item=><button className="opportunity-card" key={item.id} onClick={()=>edit(item)}><strong>{item.name}</strong><span>{item.phone||item.email||'Contato não informado'}</span>{item.estimated_value!==null&&item.estimated_value>0&&<b>{money.format(item.estimated_value)}</b>}{item.next_follow_up_at&&<small className={isOpportunityOverdue(item.next_follow_up_at)?'overdue':''}><Clock3/>{new Date(item.next_follow_up_at).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})}</small>}</button>)}</section>)}</div>}

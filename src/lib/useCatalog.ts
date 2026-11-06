@@ -3,7 +3,7 @@ import { useAccess } from '../components/AuthorizedAccess'
 import { supabase } from './supabase'
 import { catalogPayload } from './catalog'
 import {loadAllPages} from './loadAllPages'
-import {catalogSearchFilter} from './catalogSearch'
+import {catalogSearchFilter,catalogSearchPatterns} from './catalogSearch'
 
 export function useCatalog<T extends { id: string; name: string }>(table: 'clients' | 'supplies', columns: string, options?:{enabled?:boolean;page?:number;pageSize?:number;search?:string;category?:string;order?:string;ascending?:boolean}) {
   const access = useAccess()
@@ -29,7 +29,7 @@ export function useCatalog<T extends { id: string; name: string }>(table: 'clien
         const query=(from:number,to:number)=>{
           let request=supabase!.from(table).select(columns,{count:'exact'}).eq('organization_id',access.organizationId)
           const term=options?.search?.trim()
-          if(term)request=request.or(catalogSearchFilter(term))
+          if(term){if(table==='supplies'){for(const pattern of catalogSearchPatterns(term))request=request.ilike('search_text',pattern)}else request=request.or(catalogSearchFilter(term))}
           if(table==='supplies'&&options?.category)request=request.eq('category',options.category)
           return request.order(options?.order??'name',{ascending:options?.ascending??true}).order('id').range(from,to).abortSignal(controller.signal) as unknown as PromiseLike<{data:T[]|null;error:unknown;count:number|null}>
         }

@@ -1,3 +1,4 @@
+import { matchesSearch } from '../lib/searchOptions'
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { PackageCheck, Search } from 'lucide-react';
 import { Page } from '../components/Page';
@@ -27,7 +28,7 @@ export function Orders() {
         setOrders((data ?? []) as unknown as Order[]); setLoading(false); }, [access]);
     useEffect(() => { void load(); }, [load]);
     const detailId = readRoute(window.location.hash).recordId, detailOrder = detailId ? orders.find(order => order.id === detailId) ?? null : null;
-    const matching = useMemo(() => { const term = search.trim().toLocaleLowerCase('pt-BR'); return orders.filter(x => matchesDashboardFocus(x.id,dashboardFocus,x) && (!term || `${x.display_number} ${x.client?.name ?? ''} ${x.budget?.display_number ?? ''} ${labels[x.status]}`.toLocaleLowerCase('pt-BR').includes(term)) && inDateRange(x.promised_date, dateRange)); }, [orders, search, dateRange,dashboardFocus]);
+    const matching = useMemo(() => { const term = search.trim().toLocaleLowerCase('pt-BR'); return orders.filter(x => matchesDashboardFocus(x.id,dashboardFocus,x) && (!term || matchesSearch(`${x.display_number} ${x.client?.name ?? ''} ${x.budget?.display_number ?? ''} ${labels[x.status]}`,term)) && inDateRange(x.promised_date, dateRange)); }, [orders, search, dateRange,dashboardFocus]);
     const filtered = useMemo(() => { const selected = cardFilter === 'active' ? matching.filter(x => !['completed', 'cancelled'].includes(x.status)) : cardFilter ? matching.filter(x => x.status === cardFilter) : matching; return [...selected].sort((a, b) => { const values = { order: [a.display_number, b.display_number], origin: [a.budget?.display_number ?? '', b.budget?.display_number ?? ''], created: [a.created_at, b.created_at], delivery: [a.promised_date ?? '', b.promised_date ?? ''], items: [a.order_items.length, b.order_items.length], value: [Number(a.total), Number(b.total)], status: [labels[a.status], labels[b.status]] }[sort.key]; return compareValues(values[0], values[1]) * (sort.direction === 'asc' ? 1 : -1); }); }, [matching, cardFilter, sort]);
     const requestStatus = (order: Order, next: OrderStatus) => { if (next === order.status)
         return; if (next === 'cancelled') {

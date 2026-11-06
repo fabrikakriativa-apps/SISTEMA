@@ -1,3 +1,4 @@
+import { matchesSearch } from '../lib/searchOptions'
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { ArrowRight, CalendarDays, CircleDollarSign, Landmark, Search, WalletCards, X } from 'lucide-react';
 import type { ModuleKey } from '../domain';
@@ -59,7 +60,7 @@ function ReceivablesPanel({ period }: {
         setItems((data ?? []) as unknown as Receivable[]); setLoading(false); }, [access]);
     useEffect(() => { void load(); }, [load]);
     const periodItems = useMemo(() => items.filter(x => matchesDashboardFocus(x.id,dashboardFocus,x) && matchesPeriod(x.due_date, period) && inDateRange(x.due_date, dateRange)), [items, period, dateRange,dashboardFocus]);
-    const matching = useMemo(() => { const term = search.trim().toLocaleLowerCase('pt-BR'); return term ? periodItems.filter(x => `${x.description} ${x.order?.display_number ?? ''} ${x.order?.client?.name ?? ''} ${x.payment_method ?? ''}`.toLocaleLowerCase('pt-BR').includes(term)) : periodItems; }, [periodItems, search]);
+    const matching = useMemo(() => { const term = search.trim().toLocaleLowerCase('pt-BR'); return term ? periodItems.filter(x => matchesSearch(`${x.description} ${x.order?.display_number ?? ''} ${x.order?.client?.name ?? ''} ${x.payment_method ?? ''}`,term)) : periodItems; }, [periodItems, search]);
     const filtered = useMemo(() => {
         const valid = matching.filter(x => !['cancelled', 'reversed'].includes(x.status));
         const selected = summaryFilter === 'groups' ? valid.filter((item, index, list) => list.findIndex(candidate => candidate.group_id === item.group_id) === index) : summaryFilter === 'history' ? matching.filter(x => ['cancelled', 'reversed'].includes(x.status)) : valid.filter(x=>matchesFinancialCard(x,summaryFilter,localDate(new Date())));

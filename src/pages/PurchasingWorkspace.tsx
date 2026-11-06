@@ -1,3 +1,4 @@
+import { matchesSearch } from '../lib/searchOptions'
 import {useCallback,useEffect,useMemo,useState} from 'react'
 import {Search,Plus,X,RefreshCw} from 'lucide-react'
 import {PurchasingDocuments} from '../components/PurchasingDocuments'
@@ -45,7 +46,7 @@ export function PurchasingWorkspace(){
  useEffect(()=>{void load()},[load])
  const byId=useMemo(()=>new Map(items.map(i=>[i.id,i])),[items])
  const itemText=(i?:WorkspaceItem)=>i?[i.order?.display_number,i.order?.client?.name,i.snapshot.environment,i.snapshot.description].filter(Boolean).join(' · '):'Item não disponível'
- const matches=(text:string)=>normalizeSearchText(text).includes(normalizeSearchText(query))
+ const matches=(text:string)=>matchesSearch(text,query)
  const activeItem=(i:WorkspaceItem)=>i.status!=='cancelled'&&i.order?.status!=='cancelled'&&(status!=='active'||i.order?.status!=='completed')
  const summaryFor=(i:WorkspaceItem)=>{const linked=purchases.filter(p=>!['cancelled','returned'].includes(p.status)&&p.purchase_items.some(l=>l.order_item_id===i.id));return purchasingSummary(linked.length&&i.procurement_review==='pending'?{procurement_review:'needed'}:i,[...needs.filter(n=>n.order_item_id===i.id),...linked.map(p=>({status:p.status==='completed'?'received':p.status==='draft'?'awaiting_purchase':'awaiting_supplier'}))],linked.some(p=>p.status==='draft'))}
  const visibleItems=items.filter(i=>activeItem(i)&&matches(itemText(i)+' '+needs.filter(n=>n.order_item_id===i.id).map(n=>n.description+' '+n.supplier_name).join(' '))&&(status==='active'||status==='all'||summaryFor(i)===status)).sort((a,b)=>(b.order?.display_number??'').localeCompare(a.order?.display_number??''))
