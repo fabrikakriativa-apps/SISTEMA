@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { CalendarDays, ChevronDown, ChevronRight, CircleDollarSign, ContactRound, FileText, Handshake, Home, LogOut, Menu, PackageCheck, PanelLeftClose, Sparkles, Settings, ShoppingCart, UsersRound } from 'lucide-react'
+import { CalendarDays, ChevronDown, ChevronRight, CircleDollarSign, ContactRound, FileText, Handshake, Home, LogOut, Menu, PackageCheck, PanelLeftClose, Settings, ShoppingCart, UsersRound } from 'lucide-react'
 import type { ModuleKey } from '../domain'
 import { supabase } from '../lib/supabase'
 import { brandMarkSrc } from '../lib/brand'
@@ -8,7 +8,7 @@ type NavItem = { key: ModuleKey; label: string; icon: typeof Home }
 const groups: { label: string; items: NavItem[] }[] = [
   { label: 'Principal', items: [
     { key:'inicio', label:'Visão geral', icon:Home }, { key:'prospeccao', label:'Prospecção', icon:Handshake },
-    { key:'atendimento-ia', label:'Atendimento IA', icon:Sparkles }, { key:'clientes', label:'Leads e clientes', icon:UsersRound }, { key:'orcamentos', label:'Orçamentos', icon:FileText },
+    { key:'clientes', label:'Leads e clientes', icon:UsersRound }, { key:'orcamentos', label:'Orçamentos', icon:FileText },
     { key:'pedidos', label:'Pedidos', icon:PackageCheck }, { key:'agenda', label:'Agenda', icon:CalendarDays },
   ]},
   { label: 'Operação', items: [{ key:'compras', label:'Compras', icon:ShoppingCart },{ key:'prestadores', label:'Carga de prestadores', icon:CalendarDays }] },
