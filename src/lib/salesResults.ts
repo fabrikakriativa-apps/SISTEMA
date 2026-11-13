@@ -67,6 +67,6 @@ export function calculateSalesResults(leads:SalesLead[],budgets:SalesBudget[],or
   })
   return {key,orders:deals,buyers:new Set(deals.map(o=>orderOwners.get(o.budget_id)?.id).filter(Boolean)).size,value:deals.reduce((s,o)=>s+Number(o.total),0)}
  })
- const responseGroups=(['no_interaction','pre_proposal_no_response','proposal_no_response','no_response'] as const).map(key=>({key,leads:rows.filter(l=>!l.deals.length&&l.stage!=='won'&&l.stage!=='lost'&&resolvedResponse(l.response_status,l.proposals.length>0)===key)}))
+ const responseGroups=(['no_interaction','pre_proposal_no_response','proposal_no_response','no_response'] as const).map(key=>({key,leads:rows.filter(l=>!l.deals.length&&l.stage!=='won'&&resolvedResponse(l.response_status,l.proposals.length>0)===key)}))
  return {responseGroups,rows,buyers,immediate,proposals:rows.filter(l=>l.proposals.length),qualified:rows.filter(l=>l.profile_status==='in_profile'),outside:rows.filter(l=>l.profile_status==='out_of_profile'),unassessed:rows.filter(l=>l.profile_status==='unassessed'),noResponse:rows.filter(l=>l.response_status==='no_response'&&!l.deals.length),lost:rows.filter(l=>l.stage==='lost'&&l.response_status!=='no_response'&&!l.deals.length),groups,closed,unknownEntry:activeLeads.filter(l=>!l.received_on).length,historyStarts:history.map(e=>salesDay(e.recorded_at)).sort()[0]??null}
 }

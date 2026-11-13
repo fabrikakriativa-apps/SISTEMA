@@ -16,7 +16,7 @@ describe('resultados comerciais',()=>{
   expect(calculateSalesResults(leads,[],[],h,range,'2026-11-02').responseGroups[0].leads).toHaveLength(0)
   const closed=leads.map(l=>({...l,stage:'lost'}))
   const lost=closed.map(l=>event('opportunity',l.id,'2026-10-20T12:00:00Z',{stage:'lost',response_status:l.response_status}))
-  expect(calculateSalesResults(closed,[],[],lost,range,'2026-10-31').responseGroups.flatMap(g=>g.leads)).toHaveLength(0)
+  expect(calculateSalesResults(closed,[],[],lost,range,'2026-10-31').responseGroups.map(g=>g.leads.length)).toEqual([1,1,1,1])
  })
  it('explica entrada posterior ao pedido sem confundir com origem comercial',()=>{
   const o={...orders[0],created_at:'2026-10-08T12:00:00Z'}
