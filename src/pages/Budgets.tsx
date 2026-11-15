@@ -55,6 +55,15 @@ type ItemForm={id?:string;family_id:string;environment:string;description:string
 type PdfRow={selected:boolean;environment:string;presentation:'principal'|'option';margin_percent:number;sale_total:number}
 type Attachment={id:string;original_name:string;storage_path:string;created_at:string}
 type ItemPhoto={id:string;original_name:string;storage_path:string;created_at:string}
+type CurtainCalculatorPayload={
+  schema:'fk-curtain-calculation-v1';generatedAt:string;client:string;reference:string;neighborhood:string;description:string;environment:string
+  faces:Array<{name:string;environment:string;model:string;opening:string;width:number;height:number;fabric:string;collection:string;totalFabric:number;decorativeFinish:string;rod:string;materials:number;labor:number;cost:number;sale:number;installation:number;total:number}>
+  summary:{materials:number;labor:number;cost:number;installation:number;sale:number;total:number}
+  calculatorState:Record<string,unknown>
+}
+
+const CURTAIN_CALCULATOR_ORIGIN='https://sistema-calculo-cortinas.michellemahs.chatgpt.site'
+const CURTAIN_CALCULATOR_URL=`${CURTAIN_CALCULATOR_ORIGIN}/?crm=1`
 
 const blankEditable:Editable = { client_id:null, client_address:'', client_address_edited:false, valid_until:null, payment_terms:'', delivery_terms:'', notes:'', internal_notes:'', discount:0 }
 const newBlankItem=():ItemForm=>({family_id:'',environment:'',description:'',quantity:1,presentation:'principal',manufacturer_cost:0,additional_cost:0,margin_percent:50,sale_total:0,confection_subitem:'',initial_configuration:{}})
@@ -246,6 +255,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   const [pdfReading,setPdfReading]=useState(false),[pdfDragging,setPdfDragging]=useState(false),[pdfResult,setPdfResult]=useState<ParsedManufacturerDocument|null>(null),[pdfName,setPdfName]=useState(''),[pdfCandidate,setPdfCandidate]=useState(0)
   const [pdfFile,setPdfFile]=useState<File|null>(null),[attachments,setAttachments]=useState<Attachment[]>([]),[itemPhotos,setItemPhotos]=useState<ItemPhoto[]>([]),[photoUploading,setPhotoUploading]=useState(false)
   const [pdfRows,setPdfRows]=useState<PdfRow[]>([])
+  const curtainCalculatorWindow=useRef<Window|null>(null)
   const [itemPendingDelete,setItemPendingDelete]=useState<BudgetItem|null>(null)
   const [upholsteryEstimate,setUpholsteryEstimate]=useState<UpholsteryEstimate>(newUpholsteryEstimate)
   const [previewOpen,setPreviewOpen]=useState(false)
@@ -305,6 +315,44 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   const confectionSelected=selectedFormKey==='confection'
   const supportsUpholsteryCalculator=selectedFormKey==='confection'||selectedFormKey==='upholstery'
   const selectItemFamily=(value:string)=>setItemForm(current=>({...current,family_id:value,confection_subitem:''}))
+  const openCurtainCalculator=()=>{
+    const calculator=window.open(CURTAIN_CALCULATOR_URL,'fk-curtain-calculator','popup,width=1500,height=950,resizable=yes,scrollbars=yes')
+    if(!calculator){show('O navegador bloqueou a calculadora. Permita pop-ups para este site e tente novamente.','error');return}
+    curtainCalculatorWindow.current=calculator
+    calculator.focus()
+  }
+  useEffect(()=>{
+    const receiveCalculatorMessage=(event:MessageEvent)=>{
+      if(event.origin!==CURTAIN_CALCULATOR_ORIGIN||event.source!==curtainCalculatorWindow.current)return
+      if(event.data?.type==='FK_CURTAIN_CALCULATOR_READY'){
+        const previous=itemForm.initial_configuration.curtain_calculator as CurtainCalculatorPayload|undefined
+        curtainCalculatorWindow.current?.postMessage({type:'FK_CURTAIN_CALCULATOR_CONTEXT',payload:{client:client?.name??'',reference:budget.display_number,neighborhood:'',calculatorState:previous?.calculatorState??null}},CURTAIN_CALCULATOR_ORIGIN)
+        return
+      }
+      if(event.data?.type!=='FK_CURTAIN_CALCULATOR_RESULT')return
+      const payload=event.data.payload as CurtainCalculatorPayload|undefined
+      if(!payload||payload.schema!=='fk-curtain-calculation-v1'||!Array.isArray(payload.faces)||!payload.faces.length)return
+      const curtainCost=Number(payload.summary.cost)||0
+      const installation=Number(payload.summary.installation)||0
+      const saleTotal=Number(payload.summary.total)||0
+      const totalCost=curtainCost+installation
+      setSupplyLines([]);setLaborLines([])
+      setItemForm(current=>({
+        ...current,
+        environment:payload.environment||current.environment,
+        description:payload.description,
+        quantity:1,
+        manufacturer_cost:curtainCost,
+        additional_cost:installation,
+        sale_total:saleTotal,
+        margin_percent:marginFromSalePrice(totalCost,saleTotal),
+        initial_configuration:{...current.initial_configuration,source:'curtain_calculator',curtain_calculator:payload}
+      }))
+      show(`Cálculo recebido: ${payload.faces.length} face(s) consolidadas em um único item Cortina.`,'success')
+    }
+    window.addEventListener('message',receiveCalculatorMessage)
+    return()=>window.removeEventListener('message',receiveCalculatorMessage)
+  },[budget.display_number,client?.name,itemForm.initial_configuration,show])
   const stateLabel=saveState==='saving'?'Salvando…':saveState==='waiting'?'Alterações pendentes':saveState==='error'?'Falha ao salvar':'Alterações salvas'
   const loadItems=useCallback(async()=>{
     if(!supabase)return
@@ -821,7 +869,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <div>
 <span className="eyebrow">{isPreBudget?'Item do pré-orçamento':'Item do orçamento'}</span>
 <h2>{itemForm.id?(canEditItems?'Editar item':'Visualizar item'):'Adicionar item'}</h2>
-<p>{canEditItems?(isPreBudget?'Registre a referência, as medidas aproximadas e o custo estimado.':'Cortina e Persiana podem ser preenchidas pela leitura do PDF e sempre passam por conferência.'):'Esta versão está preservada e disponível somente para consulta. Crie uma revisão para alterá-la.'}</p>
+<p>{canEditItems?(isPreBudget?'Registre a referência, as medidas aproximadas e o custo estimado.':'Cortina pode ser calculada manualmente; Cortina e Persiana também podem ser preenchidas pela leitura do PDF e sempre passam por conferência.'):'Esta versão está preservada e disponível somente para consulta. Crie uma revisão para alterá-la.'}</p>
 </div>
 <button type="button" className="icon-button" onClick={()=>setItemOpen(false)}>
 <X/>
@@ -857,6 +905,10 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <option value="">Selecione</option>{families.map(x=>
 <option key={x.id} value={x.id}>{x.name}</option>)}</select>
 </label>
+{selectedFormKey==='curtain'&&<section className="curtain-calculator-panel span-2">
+<div><strong>Calculadora de cortinas</strong><p>Calcule uma ou várias faces. Ao enviar, todas serão consolidadas neste único item Cortina.</p>{Boolean(itemForm.initial_configuration.curtain_calculator)&&<small>Cálculo vinculado. Abra novamente para editar e reenviar os valores.</small>}</div>
+<button type="button" className="button secondary" onClick={openCurtainCalculator}><FileText/>{itemForm.initial_configuration.curtain_calculator?'Editar cálculo':'Calcular manualmente'}</button>
+</section>}
 {fields.environment&&<label className="field">Ambiente<input value={itemForm.environment} onChange={e=>setItemForm({...itemForm,environment:e.target.value})} placeholder="Ex.: Sala"/>
 </label>}{confectionSelected&&<label className="field span-2">Subitem de confecção<select required value={itemForm.confection_subitem} onChange={e=>setItemForm({...itemForm,confection_subitem:e.target.value})}>
 <option value="">Selecione</option>{confectionSubitems.map(subitem=><option key={subitem} value={subitem}>{subitem}</option>)}</select>
