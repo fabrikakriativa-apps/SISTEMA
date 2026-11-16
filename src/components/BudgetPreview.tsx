@@ -1,3 +1,4 @@
+import { CustomerAddress } from './CustomerAddress'
 import { Printer, X } from 'lucide-react'
 import { money } from '../lib/format'
 import { SaveDocumentImage } from './SaveDocumentImage'
@@ -16,7 +17,7 @@ export function BudgetPreview({budget,items,paymentOptions,clientName,clientAddr
       <div className="preview-toolbar"><div><strong>Prévia do {isPreBudget ? 'pré-orçamento' : 'orçamento'} para o cliente</strong><span>Esta é a mesma versão usada na impressão e no PDF.</span></div><button className="button secondary" onClick={() => window.print()}><Printer/>Imprimir / salvar PDF</button><SaveDocumentImage number={budget.display_number}/><button className="icon-button" aria-label="Fechar prévia" onClick={onClose}><X/></button></div>
       <article className="client-document budget-client-document">
         <header><div className="document-brand"><span>FK</span><div><strong>FÁBRIKA KRIATIVA</strong><small>Soluções personalizadas para ambientes</small></div></div><div className="document-number"><small>{isPreBudget ? 'PRÉ-ORÇAMENTO' : 'ORÇAMENTO'}</small><strong>{budget.display_number}</strong><span>{date(budget.created_at)}</span></div></header>
-        <section className="budget-client-heading"><div><small>PROPOSTA PARA</small><strong>{clientName}</strong>{clientAddress && <span>{clientAddress}</span>}</div><div><small>VALIDADE</small><strong>{date(budget.valid_until)}</strong>{budget.delivery_terms && <span>Previsão: {budget.delivery_terms}</span>}</div></section>
+        <section className="budget-client-heading"><div><small>PROPOSTA PARA</small><strong>{clientName}</strong>{clientAddress && <CustomerAddress address={clientAddress}/>}</div><div><small>VALIDADE</small><strong>{date(budget.valid_until)}</strong>{budget.delivery_terms && <span>Previsão: {budget.delivery_terms}</span>}</div></section>
         <section className="budget-document-items">
           {visibleItems.length ? visibleItems.map((item,index) => <BudgetItem key={item.id} item={item} index={index} paymentOptions={paymentOptions[item.id] ?? []}/>) : <div className="document-empty">Nenhum item incluído neste {isPreBudget ? 'pré-orçamento' : 'orçamento'}.</div>}
         </section>

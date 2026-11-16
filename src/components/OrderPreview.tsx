@@ -1,3 +1,4 @@
+import { CustomerAddress } from './CustomerAddress'
 import { Printer, X } from 'lucide-react'
 import {customerPaymentLabel,type PaymentGroup} from '../lib/orderPaymentPlan'
 import { money } from '../lib/format'
@@ -32,7 +33,7 @@ export function OrderPreview({order,onClose}:{order:PreviewOrder;onClose:()=>voi
           <div className="document-number"><small>PEDIDO</small><strong>{order.display_number}</strong><span>{displayDate(order.created_at)}</span></div>
         </header>
         <section className="document-client">
-          <div><small>CLIENTE</small><strong>{order.client?.name ?? 'Cliente não informado'}</strong>{order.client?.document&&<span>CPF/CNPJ: {order.client.document}</span>}{address && <span>{address}</span>}</div>
+          <div><small>CLIENTE</small><strong>{order.client?.name ?? 'Cliente não informado'}</strong>{order.client?.document&&<span>CPF/CNPJ: {order.client.document}</span>}{address && <CustomerAddress address={address}/>}</div>
           <div><small>CONDIÇÕES</small><strong>Pagamento: {paymentTerms}</strong><span>Prazo de entrega: {displayDate(order.promised_date)}</span></div>
         </section>
         <section className="document-items order-document-items">
