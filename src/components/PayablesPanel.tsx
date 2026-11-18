@@ -22,7 +22,7 @@ type OrderItem = { id: string; budget_item_id: string; snapshot: { description?:
 type Order = { id: string; display_number: string; client: { name: string } | null; order_items: OrderItem[] }
 type Payable = {
   id: string; group_id: string; installment: number; installment_count: number
-  description: string; due_date: string | null; amount: number; paid_amount: number
+  description: string; due_date: string | null; paid_at: string | null; amount: number; paid_amount: number
   status: string; payment_method: string | null; purchase_id: string | null
   order_id: string | null; budget_item_id: string | null
   supplier: { id: string; name: string } | null
@@ -75,7 +75,7 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
   const [search, setSearch] = useState('')
   const [cardFilter, setCardFilter] = useState<FinancialCardFilter>('all')
   const [dateRange, setDateRange] = useState<DateRange>({ from: '', to: '' })
-  const [sort, setSort] = useState<SortState<'installment' | 'order' | 'due' | 'amount' | 'status'>>({ key: 'due', direction: 'asc' })
+  const [sort, setSort] = useState<SortState<'installment' | 'order' | 'due' | 'paid' | 'amount' | 'status'>>({ key: 'due', direction: 'asc' })
   const [open, setOpen] = useState(false)
   const [supplierEditorOpen, setSupplierEditorOpen] = useState(false)
   const [selected, setSelected] = useState<Payable | null>(null)
@@ -97,7 +97,7 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
   const load = useCallback(async () => {
     if (!supabase) return
     const [payablesResult, suppliersResult, ordersResult, allocationsResult] = await Promise.all([
-      supabase.from('payables').select('id,group_id,installment,installment_count,description,due_date,amount,paid_amount,status,payment_method,purchase_id,order_id,budget_item_id,supplier:suppliers!payables_supplier_id_fkey(id,name),purchase:purchases!payables_purchase_id_fkey(display_number,supplier:suppliers!purchases_supplier_id_fkey(name)),order:orders!payables_order_id_fkey(display_number,client:clients!orders_client_id_fkey(name)),budget_item:budget_items!payables_budget_item_id_fkey(description,environment)').eq('organization_id', organizationId).order('due_date'),
+      supabase.from('payables').select('id,group_id,installment,installment_count,description,due_date,paid_at,amount,paid_amount,status,payment_method,purchase_id,order_id,budget_item_id,supplier:suppliers!payables_supplier_id_fkey(id,name),purchase:purchases!payables_purchase_id_fkey(display_number,supplier:suppliers!purchases_supplier_id_fkey(name)),order:orders!payables_order_id_fkey(display_number,client:clients!orders_client_id_fkey(name)),budget_item:budget_items!payables_budget_item_id_fkey(description,environment)').eq('organization_id', organizationId).order('due_date'),
       supabase.from('suppliers').select('id,name').eq('organization_id', organizationId).eq('active', true).order('name'),
       supabase.from('orders').select('id,display_number,client:clients!orders_client_id_fkey(name),order_items:order_items!order_items_order_id_fkey(id,budget_item_id,snapshot)').eq('organization_id', organizationId).neq('status', 'cancelled').order('number', { ascending: false }),
       supabase.from('payable_allocations').select('group_id,order_id,budget_item_id,amount').eq('organization_id', organizationId),
@@ -119,7 +119,7 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
     const linkedText=savedAllocations.filter(row=>row.group_id===item.group_id).map(row=>{const order=orders.find(order=>order.id===row.order_id);return `${order?.display_number??''} ${order?.client?.name??''}`}).join(' ')
     return dueMatchesPeriod && inDateRange(item.due_date, dateRange) && (!term || matchesSearch(`${linkedText} ${item.description} ${item.supplier?.name ?? ''} ${item.purchase?.supplier?.name ?? ''} ${item.order?.display_number ?? ''} ${item.budget_item?.description ?? ''}`,term))
   }).sort((a, b) => {
-    const values = { installment: [a.installment, b.installment], order: [a.purchase?.display_number ?? a.order?.display_number ?? a.supplier?.name ?? '', b.purchase?.display_number ?? b.order?.display_number ?? b.supplier?.name ?? ''], due: [a.due_date ?? '', b.due_date ?? ''], amount: [Number(a.amount), Number(b.amount)], status: [statusLabel[a.status] ?? a.status, statusLabel[b.status] ?? b.status] }[sort.key]
+    const values = { installment: [a.installment, b.installment], order: [a.purchase?.display_number ?? a.order?.display_number ?? a.supplier?.name ?? '', b.purchase?.display_number ?? b.order?.display_number ?? b.supplier?.name ?? ''], due: [a.due_date ?? '', b.due_date ?? ''], paid: [a.paid_at ?? '', b.paid_at ?? ''], amount: [Number(a.amount), Number(b.amount)], status: [statusLabel[a.status] ?? a.status, statusLabel[b.status] ?? b.status] }[sort.key]
     return compareValues(values[0], values[1]) * (sort.direction === 'asc' ? 1 : -1)
   }), [items, period, search, dateRange, sort, savedAllocations, orders])
 
@@ -220,15 +220,16 @@ export function PayablesPanel({ organizationId, period }: { organizationId: stri
         <button className="button primary" onClick={beginCreate}><Plus /> Nova conta a pagar</button>
       </div>
       <FinancialFilterTotals summary={filteredSummary} kind="payable" active={cardFilter} onSelect={filter=>setCardFilter(current=>current===filter?'all':filter)}/>
-      <div className="table-wrap"><table><thead><tr><SortableHeader label="Parcelas" column="installment" sort={sort} onChange={setSort} /><SortableHeader label="Pedido / fornecedor" column="order" sort={sort} onChange={setSort} /><SortableHeader label="Vencimento" column="due" sort={sort} onChange={setSort} /><SortableHeader label="Valor / saldo" column="amount" sort={sort} onChange={setSort} /><SortableHeader label="Status" column="status" sort={sort} onChange={setSort} /></tr></thead><tbody>
+      <div className="table-wrap"><table><thead><tr><SortableHeader label="Parcelas" column="installment" sort={sort} onChange={setSort} /><SortableHeader label="Pedido / fornecedor" column="order" sort={sort} onChange={setSort} /><SortableHeader label="Vencimento" column="due" sort={sort} onChange={setSort} /><SortableHeader label="Pagamento" column="paid" sort={sort} onChange={setSort} /><SortableHeader label="Valor / saldo" column="amount" sort={sort} onChange={setSort} /><SortableHeader label="Status" column="status" sort={sort} onChange={setSort} /></tr></thead><tbody>
         {visible.map(item => <tr className="clickable-row" key={item.id} onClick={() => setSelected(item)}>
           <td><strong>Parcela {item.installment}/{item.installment_count}</strong><small className="table-subline">{item.installment_count > 1 ? `${item.installment_count} parcelas vinculadas` : 'Lançamento único'}</small></td>
           <td style={{whiteSpace:'normal',minWidth:240,maxWidth:520}}>{allocationRows(item.group_id).length?allocationRows(item.group_id).map(renderAllocation):<><strong style={{display:'block'}}>{item.order?.display_number ?? item.purchase?.display_number ?? 'Sem pedido vinculado'}</strong>{item.order?.client?.name&&<span className="table-subline">{item.order.client.name}</span>}{item.budget_item&&<span className="table-subline">{itemLabel(item.budget_item)}</span>}</>}<small className="table-subline">Fornecedor: {item.supplier?.name ?? item.purchase?.supplier?.name ?? 'Não informado'}</small></td>
           <td>{formatDate(item.due_date)}</td>
+          <td>{item.paid_at ? formatDate(item.paid_at) : item.status === 'settled' ? 'Data não informada' : Number(item.paid_amount)>0 ? 'Parcial — sem quitação' : '—'}</td>
           <td className="payable-value"><strong>{money.format(Number(item.amount))}</strong><small><span>Pago: {money.format(Number(item.paid_amount))}</span><span>Saldo: {money.format(Math.max(0, Number(item.amount) - Number(item.paid_amount)))}</span></small></td>
           <td><select className="status-select" aria-label={`Status parcela ${item.installment} de ${item.description}`} value={item.status} onClick={event=>event.stopPropagation()} onChange={event=>{if(event.target.value==='pay')beginPaymentAction(item,'pay');if(event.target.value==='reverse')beginPaymentAction(item,'reverse')}}><option value={item.status}>{statusLabel[item.status]??item.status}</option>{['open','overdue','partial'].includes(item.status)&&<option value="pay">Registrar pagamento…</option>}{Number(item.paid_amount)>0&&['partial','settled'].includes(item.status)&&<option value="reverse">Estornar / reabrir…</option>}</select></td>
         </tr>)}
-        {!visible.length && <tr><td colSpan={5} className="empty">Nenhuma conta a pagar encontrada.</td></tr>}
+        {!visible.length && <tr><td colSpan={6} className="empty">Nenhuma conta a pagar encontrada.</td></tr>}
       </tbody></table></div>
     </section>
 
