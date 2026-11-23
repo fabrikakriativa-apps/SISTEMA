@@ -314,8 +314,21 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
   const fields=itemFieldRules(selectedFormKey)
   const confectionSelected=selectedFormKey==='confection'
   const supportsUpholsteryCalculator=selectedFormKey==='confection'||selectedFormKey==='upholstery'
+  const curtainFabrics=useMemo(()=>supplies.filter(supply=>{
+    const linked=String(supply.import_details?.['Itens de orçamento vinculados']??'')
+    return supply.category.trim().toLocaleLowerCase('pt-BR')==='tecido'&&linked.toLocaleLowerCase('pt-BR').includes('cortina')
+  }).map(supply=>({
+    id:supply.id,
+    code:supply.code,
+    name:supply.name,
+    collection:String(supply.import_details?.['Catálogo']??''),
+    supplier:String(supply.import_details?.['Fornecedor']??supply.brand??''),
+    width:Number(supply.import_details?.['Largura']??0)||3,
+    price:Number(supply.current_cost)||0
+  })).sort((a,b)=>a.name.localeCompare(b.name,'pt-BR')),[supplies])
   const selectItemFamily=(value:string)=>setItemForm(current=>({...current,family_id:value,confection_subitem:''}))
   const openCurtainCalculator=()=>{
+    if(!curtainFabrics.length){show('A lista de tecidos de cortina ainda está carregando. Aguarde alguns segundos e tente novamente.','info');return}
     const calculator=window.open(CURTAIN_CALCULATOR_URL,'fk-curtain-calculator','popup,width=1500,height=950,resizable=yes,scrollbars=yes')
     if(!calculator){show('O navegador bloqueou a calculadora. Permita pop-ups para este site e tente novamente.','error');return}
     curtainCalculatorWindow.current=calculator
@@ -326,7 +339,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
       if(event.origin!==CURTAIN_CALCULATOR_ORIGIN||event.source!==curtainCalculatorWindow.current)return
       if(event.data?.type==='FK_CURTAIN_CALCULATOR_READY'){
         const previous=itemForm.initial_configuration.curtain_calculator as CurtainCalculatorPayload|undefined
-        curtainCalculatorWindow.current?.postMessage({type:'FK_CURTAIN_CALCULATOR_CONTEXT',payload:{client:client?.name??'',reference:budget.display_number,neighborhood:'',calculatorState:previous?.calculatorState??null}},CURTAIN_CALCULATOR_ORIGIN)
+        curtainCalculatorWindow.current?.postMessage({type:'FK_CURTAIN_CALCULATOR_CONTEXT',payload:{client:client?.name??'',reference:budget.display_number,neighborhood:'',calculatorState:previous?.calculatorState??null,curtainFabrics,fabricsSyncedAt:new Date().toISOString()}},CURTAIN_CALCULATOR_ORIGIN)
         return
       }
       if(event.data?.type!=='FK_CURTAIN_CALCULATOR_RESULT')return
@@ -352,7 +365,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     }
     window.addEventListener('message',receiveCalculatorMessage)
     return()=>window.removeEventListener('message',receiveCalculatorMessage)
-  },[budget.display_number,client?.name,itemForm.initial_configuration,show])
+  },[budget.display_number,client?.name,curtainFabrics,itemForm.initial_configuration,show])
   const stateLabel=saveState==='saving'?'Salvando…':saveState==='waiting'?'Alterações pendentes':saveState==='error'?'Falha ao salvar':'Alterações salvas'
   const loadItems=useCallback(async()=>{
     if(!supabase)return
@@ -360,7 +373,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     const [familyResult,itemResult,supplyResult,providerResult,attachmentResult,optionResult]=await Promise.all([
       supabase.from('item_families').select('id,name,code,form_key').eq('organization_id',budgetOrganizationId).eq('active',true).order('name'),
       supabase.from('budget_items').select('id,family_id,position,presentation,environment,description,quantity,configuration,cost_total,margin_percent,sale_total,affects_total,family:item_families!budget_items_family_id_fkey(name)').eq('organization_id',budgetOrganizationId).eq('budget_id',budget.id).order('position'),
-      loadAllPages<SupplyOption>((from,to)=>supabase!.from('supplies').select('id,code,name,category,usage_unit,current_cost').eq('organization_id',budgetOrganizationId).eq('active',true).order('name').order('id').range(from,to)),
+      loadAllPages<SupplyOption>((from,to)=>supabase!.from('supplies').select('id,code,name,category,usage_unit,current_cost,brand,reference,import_details').eq('organization_id',budgetOrganizationId).eq('active',true).order('name').order('id').range(from,to)),
       supabase.from('suppliers').select('id,name,phone,supplier_types').eq('organization_id',budgetOrganizationId).eq('active',true).order('name'),
       supabase.from('attachments').select('id,original_name,storage_path,created_at').eq('organization_id',budgetOrganizationId).is('deleted_at',null).eq('entity_type','budget').eq('entity_id',budget.id).order('created_at',{ascending:false}),
       supabase.from('budget_item_payment_options').select('id,budget_item_id,position,description,adjustment_percent,final_value,observation').eq('organization_id',budgetOrganizationId).order('position')

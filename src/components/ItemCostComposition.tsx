@@ -6,7 +6,7 @@ import { SearchSelect } from './SearchSelect'
 import { DecimalInput } from './DecimalInput'
 import './ItemCostComposition.css'
 
-export type SupplyOption={id:string;code:string;name:string;category:string;usage_unit:string;current_cost:number}
+export type SupplyOption={id:string;code:string;name:string;category:string;usage_unit:string;current_cost:number;brand?:string|null;reference?:string|null;import_details?:Record<string,unknown>|null}
 export type SupplyLine={supply_id:string;description:string;quantity:number;unit:string;unit_cost:number}
 
 export function ItemCostComposition({supplies,lines,onChange}:{supplies:SupplyOption[];lines:SupplyLine[];onChange:(lines:SupplyLine[])=>void}){
