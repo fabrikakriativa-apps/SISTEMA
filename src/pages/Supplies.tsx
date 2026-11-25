@@ -58,7 +58,7 @@ export function Supplies(){
 <div className="supplies-filter-group">
 <label className="search">
 <Search/>
-<input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar código, nome ou categoria"/>
+<input value={search} onChange={e=>setSearch(e.target.value)} aria-label="Buscar em todos os campos dos insumos" placeholder="Buscar em todos os campos"/>
 </label>
 <label className="supplies-type"><span>Tipo</span><select aria-label="Filtrar insumos por tipo" value={category} onChange={e=>{setPage(0);setCategory(e.target.value)}} disabled={categoryCatalog.loading}><option value="">Todos os tipos</option>{categories.map(value=><option key={value} value={value}>{value}</option>)}</select></label>
 {category&&<button type="button" className="text-button" onClick={()=>{setPage(0);setCategory('')}}>Limpar tipo</button>}
