@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sistema de Cálculo de Cortinas</title>
+  <meta name="description" content="Orçamentos, custos, produção e compras de cortinas em um único sistema.">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">FK</div>
+      <div><strong>Fábrika Kriativa</strong><span>Cálculo de cortinas</span></div>
+    </div>
+    <nav id="nav" aria-label="Navegação principal">
+      <button class="nav-btn active" data-view="orcamento">Orçamento</button>
+      <button class="nav-btn" data-view="precos">Preços</button>
+      <button class="nav-btn" data-view="costureira">Costureira</button>
+      <button class="nav-btn" data-view="compras">Compras</button>
+      <button class="nav-btn" data-view="historico">Histórico</button>
+    </nav>
+    <div class="header-actions">
+      <button class="btn primary" id="sendToCrm" type="button" hidden>Enviar ao CRM</button>
+      <button class="btn ghost" id="newBudget">Novo</button>
+      <button class="btn primary" id="saveBudget">Salvar</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="view-orcamento" class="view active">
+      <div class="page-heading">
+        <div><p class="eyebrow">ORÇAMENTO ATUAL</p><h1>Composição de cortinas</h1><p>Adicione uma face para cada cortina do mesmo ambiente ou projeto.</p></div>
+        <div class="status"><span class="dot"></span><span id="saveStatus">Dados salvos neste navegador</span></div>
+      </div>
+
+      <section class="card cloud-visit-card" id="cloudVisitCard">
+        <div><p class="eyebrow">VISITA TÉCNICA</p><h2>Salvar para importar no CRM</h2><p id="cloudVisitMessage">Abra esta calculadora pelo CRM para salvar a visita no banco.</p></div>
+        <div class="cloud-visit-actions"><span class="cloud-status" id="cloudVisitStatus">Somente neste aparelho</span><button class="btn secondary" id="cloudSaveDraft" type="button">Salvar rascunho</button><button class="btn primary" id="cloudFinalize" type="button">Finalizar visita</button></div>
+      </section>
+
+      <div class="layout">
+        <div class="workspace">
+          <section class="card client-card">
+            <div class="section-title"><h2>Dados do orçamento</h2><span class="step">1</span></div>
+            <div class="form-grid cols-5">
+              <label>Cliente<input id="client" type="text" placeholder="Nome do cliente"></label>
+              <label>Telefone<input id="clientPhone" type="tel" inputmode="tel" placeholder="(00) 00000-0000"></label>
+              <label>Projeto / referência<input id="reference" type="text" placeholder="Ex.: Sala principal"></label>
+              <label>Bairro<input id="neighborhood" type="text" value="SÃO CAETANO"></label>
+              <label>Desconto à vista (%)<input id="discount" type="number" min="0" max="100" step="0.1" value="5"></label>
+            </div>
+          </section>
+
+          <div class="face-toolbar">
+            <div><h2>Faces da composição</h2><p id="faceCounter">1 de 6 faces</p></div>
+            <button class="btn secondary" id="addFace">+ Adicionar face</button>
+          </div>
+          <div id="faceTabs" class="face-tabs" role="tablist"></div>
+          <div id="faceEditor"></div>
+        </div>
+
+        <aside class="summary-card">
+          <div class="summary-head"><span>Resumo</span><strong id="activeFaces">1 face ativa</strong></div>
+          <div id="faceSummary" class="face-summary"></div>
+          <div class="summary-lines">
+            <div><span>Cortinas</span><strong id="sumCurtains">R$ 0,00</strong></div>
+            <div><span>Instalação</span><strong id="sumInstall">R$ 0,00</strong></div>
+            <div class="total"><span>Total instalado</span><strong id="sumTotal">R$ 0,00</strong></div>
+            <div class="cash"><span>À vista</span><strong id="sumCash">R$ 0,00</strong></div>
+          </div>
+          <div class="print-actions stacked"><button class="btn primary full" id="printBudget">Imprimir orçamento</button><button class="btn ghost full" data-image="cliente">Baixar como imagem</button></div>
+          <p class="summary-note">Os valores são atualizados conforme as entradas e as tabelas de preços.</p>
+        </aside>
+      </div>
+    </section>
+
+    <section id="view-precos" class="view">
+      <div class="page-heading"><div><p class="eyebrow">CADASTROS</p><h1>Tabelas de preços</h1><p>Edite diretamente ou importe arquivos CSV.</p></div><button class="btn ghost" id="exportData">Exportar dados</button></div>
+      <div class="price-grid">
+        <section class="card price-card"><div class="section-title"><div><h2>Tecidos</h2><p>Tecidos ativos aplicáveis a cortina e preço de compra por metro</p></div><label class="import-btn">Importar CSV<input type="file" data-import="fabrics" accept=".csv,text/csv"></label></div><div class="table-wrap"><table><thead><tr><th>Tecido / aplicação</th><th>Coleção</th><th>Largura</th><th>Preço compra/m</th><th></th></tr></thead><tbody id="fabricTable"></tbody></table></div><button class="link-btn" data-add-row="fabrics">+ Adicionar tecido</button></section>
+        <section class="card price-card"><div class="section-title"><div><h2>Insumos e acabamentos</h2><p>Valor unitário e quantidade por metro</p></div><label class="import-btn">Importar CSV<input type="file" data-import="finishes" accept=".csv,text/csv"></label></div><div class="table-wrap"><table><thead><tr><th>Item</th><th>Valor</th><th>Qtd./m</th><th>Grupo</th><th></th></tr></thead><tbody id="finishTable"></tbody></table></div><button class="link-btn" data-add-row="finishes">+ Adicionar insumo</button></section>
+        <section class="card price-card"><div class="section-title"><div><h2>Entretela, mão de obra e instalação</h2><p>Valores compartilhados entre todas as faces</p></div></div><div class="form-grid cols-4"><label>Entretela por metro<input id="interliningPrice" type="number" min="0" step="0.01"></label><label>Mão de obra da costureira por metro<input id="laborRate" type="number" min="0" step="0.01"></label><label>Instalação manual<input id="installManual" type="number" min="0" step="0.01"></label><label>Instalação elétrica<input id="installElectric" type="number" min="0" step="0.01"></label></div></section>
+        <section class="card price-card"><div class="section-title"><div><h2>Parâmetros técnicos de confecção</h2><p>Regras auditáveis usadas pelo motor de corte. Altere somente conforme o padrão da oficina.</p></div></div><div class="form-grid cols-4"><label>Margem superior (cm)<input id="technicalTopSeam" readonly type="number" min="0" step="0.1"></label><label>Margem inferior (cm)<input id="technicalBottomSeam" readonly type="number" min="0" step="0.1"></label><label>Barra sem multiplicação<input id="technicalHemMultiplier" readonly type="number" min="1" step="0.1"></label><label>Margem de emenda (cm)<input id="technicalJoinSeam" type="number" min="0" step="0.1"></label><label>Arredondamento de compra (m)<input id="technicalRounding" type="number" min="0.01" step="0.01"></label><label>Entretela padrão (cm)<input id="technicalInterlining" type="number" min="0" step="1"></label></div><p>Regra fixa de corte: altura final + 4 cm de acabamentos + 10 cm atrás da entretela + barra informada uma única vez.</p><div id="technicalModelTable"></div></section>
+        <section class="card price-card"><div class="section-title"><div><h2>Fixações, ponteiras e suportes</h2><p>Cadastros usados nas opções de cada face</p></div></div><div id="hardwareTables"></div></section>
+      </div>
+    </section>
+
+    <section id="view-costureira" class="view report-view">
+      <div class="page-heading"><div><p class="eyebrow">PRODUÇÃO</p><h1>Ficha da costureira</h1><p>Resumo técnico de todas as faces ativas.</p></div><div class="print-actions"><button class="btn primary" data-print="costureira">Imprimir ficha</button><button class="btn ghost" data-image="costureira">Baixar imagem</button></div></div>
+      <div id="seamstressReport"></div>
+    </section>
+
+    <section id="view-compras" class="view report-view">
+      <div class="page-heading"><div><p class="eyebrow">SEPARAÇÃO</p><h1>Lista de compras</h1><p>Materiais consolidados das faces ativas.</p></div><div class="print-actions"><button class="btn primary" data-print="compras">Imprimir lista</button><button class="btn ghost" data-image="compras">Baixar imagem</button></div></div>
+      <div id="purchaseReport"></div>
+    </section>
+
+    <section id="view-historico" class="view">
+      <div class="page-heading"><div><p class="eyebrow">ORÇAMENTOS SALVOS</p><h1>Histórico de orçamentos</h1><p>Reabra um orçamento para editar, imprimir ou baixar novamente como imagem.</p></div></div>
+      <div id="cloudVisitHistory" class="history-list"></div>
+      <div id="budgetHistory" class="history-list"></div>
+    </section>
+
+    <section id="view-cliente" class="view report-view print-only-view">
+      <div class="page-heading"><div><p class="eyebrow">ORÇAMENTO SALVO</p><h1>Orçamento do cliente</h1><p>Revise, imprima ou baixe novamente.</p></div><div class="print-actions"><button class="btn primary" data-print="cliente">Imprimir orçamento</button><button class="btn ghost" data-image="cliente">Baixar imagem</button><button class="btn ghost" data-view-return="historico">Voltar ao histórico</button></div></div>
+      <div id="clientReport"></div>
+    </section>
+  </main>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+  <link rel="stylesheet" href="hem-feedback.css">
+  <link rel="stylesheet" href="mobile-visit.css">
+  <script src="engine.js"></script>
+  <script src="curtain-fabrics.js"></script>
+  <script src="app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4/dist/umd/supabase.min.js"></script>
+  <script src="cloud.js"></script>
+</body>
+</html>

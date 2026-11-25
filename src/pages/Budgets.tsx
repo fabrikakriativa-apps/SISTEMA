@@ -61,6 +61,7 @@ type CurtainCalculatorPayload={
   summary:{materials:number;labor:number;cost:number;installation:number;sale:number;total:number}
   calculatorState:Record<string,unknown>
 }
+type CurtainVisitQuote={id:string;reference_code:string;status:'draft'|'finalized';client_name:string|null;client_phone:string|null;project_reference:string|null;neighborhood:string|null;updated_at:string;result_payload:CurtainCalculatorPayload}
 
 const CURTAIN_CALCULATOR_ORIGIN='https://sistema-calculo-cortinas.michellemahs.chatgpt.site'
 const CURTAIN_CALCULATOR_URL=`${CURTAIN_CALCULATOR_ORIGIN}/?crm=1`
@@ -333,6 +334,26 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
     if(!calculator){show('O navegador bloqueou a calculadora. Permita pop-ups para este site e tente novamente.','error');return}
     curtainCalculatorWindow.current=calculator
     calculator.focus()
+  }
+  const [curtainVisitsOpen,setCurtainVisitsOpen]=useState(false),[curtainVisits,setCurtainVisits]=useState<CurtainVisitQuote[]>([]),[curtainVisitSearch,setCurtainVisitSearch]=useState(''),[curtainVisitBusy,setCurtainVisitBusy]=useState(false)
+  const mobileCurtainUrl=`${window.location.origin}${import.meta.env.BASE_URL}calculadora-cortinas/?visit=1`
+  const loadCurtainVisits=async()=>{
+    if(!supabase)return
+    setCurtainVisitBusy(true)
+    const {data,error}=await supabase.from('curtain_visit_quotes').select('id,reference_code,status,client_name,client_phone,project_reference,neighborhood,updated_at,result_payload').eq('organization_id',budgetOrganizationId).in('status',['draft','finalized']).order('updated_at',{ascending:false}).limit(100)
+    setCurtainVisitBusy(false)
+    if(error){show('Não foi possível carregar as visitas salvas.','error');return}
+    setCurtainVisits((data??[]) as unknown as CurtainVisitQuote[]);setCurtainVisitsOpen(true)
+  }
+  const importCurtainVisit=async(visit:CurtainVisitQuote)=>{
+    if(!supabase||curtainVisitBusy)return
+    const family=families.find(item=>item.form_key==='curtain')
+    if(!family){show('Cadastre ou ative a família Cortina antes de importar.','error');return}
+    setCurtainVisitBusy(true)
+    const {error}=await supabase.rpc('import_curtain_visit_quote',{org_id:budgetOrganizationId,visit_quote_id:visit.id,target_budget_id:budget.id,curtain_family_id:family.id})
+    if(error){show(error.message||'Não foi possível importar a visita.','error');setCurtainVisitBusy(false);return}
+    await loadItems();setCurtainVisitBusy(false);setCurtainVisitsOpen(false);setItemOpen(false)
+    show(`${visit.reference_code} importada como um único item Cortina, com custos e instalação espelhados.`,'success')
   }
   useEffect(()=>{
     const receiveCalculatorMessage=(event:MessageEvent)=>{
@@ -693,6 +714,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 <ArrowLeft/>Voltar aos orçamentos</button>
 </div>}>
     {previewOpen&&<BudgetPreview budget={{...budget,valid_until:form.valid_until,payment_terms:form.payment_terms,delivery_terms:form.delivery_terms,notes:form.notes,discount:Number(form.discount||0),total:Math.max(0,Number(budget.subtotal)-Number(form.discount||0))}} items={documentItemOrder(items)} paymentOptions={itemPaymentOptions} clientName={client?.name??'Cliente não informado'} clientAddress={form.client_address??''} onClose={()=>setPreviewOpen(false)}/>}
+    {curtainVisitsOpen&&<div className="dialog-backdrop"><section className="dialog curtain-visits-dialog" role="dialog" aria-modal="true" aria-labelledby="curtain-visits-title"><header><div><span className="eyebrow">Calculadora de cortinas</span><h2 id="curtain-visits-title">Importar visita salva</h2><p>Escolha uma visita. Todas as faces serão consolidadas em um único item Cortina neste {isPreBudget?'pré-orçamento':'orçamento'}.</p></div><button type="button" className="icon-button" aria-label="Fechar" onClick={()=>setCurtainVisitsOpen(false)}><X/></button></header><div className="curtain-visits-body"><label className="search"><Search/><input autoFocus placeholder="Buscar por código, cliente, telefone ou projeto" value={curtainVisitSearch} onChange={e=>setCurtainVisitSearch(e.target.value)}/></label>{curtainVisitBusy&&<p role="status">Carregando…</p>}<div className="curtain-visits-list">{curtainVisits.filter(visit=>matchesSearch(`${visit.reference_code} ${visit.client_name??''} ${visit.client_phone??''} ${visit.project_reference??''}`,curtainVisitSearch)).map(visit=><article key={visit.id}><div><strong>{visit.reference_code} · {visit.client_name||'Cliente não informado'}</strong><span>{visit.project_reference||'Sem referência'}{visit.neighborhood?` · ${visit.neighborhood}`:''}</span><small>{visit.status==='finalized'?'Visita finalizada':'Rascunho'} · {new Date(visit.updated_at).toLocaleString('pt-BR')}</small></div><button type="button" className="button primary" disabled={curtainVisitBusy} onClick={()=>void importCurtainVisit(visit)}>Importar</button></article>)}</div>{!curtainVisitBusy&&!curtainVisits.length&&<p>Nenhuma visita pendente. Abra o modo visita, faça o cálculo e finalize para importar.</p>}</div><footer><button type="button" className="button secondary" onClick={()=>window.open(mobileCurtainUrl,'_blank','noopener')}>Abrir calculadora de visita</button><button type="button" className="button secondary" onClick={()=>setCurtainVisitsOpen(false)}>Fechar</button></footer></section></div>}
     {specOpen&&<div className="dialog-backdrop"><form className="dialog" onSubmit={e=>{e.preventDefault();void saveSpecifications()}}><header><div><h2>Revisar especificações</h2><p>Complemente tecido, descrições e observações. Esta revisão mantém os valores aprovados e o pedido vinculado.</p></div><button type="button" className="icon-button" aria-label="Fechar" onClick={()=>setSpecOpen(false)}><X/></button></header><div className="form-grid">{specItems.map((item,index)=><label className="field span-2" key={item.id}>Descrição do item {index+1}<textarea required value={item.description} onChange={e=>setSpecItems(current=>current.map(x=>x.id===item.id?{...x,description:e.target.value}:x))}/></label>)}<label className="field span-2">Observações<textarea value={specNotes} onChange={e=>setSpecNotes(e.target.value)}/></label></div><footer><button type="button" className="button secondary" onClick={()=>setSpecOpen(false)}>Cancelar</button><button className="button primary" disabled={workflowBusy}>{workflowBusy?'Salvando…':'Salvar revisão'}</button></footer></form></div>}
     {confirmDuplicate&&<div className="dialog-backdrop"><div className="dialog"><header><div><h2>Duplicar orçamento</h2><p>Uma cópia em rascunho receberá um novo número da sequência atual. Cliente, itens, custos e condições serão copiados. Pedidos, financeiro e arquivos anexados não serão duplicados.</p></div></header><footer><button className="button secondary" disabled={workflowBusy} onClick={()=>setConfirmDuplicate(false)}>Cancelar</button><button className="button primary" disabled={workflowBusy} onClick={()=>void duplicateBudget()}>{workflowBusy?'Duplicando…':'Confirmar duplicação'}</button></footer></div></div>}
     {newClientOpen&&<div className="dialog-backdrop">
@@ -920,7 +942,7 @@ function BudgetEditor({access,budget,setBudget,form,setForm,clients,saveState,cl
 </label>
 {selectedFormKey==='curtain'&&<section className="curtain-calculator-panel span-2">
 <div><strong>Calculadora de cortinas</strong><p>Calcule uma ou várias faces. Ao enviar, todas serão consolidadas neste único item Cortina.</p>{Boolean(itemForm.initial_configuration.curtain_calculator)&&<small>Cálculo vinculado. Abra novamente para editar e reenviar os valores.</small>}</div>
-<button type="button" className="button secondary" onClick={openCurtainCalculator}><FileText/>{itemForm.initial_configuration.curtain_calculator?'Editar cálculo':'Calcular manualmente'}</button>
+<div className="curtain-calculator-actions"><button type="button" className="button secondary" onClick={openCurtainCalculator}><FileText/>{itemForm.initial_configuration.curtain_calculator?'Editar cálculo':'Calcular agora'}</button><button type="button" className="button secondary" onClick={()=>window.open(mobileCurtainUrl,'_blank','noopener')}><CalendarPlus/>Abrir modo visita</button><button type="button" className="button primary" onClick={()=>void loadCurtainVisits()}><Plus/>Importar visita salva</button></div>
 </section>}
 {fields.environment&&<label className="field">Ambiente<input value={itemForm.environment} onChange={e=>setItemForm({...itemForm,environment:e.target.value})} placeholder="Ex.: Sala"/>
 </label>}{confectionSelected&&<label className="field span-2">Subitem de confecção<select required value={itemForm.confection_subitem} onChange={e=>setItemForm({...itemForm,confection_subitem:e.target.value})}>
