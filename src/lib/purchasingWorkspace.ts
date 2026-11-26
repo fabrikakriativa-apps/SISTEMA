@@ -13,5 +13,5 @@ export function purchasingSummary(item:Pick<WorkspaceItem,'procurement_review'>,
  return 'Aguardando entrega'
 }
 export const workspacePurchaseLabels:Record<string,string>={draft:'Compra pendente',awaiting_delivery:'Aguardando entrega',delayed:'Aguardando entrega (atrasada)',completed:'Concluído',cancelled:'Cancelado',returned:'Devolvido'}
-export const lineTotal=(n:{quantity:number;unit_cost:number})=>Math.round((Number(n.quantity)*Number(n.unit_cost)+Number.EPSILON)*100)/100
+export const lineTotal=(n:{quantity:number;unit_cost:number;actual_total?:number|null})=>n.actual_total!=null?Math.round((Number(n.actual_total)+Number.EPSILON)*100)/100:Math.round((Number(n.quantity)*Number(n.unit_cost)+Number.EPSILON)*100)/100
 
