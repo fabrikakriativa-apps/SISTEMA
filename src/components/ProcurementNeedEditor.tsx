@@ -1,4 +1,5 @@
 import {QuickSupplierEditor} from './QuickSupplierEditor'
+import {materialSupplier} from '../lib/purchaseSupplier'
 import { useEffect,useState } from 'react'
 import { X,Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -26,7 +27,7 @@ export function ProcurementNeedEditor({organizationId,need,onClose,onSaved,initi
  const materialMode=form.material_mode??(form.supply_id?'catalog':form.description?'loose':'catalog')
  const selectSupply=async(id:string)=>{
   const supply=supplies.find(x=>x.id===id)!;setSupplySearch(supplyLabel(supply));setForm(current=>({...current,supply_id:id,description:supply.name,unit:supply.usage_unit,unit_cost:Number(supply.current_cost),supplier_name:''}));setSupplierLoading(true);setSupplierError(false)
-  try{const {data,error}=await supabase!.from('supplies').select('import_details').eq('organization_id',organizationId).eq('id',id).single();if(error)throw error;const name=String(data?.import_details?.Fornecedor??'');setForm(current=>current.supply_id===id?{...current,supplier_name:name}:current)}catch{setSupplierError(true);show('Não foi possível carregar o fornecedor. Informe o nome manualmente.','error')}finally{setSupplierLoading(false)}
+  try{const {data,error}=await supabase!.from('supplies').select('primary_supplier_id,import_details').eq('organization_id',organizationId).eq('id',id).single();if(error)throw error;const name=materialSupplier({supply:data},vendors).name;setForm(current=>current.supply_id===id?{...current,supplier_name:name}:current)}catch{setSupplierError(true);show('Não foi possível carregar o fornecedor. Informe o nome manualmente.','error')}finally{setSupplierLoading(false)}
  }
  const [category,setCategory]=useState('')
  const categories=[...new Set(supplies.map(supply=>supply.category).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'))
@@ -61,5 +62,5 @@ export function ProcurementNeedEditor({organizationId,need,onClose,onSaved,initi
  <label className="field">Comprar até (opcional)<input type="date" value={form.deadline??''} onChange={e=>setForm({...form,deadline:e.target.value||null})}/></label>
  <div className="procurement-total span-2"><span>Total previsto</span><strong>{money.format(form.quantity*form.unit_cost)}</strong></div>
  {confirmDelete&&<p className="span-2">Remover este material da lista de compras? O item do pedido será preservado.</p>}
- </div><footer>{need&&<button type="button" className="button secondary" disabled={saving} onClick={()=>confirmDelete?void save(true):setConfirmDelete(true)}><Trash2/>{confirmDelete?'Confirmar exclusão':'Excluir item de compra'}</button>}<button type="button" className="button secondary" onClick={onClose}>Cancelar</button><button className="button primary" disabled={saving||loading||loadError}>{saving?'Salvando…':'Salvar item de compra'}</button></footer></form></div>{newVendor&&<QuickSupplierEditor organizationId={organizationId} onClose={()=>setNewVendor(false)} onSaved={vendor=>{setVendors(current=>[...current.filter(v=>v.id!==vendor.id),vendor].sort((a,b)=>a.name.localeCompare(b.name,'pt-BR')));setForm(current=>({...current,supplier_name:vendor.name}));setNewVendor(false)}}/>}</>
+ </div><footer>{need&&<button type="button" className="button secondary" disabled={saving} onClick={()=>confirmDelete?void save(true):setConfirmDelete(true)}><Trash2/>{confirmDelete?'Confirmar exclusão':'Excluir item de compra'}</button>}<button type="button" className="button secondary" onClick={onClose}>Cancelar</button><button className="button primary" disabled={saving||loading||loadError}>{saving?'Salvando…':'Salvar item de compra'}</button></footer></form></div>{newVendor&&<QuickSupplierEditor organizationId={organizationId} initialName={form.supplier_name??''} onClose={()=>setNewVendor(false)} onSaved={vendor=>{setVendors(current=>[...current.filter(v=>v.id!==vendor.id),vendor].sort((a,b)=>a.name.localeCompare(b.name,'pt-BR')));setForm(current=>({...current,supplier_name:vendor.name}));setNewVendor(false)}}/>}</>
 }

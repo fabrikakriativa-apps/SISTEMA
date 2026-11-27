@@ -17,6 +17,11 @@ function render(seeds:[number,unknown][]=[]){
  return renderToStaticMarkup(<PurchasingWorkspace/>)
 }
 describe('compras práticas — tela',()=>{
+ it('mantém o nome importado e oferece cadastro dentro da compra',()=>{
+  const html=render([[24,['n1']],[28,{id:'new',kind:'create'}],[29,''],[30,'ANTUARTE']])
+  expect(html).toContain('+ Cadastrar ANTUARTE')
+  expect(html).toContain('Nome informado no insumo')
+ })
  it('permite acrescentar itens ao pedido existente sem repetir o financeiro',()=>{
   const html=render([[15,[purchase]],[24,['n1','n2']],[28,{id:'new',kind:'create'}],[29,'v'],[43,'p']])
   expect(html).toContain('Vincular itens ao pedido')

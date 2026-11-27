@@ -1,16 +1,25 @@
 import { useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabase'
 import { useToast } from './ToastProvider'
+import {loadAllPages} from '../lib/loadAllPages'
+import {normalizeSearchText} from '../lib/searchOptions'
 
-export function QuickSupplierEditor({ organizationId, onClose, onSaved }: { organizationId: string; onClose: () => void; onSaved: (supplier: { id: string; name: string }) => void }) {
+export function QuickSupplierEditor({ organizationId, onClose, onSaved,initialName='' }: { organizationId: string; onClose: () => void; onSaved: (supplier: { id: string; name: string }) => void;initialName?:string }) {
   const { show } = useToast()
-  const [form, setForm] = useState({ name: '', document: '', phone: '', email: '', supplier_types: '', notes: '' })
+  const [form, setForm] = useState({ name: initialName, document: '', phone: '', email: '', supplier_types: '', notes: '' })
   const [saving, setSaving] = useState(false)
   const save = async (event: FormEvent) => {
     event.preventDefault()
     if (!supabase || saving || !form.name.trim()) return
     setSaving(true)
     try {
+      const existing=await loadAllPages<{id:string;name:string;active:boolean}>((from,to)=>supabase!.from('suppliers').select('id,name,active').eq('organization_id',organizationId).order('id').range(from,to))
+      if(existing.error)throw existing.error
+      const matches=(existing.data??[]).filter(v=>normalizeSearchText(v.name)===normalizeSearchText(form.name))
+      if(matches.length){
+        if(matches.length!==1||!matches[0].active){show('Já existe cadastro com este nome, duplicado ou inativo. Confira em Fornecedores antes de continuar.','error');return}
+        onSaved(matches[0]);show('Fornecedor existente selecionado. Nenhum cadastro duplicado foi criado.','success');return
+      }
       const { data, error } = await supabase.from('suppliers').insert({ organization_id: organizationId, name: form.name.trim(), document: form.document.trim() || null, phone: form.phone.trim() || null, email: form.email.trim() || null, supplier_types: form.supplier_types.split(',').map(value => value.trim()).filter(Boolean), notes: form.notes.trim() || null, active: true }).select('id,name').single()
       if (error || !data) { show(error?.code === '42501' ? 'Seu perfil não pode cadastrar fornecedores.' : 'Não foi possível cadastrar o fornecedor.', 'error'); return }
       onSaved(data)
